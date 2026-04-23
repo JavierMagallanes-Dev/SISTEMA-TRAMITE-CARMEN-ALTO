@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",
+    "@supabase/supabase-js": "^2.104.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

@@ -32,7 +32,7 @@ export const env = {
   APIPERU_TOKEN: process.env.APIPERU_TOKEN ?? '',
   // Supabase Storage
   SUPABASE_URL:      process.env.SUPABASE_URL ?? '',
-  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY ?? '',
+  SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY ?? '',
 
   // Helpers
   isDev:  process.env.NODE_ENV === 'development',

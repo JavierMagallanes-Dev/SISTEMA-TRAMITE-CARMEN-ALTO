@@ -1,23 +1,24 @@
 // src/pages/AreasPage.tsx
 
-import { useEffect, useState } from 'react';
-import { areasService }        from '../services/areas.service';
-import { useAuth }             from '../context/AuthContext';
-import { Card, CardTitle }     from '../components/ui/Card';
-import Button                  from '../components/ui/Button';
-import Modal                   from '../components/ui/Modal';
-import Alert                   from '../components/ui/Alert';
-import Spinner                 from '../components/ui/Spinner';
-import Input                   from '../components/ui/Input';
-import EstadoBadge             from '../components/shared/EstadoBadge';
-import TimelineMovimientos     from '../components/shared/TimelineMovimientos';
-import ConfirmModal            from '../components/shared/ConfirmModal';
+import { useEffect, useState, useRef } from 'react';
+import { areasService }                from '../services/areas.service';
+import { documentosService }           from '../services/documentos.service';
+import { useAuth }                     from '../context/AuthContext';
+import { Card, CardTitle }             from '../components/ui/Card';
+import Button                          from '../components/ui/Button';
+import Modal                           from '../components/ui/Modal';
+import Alert                           from '../components/ui/Alert';
+import Spinner                         from '../components/ui/Spinner';
+import Input                           from '../components/ui/Input';
+import EstadoBadge                     from '../components/shared/EstadoBadge';
+import TimelineMovimientos             from '../components/shared/TimelineMovimientos';
+import ConfirmModal                    from '../components/shared/ConfirmModal';
 import { formatFecha, diasRestantes, colorDiasRestantes } from '../utils/formato';
 import type { EstadoExpediente, Movimiento } from '../types';
 import {
   RefreshCw, Eye, Play, AlertCircle,
   XCircle, CheckCircle, Upload, Archive,
-  Clock, FileText,
+  Clock, FileText, Download, X,
 } from 'lucide-react';
 
 interface ExpedienteBandeja {
@@ -30,13 +31,22 @@ interface ExpedienteBandeja {
   tipoTramite:    { nombre: string; plazo_dias: number };
 }
 
+interface Documento {
+  id:          number;
+  nombre:      string;
+  url:         string;
+  tipo_mime:   string;
+  uploaded_at: string;
+}
+
 interface DetalleExpediente extends ExpedienteBandeja {
   areaActual:               { nombre: string; sigla: string } | null;
   fecha_resolucion:         string | null;
   url_pdf_firmado:          string | null;
   codigo_verificacion_firma: string | null;
-  pagos:      { boleta: string; monto_cobrado: number; fecha_pago: string }[];
+  pagos:       { boleta: string; monto_cobrado: number; fecha_pago: string }[];
   movimientos: Movimiento[];
+  documentos:  Documento[];
 }
 
 export default function AreasPage() {
@@ -61,10 +71,11 @@ export default function AreasPage() {
   const [comentario,    setComentario]    = useState('');
   const [expAccion,     setExpAccion]     = useState<ExpedienteBandeja | null>(null);
 
-  // Modal PDF firmado
-  const [modalPdf, setModalPdf] = useState(false);
-  const [urlPdf,   setUrlPdf]   = useState('');
-  const [expPdf,   setExpPdf]   = useState<ExpedienteBandeja | null>(null);
+  // Modal PDF firmado con archivo real
+  const [modalPdf,   setModalPdf]   = useState(false);
+  const [expPdf,     setExpPdf]     = useState<ExpedienteBandeja | null>(null);
+  const [archivoPdf, setArchivoPdf] = useState<File | null>(null);
+  const fileInputRef                = useRef<HTMLInputElement>(null);
 
   // Confirms
   const [confirmTomar,    setConfirmTomar]    = useState<ExpedienteBandeja | null>(null);
@@ -88,7 +99,11 @@ export default function AreasPage() {
     setModalDetalle(true);
     setCargandoDet(true);
     try {
-      setDetalle(await areasService.detalle(id));
+      const [det, docs] = await Promise.all([
+        areasService.detalle(id),
+        documentosService.listar(id),
+      ]);
+      setDetalle({ ...det, documentos: docs });
     } catch {
       setError('Error al cargar el detalle.');
     } finally {
@@ -104,7 +119,7 @@ export default function AreasPage() {
       setConfirmTomar(null);
       cargarBandeja();
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al tomar el expediente.');
+      setError(err?.response?.data?.error ?? 'Error al tomar.');
     } finally { setLoading(false); }
   };
 
@@ -148,17 +163,31 @@ export default function AreasPage() {
     } finally { setLoading(false); }
   };
 
-  const handleSubirPdf = async () => {
-    if (!expPdf || !urlPdf.trim()) return;
+  const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setError('Solo se aceptan archivos PDF.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('El archivo no puede superar 10MB.');
+      return;
+    }
+    setArchivoPdf(file);
+  };
+
+  const handleSubirPdfFirmado = async () => {
+    if (!expPdf || !archivoPdf) return;
     setLoading(true);
     try {
-      const res = await areasService.subirPdfFirmado(expPdf.id, urlPdf.trim());
+      const res = await documentosService.subirPdfFirmado(expPdf.id, archivoPdf);
       setSuccess(`PDF firmado subido. Código: ${res.codigo_verificacion_firma}`);
       setModalPdf(false);
-      setUrlPdf('');
+      setArchivoPdf(null);
       cargarBandeja();
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al subir el PDF.');
+      setError(err?.response?.data?.error ?? 'Error al subir el PDF firmado.');
     } finally { setLoading(false); }
   };
 
@@ -222,8 +251,7 @@ export default function AreasPage() {
                     </p>
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                       <span className="flex items-center gap-1">
-                        <Clock size={11} />
-                        {formatFecha(exp.fecha_registro)}
+                        <Clock size={11} />{formatFecha(exp.fecha_registro)}
                       </span>
                       <span className={`font-medium ${colorDiasRestantes(dias)}`}>
                         {dias < 0 ? `Vencido ${Math.abs(dias)}d` : `${dias}d restantes`}
@@ -244,10 +272,12 @@ export default function AreasPage() {
 
                     {!esJefe && exp.estado === 'EN_PROCESO' && (
                       <>
-                        <Button size="sm" variant="secondary" icon={<AlertCircle size={13} />} onClick={() => { setExpAccion(exp); setComentario(''); setModalObservar(true); }}>
+                        <Button size="sm" variant="secondary" icon={<AlertCircle size={13} />}
+                          onClick={() => { setExpAccion(exp); setComentario(''); setModalObservar(true); }}>
                           Observar
                         </Button>
-                        <Button size="sm" variant="danger" icon={<XCircle size={13} />} onClick={() => { setExpAccion(exp); setComentario(''); setModalRechazar(true); }}>
+                        <Button size="sm" variant="danger" icon={<XCircle size={13} />}
+                          onClick={() => { setExpAccion(exp); setComentario(''); setModalRechazar(true); }}>
                           Rechazar
                         </Button>
                       </>
@@ -260,13 +290,15 @@ export default function AreasPage() {
                     )}
 
                     {esJefe && exp.estado === 'LISTO_DESCARGA' && (
-                      <Button size="sm" icon={<Upload size={13} />} onClick={() => { setExpPdf(exp); setUrlPdf(''); setModalPdf(true); }}>
+                      <Button size="sm" icon={<Upload size={13} />}
+                        onClick={() => { setExpPdf(exp); setArchivoPdf(null); setModalPdf(true); }}>
                         Subir PDF firmado
                       </Button>
                     )}
 
                     {esJefe && exp.estado === 'RESUELTO' && (
-                      <Button size="sm" variant="secondary" icon={<Archive size={13} />} onClick={() => setConfirmArchivar(exp)}>
+                      <Button size="sm" variant="secondary" icon={<Archive size={13} />}
+                        onClick={() => setConfirmArchivar(exp)}>
                         Archivar
                       </Button>
                     )}
@@ -303,11 +335,40 @@ export default function AreasPage() {
               </div>
             </div>
 
+            {/* Documentos adjuntos del ciudadano */}
+            {detalle.documentos && detalle.documentos.length > 0 && (
+              <div>
+                <CardTitle>Documentos adjuntos del ciudadano</CardTitle>
+                <div className="mt-2 space-y-2">
+                  {detalle.documentos.map((doc) => (
+                    <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <FileText size={16} className="text-blue-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700 truncate">{doc.nombre}</p>
+                        <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        <Download size={13} />
+                        Descargar
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* PDF firmado */}
             {detalle.url_pdf_firmado && (
               <div className="bg-green-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1">PDF firmado</p>
-                <a href={detalle.url_pdf_firmado} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                  Descargar PDF firmado →
+                <p className="text-xs text-gray-500 mb-1">PDF firmado digitalmente</p>
+                <a href={detalle.url_pdf_firmado} target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                  <Download size={13} /> Descargar PDF firmado →
                 </a>
                 {detalle.codigo_verificacion_firma && (
                   <p className="text-xs text-gray-400 mt-1 font-mono">Código: {detalle.codigo_verificacion_firma}</p>
@@ -330,7 +391,8 @@ export default function AreasPage() {
           <Button variant="primary" loading={loading} onClick={handleObservar} disabled={!comentario.trim()}>Registrar</Button>
         </>}
       >
-        <Input label="Detalle de la observación" placeholder="Qué falta o qué debe corregirse..." value={comentario} onChange={(e) => setComentario(e.target.value)} required autoFocus />
+        <Input label="Detalle de la observación" placeholder="Qué falta o qué debe corregirse..."
+          value={comentario} onChange={(e) => setComentario(e.target.value)} required autoFocus />
       </Modal>
 
       {/* Modal rechazar */}
@@ -340,31 +402,75 @@ export default function AreasPage() {
           <Button variant="danger" loading={loading} onClick={handleRechazar} disabled={!comentario.trim()}>Rechazar</Button>
         </>}
       >
-        <Input label="Motivo de rechazo" placeholder="Describe el motivo..." value={comentario} onChange={(e) => setComentario(e.target.value)} required autoFocus />
+        <Input label="Motivo de rechazo" placeholder="Describe el motivo..."
+          value={comentario} onChange={(e) => setComentario(e.target.value)} required autoFocus />
       </Modal>
 
-      {/* Modal PDF firmado */}
-      <Modal open={modalPdf} onClose={() => setModalPdf(false)} title="Subir PDF firmado con FirmaPeru" size="sm"
+      {/* Modal subir PDF firmado con FirmaPeru */}
+      <Modal
+        open={modalPdf}
+        onClose={() => { setModalPdf(false); setArchivoPdf(null); }}
+        title="Subir PDF firmado con FirmaPeru"
+        size="sm"
         footer={<>
-          <Button variant="secondary" onClick={() => setModalPdf(false)}>Cancelar</Button>
-          <Button variant="primary" loading={loading} icon={<Upload size={14} />} onClick={handleSubirPdf} disabled={!urlPdf.trim()}>Subir PDF</Button>
+          <Button variant="secondary" onClick={() => { setModalPdf(false); setArchivoPdf(null); }}>Cancelar</Button>
+          <Button variant="primary" loading={loading} icon={<Upload size={14} />}
+            onClick={handleSubirPdfFirmado} disabled={!archivoPdf}>
+            Subir PDF firmado
+          </Button>
         </>}
       >
-        <div className="space-y-3">
-          <Alert type="info" message="Firma el PDF con FirmaPeru usando tu DNI electrónico, súbelo a Supabase Storage y pega la URL aquí." />
-          <Input label="URL del PDF firmado" placeholder="https://...supabase.co/storage/..." value={urlPdf} onChange={(e) => setUrlPdf(e.target.value)} required autoFocus />
+        <div className="space-y-4">
+          <Alert type="info" message="Firma el PDF con FirmaPeru usando tu DNI electrónico y luego súbelo aquí." />
+
+          {archivoPdf ? (
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <FileText size={16} className="text-green-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-green-700 truncate">{archivoPdf.name}</p>
+                <p className="text-xs text-green-500">{(archivoPdf.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <button onClick={() => { setArchivoPdf(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                className="text-gray-400 hover:text-red-500">
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+            >
+              <Upload size={24} className="mx-auto text-gray-400 mb-2" />
+              <p className="text-sm text-gray-500">Haz clic para seleccionar el PDF firmado</p>
+              <p className="text-xs text-gray-400 mt-1">Solo PDF · Máximo 10MB</p>
+            </div>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={handleArchivoChange}
+          />
         </div>
       </Modal>
 
       {/* Confirms */}
-      <ConfirmModal open={!!confirmTomar} onClose={() => setConfirmTomar(null)} onConfirm={() => confirmTomar && handleTomar(confirmTomar)}
-        title="Tomar expediente" message={`¿Tomar el expediente ${confirmTomar?.codigo} para evaluación?`} confirmText="Tomar" loading={loading} />
+      <ConfirmModal open={!!confirmTomar} onClose={() => setConfirmTomar(null)}
+        onConfirm={() => confirmTomar && handleTomar(confirmTomar)}
+        title="Tomar expediente" message={`¿Tomar el expediente ${confirmTomar?.codigo}?`}
+        confirmText="Tomar" loading={loading} />
 
-      <ConfirmModal open={!!confirmVisto} onClose={() => setConfirmVisto(null)} onConfirm={() => confirmVisto && handleVistoBueno(confirmVisto)}
-        title="Dar visto bueno" message={`¿Confirmas el visto bueno para ${confirmVisto?.codigo}?`} confirmText="Dar visto bueno" loading={loading} />
+      <ConfirmModal open={!!confirmVisto} onClose={() => setConfirmVisto(null)}
+        onConfirm={() => confirmVisto && handleVistoBueno(confirmVisto)}
+        title="Dar visto bueno" message={`¿Confirmas el visto bueno para ${confirmVisto?.codigo}?`}
+        confirmText="Dar visto bueno" loading={loading} />
 
-      <ConfirmModal open={!!confirmArchivar} onClose={() => setConfirmArchivar(null)} onConfirm={() => confirmArchivar && handleArchivar(confirmArchivar)}
-        title="Archivar expediente" message={`¿Archivar permanentemente el expediente ${confirmArchivar?.codigo}?`} confirmText="Archivar" loading={loading} danger />
+      <ConfirmModal open={!!confirmArchivar} onClose={() => setConfirmArchivar(null)}
+        onConfirm={() => confirmArchivar && handleArchivar(confirmArchivar)}
+        title="Archivar expediente" message={`¿Archivar permanentemente ${confirmArchivar?.codigo}?`}
+        confirmText="Archivar" loading={loading} danger />
     </div>
   );
 }

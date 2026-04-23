@@ -16,7 +16,7 @@ import mesaPartesRoutes from './routes/mesaPartes.routes';
 import areasRoutes      from './routes/areas.routes';
 import portalRoutes     from './routes/portal.routes';
 import auditoriaRoutes  from './routes/auditoria.routes';
-
+import documentosRoutes from './routes/documentos.routes';
 // ── Middleware de error ──────────────────────────────────────────
 import { errorHandler } from './middlewares/error.middleware';
 
@@ -48,7 +48,7 @@ app.use('/api/mesa-partes', mesaPartesRoutes);
 app.use('/api/areas',       areasRoutes);
 app.use('/api/portal',      portalRoutes);
 app.use('/api/auditoria',   auditoriaRoutes);
-
+app.use('/api/documentos', documentosRoutes);
 // ── Ruta no encontrada ───────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada.' });
