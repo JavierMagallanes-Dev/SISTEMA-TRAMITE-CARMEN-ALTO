@@ -20,8 +20,9 @@ const router = Router();
 router.use(autenticar);
 
 // Bandeja y detalle — Técnico, Jefe y Admin
-router.get('/bandeja',         autorizar('TECNICO', 'JEFE_AREA', 'ADMIN'), bandejaPorArea);
-router.get('/expediente/:id',  autorizar('TECNICO', 'JEFE_AREA', 'ADMIN'), detalleExpediente);
+router.get('/bandeja', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_DE_PARTES'), bandejaPorArea);
+router.get('/expediente/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_DE_PARTES'), detalleExpediente);
+
 
 // Acciones del Técnico
 router.patch('/tomar/:id',    autorizar('TECNICO', 'ADMIN'),              tomarExpediente);

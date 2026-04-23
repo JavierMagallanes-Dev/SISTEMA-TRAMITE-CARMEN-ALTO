@@ -2,213 +2,300 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth }             from '../context/AuthContext';
-import { auditoriaService }    from '../services/auditoria.service';
-import { cajeroService }       from '../services/cajero.service';
-import { Card, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card }                from '../components/ui/Card';
 import Spinner                 from '../components/ui/Spinner';
 import Alert                   from '../components/ui/Alert';
 import EstadoBadge             from '../components/shared/EstadoBadge';
-import { formatFechaHora, formatMoneda } from '../utils/formato';
-import type { EstadoExpediente }    from '../types';
+import { formatFecha, formatMoneda, diasRestantes, colorDiasRestantes } from '../utils/formato';
+import type { EstadoExpediente } from '../types';
+import api from '../services/api';
 import {
-  FileText, CreditCard, Clock,
-  CheckCircle, TrendingUp, Users,
+  FileText, CreditCard, Clock, AlertTriangle,
+  CheckCircle, TrendingUp, Send, Eye,
+  XCircle, RefreshCw,
 } from 'lucide-react';
 
+interface KpiCardProps {
+  label:     string;
+  value:     number | string;
+  icon:      React.ReactNode;
+  color:     string;
+  bg:        string;
+  sublabel?: string;
+}
+
+function KpiCard({ label, value, icon, color, bg, sublabel }: KpiCardProps) {
+  return (
+    <Card>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-gray-500 font-medium">{label}</p>
+          <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
+          {sublabel && <p className="text-xs text-gray-400 mt-0.5">{sublabel}</p>}
+        </div>
+        <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+          <span className={color}>{icon}</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
-  const { usuario } = useAuth();
-  const rol = usuario?.rol.nombre;
+  const { usuario }  = useAuth();
+  const rol          = usuario?.rol?.nombre;
 
-  const [resumen,    setResumen]    = useState<any>(null);
-  const [cajeroHoy,  setCajeroHoy]  = useState<any>(null);
-  const [cargando,   setCargando]   = useState(true);
-  const [error,      setError]      = useState('');
+  const [datos,    setDatos]    = useState<any>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error,    setError]    = useState('');
 
-  useEffect(() => {
-    const cargar = async () => {
-      try {
-        if (rol === 'ADMIN') {
-          const data = await auditoriaService.resumen();
-          setResumen(data);
-        }
-        if (rol === 'CAJERO' || rol === 'ADMIN') {
-          const data = await cajeroService.resumenHoy();
-          setCajeroHoy(data);
-        }
-      } catch {
-        setError('Error al cargar el dashboard.');
-      } finally {
-        setCargando(false);
-      }
-    };
-    cargar();
-  }, [rol]);
+  const cargar = async () => {
+    setCargando(true);
+    setError('');
+    try {
+      const res = await api.get('/dashboard');
+      setDatos(res.data);
+    } catch {
+      setError('Error al cargar el dashboard.');
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => { cargar(); }, []);
 
   if (cargando) return <Spinner text="Cargando dashboard..." />;
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">
-          Bienvenido, {usuario?.nombre_completo.split(' ')[0]}
-        </h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {usuario?.rol?.nombre?.replace('_', ' ')}
-          {usuario?.area && ` — ${usuario.area.nombre}`}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">
+            Bienvenido, {usuario?.nombre_completo.split(' ')[0]}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {usuario?.rol?.nombre?.replace(/_/g, ' ')}
+            {usuario?.area && ` — ${usuario.area.nombre}`}
+          </p>
+        </div>
+        <button
+          onClick={cargar}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100"
+        >
+          <RefreshCw size={14} />
+          Actualizar
+        </button>
       </div>
 
-      {error && <Alert type="error" message={error} />}
+      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
-      {/* ── Vista ADMIN ───────────────────────────────────── */}
-      {rol === 'ADMIN' && resumen && (
+      {/* ── MESA DE PARTES ──────────────────────────────────── */}
+      {(rol === 'MESA_DE_PARTES' || rol === 'ADMIN') && datos?.kpis && (
         <>
-          {/* KPIs del día */}
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <FileText size={18} className="text-blue-600" />
+          {/* Alertas de urgencia */}
+          {(datos.kpis.vencidos > 0 || datos.kpis.proximos_vencer > 0) && (
+            <div className="grid grid-cols-2 gap-4">
+              {datos.kpis.vencidos > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
+                  <AlertTriangle size={20} className="text-red-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-red-700">{datos.kpis.vencidos} expediente(s) vencidos</p>
+                    <p className="text-xs text-red-500">Requieren atención inmediata</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {resumen.hoy.expedientes_registrados}
-                  </p>
-                  <p className="text-xs text-gray-500">Expedientes hoy</p>
+              )}
+              {datos.kpis.proximos_vencer > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center gap-3">
+                  <Clock size={20} className="text-orange-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-orange-700">{datos.kpis.proximos_vencer} por vencer en 2 días</p>
+                    <p className="text-xs text-orange-500">Procesa estos expedientes pronto</p>
+                  </div>
                 </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                  <CreditCard size={18} className="text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {resumen.hoy.pagos_verificados}
-                  </p>
-                  <p className="text-xs text-gray-500">Pagos verificados hoy</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Expedientes por estado */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Expedientes por estado</CardTitle>
-              <TrendingUp size={18} className="text-gray-400" />
-            </CardHeader>
-            <div className="space-y-2">
-              {resumen.expedientes_por_estado.map((item: any) => (
-                <div key={item.estado} className="flex items-center justify-between py-1.5">
-                  <EstadoBadge estado={item.estado as EstadoExpediente} size="sm" />
-                  <span className="text-sm font-semibold text-gray-700">
-                    {item.total}
-                  </span>
-                </div>
-              ))}
-              {resumen.expedientes_por_estado.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">
-                  Sin expedientes activos
-                </p>
               )}
             </div>
-          </Card>
+          )}
 
-          {/* Últimos movimientos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Últimos movimientos</CardTitle>
-              <Clock size={18} className="text-gray-400" />
-            </CardHeader>
-            <div className="space-y-3">
-              {resumen.ultimos_movimientos.map((mov: any, idx: number) => (
-                <div key={idx} className="flex items-start gap-3 text-sm">
-                  <CheckCircle size={14} className="text-blue-500 mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-gray-700 truncate">
-                      <span className="font-mono text-blue-600 text-xs">
-                        {mov.expediente.codigo}
-                      </span>
-                      {' — '}
-                      {mov.comentario ?? mov.tipo_accion}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {mov.usuario.nombre_completo} · {formatFechaHora(mov.fecha_hora)}
-                    </p>
-                  </div>
-                  <EstadoBadge estado={mov.estado_resultado} size="sm" />
-                </div>
-              ))}
-            </div>
-          </Card>
+          {/* KPIs principales */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KpiCard
+              label="Registrados hoy"
+              value={datos.kpis.registrados_hoy}
+              icon={<FileText size={20} />}
+              color="text-blue-600"
+              bg="bg-blue-100"
+              sublabel="Nuevos expedientes"
+            />
+            <KpiCard
+              label="Pendiente de pago"
+              value={datos.kpis.pendiente_pago}
+              icon={<CreditCard size={20} />}
+              color="text-yellow-600"
+              bg="bg-yellow-100"
+              sublabel="En ventanilla de caja"
+            />
+            <KpiCard
+              label="En revisión MDP"
+              value={datos.kpis.en_revision}
+              icon={<Eye size={20} />}
+              color="text-purple-600"
+              bg="bg-purple-100"
+              sublabel="Revisando documentación"
+            />
+            <KpiCard
+              label="Derivados"
+              value={datos.kpis.derivados}
+              icon={<Send size={20} />}
+              color="text-indigo-600"
+              bg="bg-indigo-100"
+              sublabel="Enviados a áreas técnicas"
+            />
+          </div>
+
+          {/* KPIs secundarios */}
+          <div className="grid grid-cols-3 gap-4">
+            <KpiCard
+              label="Recibidos"
+              value={datos.kpis.recibidos}
+              icon={<CheckCircle size={18} />}
+              color="text-green-600"
+              bg="bg-green-100"
+            />
+            <KpiCard
+              label="Observados"
+              value={datos.kpis.observados}
+              icon={<AlertTriangle size={18} />}
+              color="text-orange-600"
+              bg="bg-orange-100"
+            />
+            <KpiCard
+              label="Rechazados"
+              value={datos.kpis.rechazados}
+              icon={<XCircle size={18} />}
+              color="text-red-600"
+              bg="bg-red-100"
+            />
+          </div>
+
+          {/* Últimos expedientes */}
+          {datos.ultimos_expedientes?.length > 0 && (
+            <Card>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-800">Últimos expedientes registrados</h3>
+                <a href="/mesa-partes" className="text-xs text-blue-600 hover:underline">
+                  Ver todos →
+                </a>
+              </div>
+              <div className="space-y-3">
+                {datos.ultimos_expedientes.map((exp: any) => {
+                  const dias = diasRestantes(exp.fecha_limite);
+                  return (
+                    <div key={exp.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-blue-600">{exp.codigo}</span>
+                          <EstadoBadge estado={exp.estado as EstadoExpediente} size="sm" />
+                        </div>
+                        <p className="text-xs text-gray-600 mt-0.5 truncate">
+                          {exp.ciudadano.nombres} {exp.ciudadano.apellido_pat} · {exp.tipoTramite.nombre}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-gray-400">{formatFecha(exp.fecha_registro)}</p>
+                        <p className={`text-xs font-medium ${colorDiasRestantes(dias)}`}>
+                          {dias < 0 ? `Vencido` : `${dias}d`}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
         </>
       )}
 
-      {/* ── Vista CAJERO ──────────────────────────────────── */}
-      {(rol === 'CAJERO') && cajeroHoy && (
-        <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <CreditCard size={18} className="text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {cajeroHoy.pagos_verificados_hoy}
-                </p>
-                <p className="text-xs text-gray-500">Pagos verificados hoy</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <TrendingUp size={18} className="text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatMoneda(cajeroHoy.total_recaudado_hoy)}
-                </p>
-                <p className="text-xs text-gray-500">Recaudado hoy</p>
-              </div>
-            </div>
-          </Card>
+      {/* ── CAJERO ──────────────────────────────────────────── */}
+      {rol === 'CAJERO' && datos?.kpis && (
+        <div className="grid grid-cols-3 gap-4">
+          <KpiCard
+            label="Pagos verificados hoy"
+            value={datos.kpis.pagos_hoy}
+            icon={<CheckCircle size={20} />}
+            color="text-green-600"
+            bg="bg-green-100"
+          />
+          <KpiCard
+            label="Total recaudado hoy"
+            value={formatMoneda(datos.kpis.monto_hoy)}
+            icon={<TrendingUp size={20} />}
+            color="text-blue-600"
+            bg="bg-blue-100"
+          />
+          <KpiCard
+            label="Pendientes de pago"
+            value={datos.kpis.pendientes_pago}
+            icon={<CreditCard size={20} />}
+            color="text-yellow-600"
+            bg="bg-yellow-100"
+            sublabel="Esperando en ventanilla"
+          />
         </div>
       )}
 
-      {/* ── Vista MESA_DE_PARTES / TECNICO / JEFE ─────────── */}
-      {(rol === 'MESA_DE_PARTES' || rol === 'TECNICO' || rol === 'JEFE_AREA') && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Acceso rápido</CardTitle>
-            <Users size={18} className="text-gray-400" />
-          </CardHeader>
-          <div className="grid grid-cols-2 gap-3">
-            {rol === 'MESA_DE_PARTES' && (
-              <>
-                <a href="/mesa-partes" className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
-                  <FileText size={16} className="text-blue-600" />
-                  <span className="text-sm font-medium text-blue-700">Registrar Expediente</span>
-                </a>
-                <a href="/mesa-partes" className="flex items-center gap-2 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                  <Clock size={16} className="text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">Ver Bandeja</span>
-                </a>
-              </>
-            )}
-            {(rol === 'TECNICO' || rol === 'JEFE_AREA') && (
-              <a href="/areas" className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
-                <FileText size={16} className="text-blue-600" />
-                <span className="text-sm font-medium text-blue-700">Ver Mi Bandeja</span>
-              </a>
-            )}
+      {/* ── TÉCNICO / JEFE ───────────────────────────────────── */}
+      {(rol === 'TECNICO' || rol === 'JEFE_AREA') && datos?.kpis && (
+        <>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KpiCard
+              label="Total en bandeja"
+              value={datos.kpis.total_en_bandeja}
+              icon={<FileText size={20} />}
+              color="text-blue-600"
+              bg="bg-blue-100"
+            />
+            <KpiCard
+              label="En proceso"
+              value={datos.kpis.en_proceso}
+              icon={<Clock size={20} />}
+              color="text-orange-600"
+              bg="bg-orange-100"
+            />
+            <KpiCard
+              label="Listo para firma"
+              value={datos.kpis.listo_descarga}
+              icon={<CheckCircle size={20} />}
+              color="text-cyan-600"
+              bg="bg-cyan-100"
+            />
+            <KpiCard
+              label="Observados"
+              value={datos.kpis.observados}
+              icon={<AlertTriangle size={20} />}
+              color="text-red-600"
+              bg="bg-red-100"
+            />
           </div>
-        </Card>
+
+          <Card>
+            <div className="flex items-center gap-3 p-2">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <Send size={18} className="text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-800">Ir a tu bandeja</p>
+                <p className="text-xs text-gray-500">Ver expedientes asignados a tu área</p>
+              </div>
+              <a
+                href="/areas"
+                className="text-sm text-blue-600 font-medium hover:underline"
+              >
+                Ver bandeja →
+              </a>
+            </div>
+          </Card>
+        </>
       )}
     </div>
   );

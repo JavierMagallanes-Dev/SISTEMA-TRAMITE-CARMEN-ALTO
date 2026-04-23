@@ -1,7 +1,9 @@
 // src/pages/MesaPartesPage.tsx
 
-import { useEffect, useState } from 'react';
-import { mesaPartesService }   from '../services/mesaPartes.service';
+import { useEffect, useState, useRef } from 'react'; // useRef agregado
+import { mesaPartesService } from '../services/mesaPartes.service';
+import { areasService }        from '../services/areas.service';
+import { documentosService }   from '../services/documentos.service';
 import { Card, CardTitle }     from '../components/ui/Card';
 import Button                  from '../components/ui/Button';
 import Input                   from '../components/ui/Input';
@@ -10,15 +12,21 @@ import Alert                   from '../components/ui/Alert';
 import Spinner                 from '../components/ui/Spinner';
 import Table                   from '../components/ui/Table';
 import EstadoBadge             from '../components/shared/EstadoBadge';
-import {diasRestantes, colorDiasRestantes } from '../utils/formato';
-import type { Area, EstadoExpediente } from '../types';
+import TimelineMovimientos     from '../components/shared/TimelineMovimientos';
+import { formatFecha, diasRestantes, colorDiasRestantes } from '../utils/formato';
+import type { Area, EstadoExpediente, Movimiento } from '../types';
 import {
   FileText, Plus, Send, RefreshCw,
-  Search, Clock, CheckCircle,
+  Search, Clock, CheckCircle, Eye, Download,
+  Upload, X // Importaciones de iconos agregadas
 } from 'lucide-react';
 
 interface TipoTramite {
   id: number; nombre: string; costo_soles: number; plazo_dias: number;
+}
+
+interface Documento {
+  id: number; nombre: string; url: string; tipo_mime: string; uploaded_at: string;
 }
 
 interface ExpedienteBandeja {
@@ -32,6 +40,21 @@ interface ExpedienteBandeja {
   pagos:          { boleta: string; monto_cobrado: number }[];
 }
 
+interface DetalleExpediente {
+  id:              number;
+  codigo:          string;
+  estado:          EstadoExpediente;
+  fecha_registro:  string;
+  fecha_limite:    string;
+  fecha_resolucion: string | null;
+  ciudadano:       { dni: string; nombres: string; apellido_pat: string; apellido_mat: string; email: string; telefono: string | null };
+  tipoTramite:     { nombre: string; plazo_dias: number; costo_soles: number };
+  areaActual:      { nombre: string; sigla: string } | null;
+  pagos:           { boleta: string; monto_cobrado: number; fecha_pago: string }[];
+  movimientos:     Movimiento[];
+  documentos:      Documento[];
+}
+
 export default function MesaPartesPage() {
   const [tab,      setTab]      = useState<'bandeja' | 'registrar'>('bandeja');
   const [bandeja,  setBandeja]  = useState<ExpedienteBandeja[]>([]);
@@ -40,6 +63,15 @@ export default function MesaPartesPage() {
   const [cargando, setCargando] = useState(true);
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState('');
+
+  // Estados para el archivo PDF agregados
+  const [archivoPdf, setArchivoPdf] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Modal detalle + documentos
+  const [modalDetalle, setModalDetalle] = useState(false);
+  const [detalle,      setDetalle]      = useState<DetalleExpediente | null>(null);
+  const [cargandoDet,  setCargandoDet]  = useState(false);
 
   // Formulario registro
   const [form, setForm] = useState({
@@ -82,13 +114,47 @@ export default function MesaPartesPage() {
 
   useEffect(() => { cargarDatos(); }, []);
 
+  // Función para manejar el archivo agregada
+  const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') { 
+      setError('Solo se aceptan archivos PDF.'); 
+      return; 
+    }
+    if (file.size > 10 * 1024 * 1024) { 
+      setError('El archivo no puede superar 10MB.'); 
+      return; 
+    }
+    setError('');
+    setArchivoPdf(file);
+  };
+
+  // ── Ver detalle + documentos ─────────────────────────────────
+  const verDetalle = async (id: number) => {
+    setModalDetalle(true);
+    setCargandoDet(true);
+    try {
+      const [det, docs] = await Promise.all([
+        areasService.detalle(id),
+        documentosService.listar(id),
+      ]);
+      setDetalle({ ...det, documentos: docs });
+    } catch {
+      setError('Error al cargar el detalle.');
+    } finally {
+      setCargandoDet(false);
+    }
+  };
+
+  // ── Buscar DNI ───────────────────────────────────────────────
   const buscarDni = async () => {
     if (form.dni.length !== 8) return;
     setBuscandoDni(true);
     try {
       const res = await mesaPartesService.consultarDni(form.dni);
-      if (res.ciudadano) {
-        const c = res.ciudadano;
+      const c   = res.datos || res.ciudadano;
+      if (c) {
         setForm(prev => ({
           ...prev,
           nombres:      c.nombres      || '',
@@ -98,12 +164,13 @@ export default function MesaPartesPage() {
         }));
       }
     } catch {
-      // RENIEC no disponible — ingreso manual
+      // RENIEC no disponible
     } finally {
       setBuscandoDni(false);
     }
   };
 
+  // ── Registrar expediente ─────────────────────────────────────
   const handleRegistrar = async () => {
     if (!form.dni || !form.nombres || !form.apellido_pat || !form.email || !form.tipoTramiteId) {
       setError('Completa todos los campos obligatorios.');
@@ -112,8 +179,19 @@ export default function MesaPartesPage() {
     setLoadingReg(true);
     try {
       const res = await mesaPartesService.registrar(form);
+      
+      // Subir PDF si existe (Lógica agregada)
+      if (archivoPdf) {
+        try {
+          await documentosService.subirDocumento(res.expediente.id, archivoPdf);
+        } catch {
+          console.warn('No se pudo subir el PDF.');
+        }
+      }
+      
       setSuccess(`Expediente ${res.expediente.codigo} registrado. El ciudadano debe pagar en ventanilla.`);
       setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '', tipoTramiteId: '' });
+      setArchivoPdf(null); // Limpiar archivo
       setTab('bandeja');
       cargarDatos();
     } catch (err: any) {
@@ -123,11 +201,9 @@ export default function MesaPartesPage() {
     }
   };
 
+  // ── Derivar ──────────────────────────────────────────────────
   const abrirDerivar = (exp: ExpedienteBandeja) => {
-    setExpDerivar(exp);
-    setAreaDestino('');
-    setInstrucciones('');
-    setModalDerivar(true);
+    setExpDerivar(exp); setAreaDestino(''); setInstrucciones(''); setModalDerivar(true);
   };
 
   const handleDerivar = async () => {
@@ -187,12 +263,15 @@ export default function MesaPartesPage() {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
         {([
-          { key: 'bandeja',   label: `Bandeja (${bandeja.length})`, icon: <Clock size={13} /> },
-          { key: 'registrar', label: 'Nuevo expediente',            icon: <Plus  size={13} /> },
+          { key: 'bandeja',  label: `Bandeja (${bandeja.length})`, icon: <Clock size={13} /> },
+          { key: 'registrar', label: 'Nuevo expediente',             icon: <Plus  size={13} /> },
         ] as const).map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => {
+              setTab(t.key);
+              setArchivoPdf(null); // Limpiar archivo al cambiar tab
+            }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
               tab === t.key
                 ? 'border-blue-600 text-blue-600'
@@ -210,7 +289,7 @@ export default function MesaPartesPage() {
           <Table
             keyField="id"
             data={bandeja}
-            emptyText="No hay expedientes en bandeja. Los expedientes aparecen aquí después de que el cajero verifique el pago."
+            emptyText="No hay expedientes en bandeja."
             columns={[
               {
                 key: 'codigo', header: 'Código',
@@ -253,15 +332,27 @@ export default function MesaPartesPage() {
               {
                 key: 'acciones', header: '',
                 render: (r) => (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={<Send size={12} />}
-                    onClick={() => abrirDerivar(r)}
-                    disabled={!r.pagos || r.pagos.length === 0}
-                  >
-                    Derivar
-                  </Button>
+                  <div className="flex gap-1.5">
+                    {/* Ver documentos */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<Eye size={12} />}
+                      onClick={() => verDetalle(r.id)}
+                    >
+                      Ver
+                    </Button>
+                    {/* Derivar */}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Send size={12} />}
+                      onClick={() => abrirDerivar(r)}
+                      disabled={!r.pagos || r.pagos.length === 0}
+                    >
+                      Derivar
+                    </Button>
+                  </div>
                 ),
               },
             ]}
@@ -276,22 +367,11 @@ export default function MesaPartesPage() {
           <div className="mt-4 space-y-4">
             <div className="flex gap-2 items-end">
               <div className="flex-1">
-                <Input
-                  label="DNI del ciudadano"
-                  placeholder="12345678"
-                  value={form.dni}
-                  onChange={(e) => setF('dni', e.target.value)}
-                  maxLength={8}
-                  required
-                />
+                <Input label="DNI del ciudadano" placeholder="12345678" value={form.dni}
+                  onChange={(e) => setF('dni', e.target.value)} maxLength={8} required />
               </div>
-              <Button
-                variant="secondary"
-                icon={<Search size={14} />}
-                loading={buscandoDni}
-                onClick={buscarDni}
-                disabled={form.dni.length !== 8}
-              >
+              <Button variant="secondary" icon={<Search size={14} />} loading={buscandoDni}
+                onClick={buscarDni} disabled={form.dni.length !== 8}>
                 Buscar DNI
               </Button>
             </div>
@@ -303,13 +383,8 @@ export default function MesaPartesPage() {
               <Input label="Teléfono"         value={form.telefono}     onChange={(e) => setF('telefono', e.target.value)}     placeholder="987654321" />
             </div>
 
-            <Input
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setF('email', e.target.value)}
-              required
-            />
+            <Input label="Email" type="email" value={form.email}
+              onChange={(e) => setF('email', e.target.value)} required />
 
             <div>
               <label className="text-sm font-medium text-gray-700 block mb-1">
@@ -329,8 +404,55 @@ export default function MesaPartesPage() {
               </select>
             </div>
 
+            {/* Campo PDF Agregado */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">
+                Documento adjunto (PDF)
+                <span className="text-gray-400 font-normal ml-1">— opcional</span>
+              </label>
+              {archivoPdf ? (
+                <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <FileText size={16} className="text-green-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-green-700 truncate">{archivoPdf.name}</p>
+                    <p className="text-xs text-green-500">{(archivoPdf.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button 
+                    onClick={() => { setArchivoPdf(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                    className="text-gray-400 hover:text-red-500"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                >
+                  <Upload size={20} className="mx-auto text-gray-400 mb-1" />
+                  <p className="text-sm text-gray-500">Haz clic para seleccionar un PDF</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Máximo 10MB</p>
+                </div>
+              )}
+              <input 
+                ref={fileInputRef} 
+                type="file" 
+                accept="application/pdf" 
+                className="hidden" 
+                onChange={handleArchivoChange} 
+              />
+            </div>
+
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="secondary" onClick={() => setTab('bandeja')}>Cancelar</Button>
+              <button 
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={() => {
+                  setTab('bandeja');
+                  setArchivoPdf(null); // Limpiar al cancelar
+                }}
+              >
+                Cancelar
+              </button>
               <Button variant="primary" icon={<FileText size={14} />} loading={loadingReg} onClick={handleRegistrar}>
                 Registrar expediente
               </Button>
@@ -339,7 +461,86 @@ export default function MesaPartesPage() {
         </Card>
       )}
 
-      {/* Modal derivar */}
+      {/* ── Modales Detalle, Derivar y Token se mantienen igual... ── */}
+      <Modal
+        open={modalDetalle}
+        onClose={() => setModalDetalle(false)}
+        title="Detalle del expediente"
+        size="lg"
+      >
+        {cargandoDet ? <Spinner text="Cargando detalle..." /> : detalle ? (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-xs text-gray-400">Código</p>
+                <p className="font-mono font-bold text-blue-600">{detalle.codigo}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Estado</p>
+                <EstadoBadge estado={detalle.estado} />
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Ciudadano</p>
+                <p className="font-medium">{detalle.ciudadano.nombres} {detalle.ciudadano.apellido_pat}</p>
+                <p className="text-xs text-gray-500">DNI: {detalle.ciudadano.dni} · {detalle.ciudadano.email}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Trámite</p>
+                <p className="font-medium">{detalle.tipoTramite.nombre}</p>
+                <p className="text-xs text-gray-500">{detalle.tipoTramite.plazo_dias} días · S/ {Number(detalle.tipoTramite.costo_soles).toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Registrado</p>
+                <p>{formatFecha(detalle.fecha_registro)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Fecha límite</p>
+                <p className={colorDiasRestantes(diasRestantes(detalle.fecha_limite))}>
+                  {formatFecha(detalle.fecha_limite)}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <CardTitle>Documentos adjuntos del ciudadano</CardTitle>
+              {detalle.documentos && detalle.documentos.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {detalle.documentos.map((doc) => (
+                    <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <FileText size={16} className="text-blue-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700 truncate">{doc.nombre}</p>
+                        <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg"
+                      >
+                        <Download size={13} />
+                        Descargar
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 mt-2 bg-gray-50 rounded-lg p-3 text-center">
+                  El ciudadano no adjuntó documentos.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <CardTitle>Historial de movimientos</CardTitle>
+              <div className="mt-3">
+                <TimelineMovimientos movimientos={detalle.movimientos} />
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
       <Modal
         open={modalDerivar}
         onClose={() => setModalDerivar(false)}
@@ -348,7 +549,8 @@ export default function MesaPartesPage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setModalDerivar(false)}>Cancelar</Button>
-            <Button variant="primary" loading={loadingDerivar} icon={<Send size={14} />} onClick={handleDerivar} disabled={!areaDestino}>
+            <Button variant="primary" loading={loadingDerivar} icon={<Send size={14} />}
+              onClick={handleDerivar} disabled={!areaDestino}>
               Derivar
             </Button>
           </>
@@ -387,7 +589,6 @@ export default function MesaPartesPage() {
         )}
       </Modal>
 
-      {/* Modal token */}
       <Modal
         open={modalToken}
         onClose={() => setModalToken(false)}
@@ -396,7 +597,8 @@ export default function MesaPartesPage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setModalToken(false)}>Cancelar</Button>
-            <Button variant="primary" loading={loadingToken} icon={<CheckCircle size={14} />} onClick={handleConfirmarToken}>
+            <Button variant="primary" loading={loadingToken} icon={<CheckCircle size={14} />}
+              onClick={handleConfirmarToken}>
               Confirmar derivación
             </Button>
           </>

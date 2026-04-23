@@ -19,7 +19,7 @@ import auditoriaRoutes  from './routes/auditoria.routes';
 import documentosRoutes from './routes/documentos.routes';
 // ── Middleware de error ──────────────────────────────────────────
 import { errorHandler } from './middlewares/error.middleware';
-
+import dashboardRoutes from './routes/dashboard.routes';
 const app = express();
 
 // ── Middlewares globales ─────────────────────────────────────────
@@ -49,6 +49,9 @@ app.use('/api/areas',       areasRoutes);
 app.use('/api/portal',      portalRoutes);
 app.use('/api/auditoria',   auditoriaRoutes);
 app.use('/api/documentos', documentosRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+
+
 // ── Ruta no encontrada ───────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada.' });
