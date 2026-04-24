@@ -1,14 +1,21 @@
 // src/controllers/mesaPartes.controller.ts
 // RF19: Notificación al registrar expediente.
-// RF20: Notificación al derivar.
+// RF20: Notificación al derivar, observar y reactivar (subsanación).
 
 import { Request, Response, NextFunction } from 'express';
-import { randomBytes }  from 'crypto';
-import { prisma }       from '../config/prisma';
-import { AppError }     from '../middlewares/error.middleware';
+import { randomBytes } from 'crypto';
+import { prisma } from '../config/prisma';
+import { AppError } from '../middlewares/error.middleware';
 import { generarCodigoExpediente } from '../utils/codigo';
-import { consultarReniec }         from '../utils/reniec';
+import { consultarReniec } from '../utils/reniec';
 import { notificarRegistro, notificarCambioEstado } from '../services/email.service';
+
+const selectNotificacion = {
+  codigo:      true,
+  ciudadano:   { select: { email: true, nombres: true } },
+  tipoTramite: { select: { nombre: true } },
+  areaActual:  { select: { nombre: true } },
+} as const;
 
 // ── GET /api/mesa-partes/consultar-dni/:dni ──────────────────
 export const consultarDni = async (
@@ -83,22 +90,15 @@ export const registrarExpediente = async (
       return exp;
     });
 
-    // RF19 — Email al ciudadano
-    console.log('📧 Intentando enviar email a:', ciudadano.email);
-    try {
-      await notificarRegistro({
-        email:          ciudadano.email,
-        nombres:        ciudadano.nombres,
-        codigo:         expediente.codigo,
-        tipoTramite:    tipoTramite.nombre,
-        fecha_registro: expediente.fecha_registro,
-        fecha_limite:   expediente.fecha_limite,
-        costo_soles:    Number(tipoTramite.costo_soles),
-      });
-      console.log('✅ Email enviado correctamente');
-    } catch (e) {
-      console.error('❌ Error al enviar email:', e);
-    }
+    notificarRegistro({
+      email:          ciudadano.email,
+      nombres:        ciudadano.nombres,
+      codigo:         expediente.codigo,
+      tipoTramite:    tipoTramite.nombre,
+      fecha_registro: expediente.fecha_registro,
+      fecha_limite:   expediente.fecha_limite,
+      costo_soles:    Number(tipoTramite.costo_soles),
+    }).catch((e) => console.warn('⚠️ Email RF19:', e));
 
     res.status(201).json({ message: 'Expediente registrado correctamente.', expediente });
   } catch (err) { next(err); }
@@ -110,16 +110,104 @@ export const bandejaMDP = async (
 ): Promise<void> => {
   try {
     const expedientes = await prisma.expediente.findMany({
-      where:   { estado: { in: ['RECIBIDO', 'EN_REVISION_MDP'] } },
+      where:   { estado: { in: ['RECIBIDO', 'EN_REVISION_MDP', 'OBSERVADO'] } },
       select: {
         id: true, codigo: true, estado: true, fecha_registro: true, fecha_limite: true,
-        ciudadano:  { select: { dni: true, nombres: true, apellido_pat: true, apellido_mat: true, email: true } },
+        ciudadano:   { select: { dni: true, nombres: true, apellido_pat: true, apellido_mat: true, email: true } },
         tipoTramite: { select: { nombre: true, costo_soles: true } },
         pagos: { where: { estado: 'VERIFICADO' }, select: { boleta: true, monto_cobrado: true, fecha_pago: true }, take: 1 },
       },
       orderBy: { fecha_registro: 'asc' },
     });
     res.json(expedientes);
+  } catch (err) { next(err); }
+};
+
+// ── PATCH /api/mesa-partes/observar/:id ──────────────────────
+export const observarExpedienteMDP = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id             = Number(req.params['id']);
+    const usuarioId      = req.usuario!.id;
+    const { comentario } = req.body as { comentario: string };
+
+    if (!comentario?.trim()) throw new AppError(400, 'El comentario de observación es obligatorio.');
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: { estado: true, ...selectNotificacion },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+    if (!['RECIBIDO', 'EN_REVISION_MDP', 'EN_PROCESO'].includes(expediente.estado)) {
+      throw new AppError(400, `No se puede observar un expediente en estado ${expediente.estado}.`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.expediente.update({ where: { id }, data: { estado: 'OBSERVADO' } });
+      await tx.movimiento.create({
+        data: { expedienteId: id, usuarioId, tipo_accion: 'OBSERVACION', estado_resultado: 'OBSERVADO', comentario: comentario.trim() },
+      });
+    });
+
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email,
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'OBSERVADO',
+      comentario:  comentario.trim(),
+      area:        expediente.areaActual?.nombre,
+    }).catch((e) => console.warn('⚠️ Email OBSERVADO MDP:', e));
+
+    res.json({ message: 'Expediente marcado como OBSERVADO. Ciudadano notificado.' });
+  } catch (err) { next(err); }
+};
+
+// ── PATCH /api/mesa-partes/reactivar/:id ─────────────────────
+export const reactivarExpediente = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id        = Number(req.params['id']);
+    const usuarioId = req.usuario!.id;
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: { estado: true, ...selectNotificacion },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+    if (expediente.estado !== 'OBSERVADO') {
+      throw new AppError(400, `Solo se pueden reactivar expedientes en OBSERVADO. Estado: ${expediente.estado}`);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.expediente.update({ where: { id }, data: { estado: 'RECIBIDO' } });
+      await tx.movimiento.create({
+        data: {
+          expedienteId:     id,
+          usuarioId,
+          tipo_accion:      'SUBSANACION',
+          estado_resultado: 'RECIBIDO',
+          comentario:       'Expediente reactivado por Mesa de Partes. Documentos subsanados por el ciudadano.',
+        },
+      });
+    });
+
+    // Notificación usando el nuevo estado 'SUBSANADO'
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email,
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'SUBSANADO',
+      comentario:  'Tus documentos han sido revisados y subsanados correctamente. Tu trámite está en espera de derivación al área técnica.',
+      area:        expediente.areaActual?.nombre,
+    }).catch((e) => console.warn('⚠️ Email SUBSANACION:', e));
+
+    res.json({ message: 'Expediente reactivado. Estado: RECIBIDO.' });
   } catch (err) { next(err); }
 };
 
@@ -133,9 +221,14 @@ export const derivarExpediente = async (
 
     if (!expedienteId || !areaDestinoId) throw new AppError(400, 'Faltan campos: expedienteId, areaDestinoId.');
 
-    const expediente = await prisma.expediente.findUnique({ where: { id: Number(expedienteId) }, include: { ciudadano: true, tipoTramite: true } });
+    const expediente = await prisma.expediente.findUnique({
+      where:   { id: Number(expedienteId) },
+      include: { ciudadano: true, tipoTramite: true },
+    });
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
-    if (!['EN_REVISION_MDP', 'RECIBIDO'].includes(expediente.estado)) throw new AppError(400, `No se puede derivar en estado ${expediente.estado}.`);
+    if (!['EN_REVISION_MDP', 'RECIBIDO'].includes(expediente.estado)) {
+      throw new AppError(400, `No se puede derivar en estado ${expediente.estado}.`);
+    }
 
     const area = await prisma.area.findUnique({ where: { id: Number(areaDestinoId) } });
     if (!area) throw new AppError(400, 'Área destino no encontrada.');
@@ -179,16 +272,22 @@ export const confirmarDerivacion = async (
       });
     });
 
-    // RF20 — Email al ciudadano: expediente derivado
-    try {
-      const datos = await prisma.expediente.findUnique({
-        where: { id: derivacion.expedienteId },
-        select: { codigo: true, ciudadano: { select: { email: true, nombres: true } }, tipoTramite: { select: { nombre: true } }, areaActual: { select: { nombre: true } } },
-      });
-      if (datos) {
-        await notificarCambioEstado({ email: datos.ciudadano.email, nombres: datos.ciudadano.nombres, codigo: datos.codigo, tipoTramite: datos.tipoTramite.nombre, estado: 'DERIVADO', comentario: null, area: datos.areaActual?.nombre });
-      }
-    } catch (e) { console.warn('⚠️ Email DERIVADO no enviado:', e); }
+    const datos = await prisma.expediente.findUnique({
+      where: { id: derivacion.expedienteId },
+      select: selectNotificacion,
+    });
+    
+    if (datos) {
+      notificarCambioEstado({
+        email:       datos.ciudadano.email,
+        nombres:     datos.ciudadano.nombres,
+        codigo:      datos.codigo,
+        tipoTramite: datos.tipoTramite.nombre,
+        estado:      'DERIVADO',
+        comentario:  null,
+        area:        datos.areaActual?.nombre,
+      }).catch((e) => console.warn('⚠️ Email DERIVADO:', e));
+    }
 
     res.json({ message: 'Derivación confirmada. El expediente avanzó a DERIVADO.' });
   } catch (err) { next(err); }

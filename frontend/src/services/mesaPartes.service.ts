@@ -20,6 +20,11 @@ export const mesaPartesService = {
   derivar: (expedienteId: number, areaDestinoId: number, instrucciones?: string) =>
     api.post('/mesa-partes/derivar', { expedienteId, areaDestinoId, instrucciones }).then(r => r.data),
 
+    reactivar: (id: number) =>
+  api.patch(`/mesa-partes/reactivar/${id}`).then(r => r.data),
+    
   confirmarDerivacion: (token: string) =>
     api.post('/mesa-partes/confirmar-derivacion', { token }).then(r => r.data),
+  observar: (id: number, comentario: string) =>
+  api.patch(`/mesa-partes/observar/${id}`, { comentario }).then(r => r.data),
 };

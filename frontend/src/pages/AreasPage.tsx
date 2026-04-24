@@ -104,20 +104,17 @@ export default function AreasPage() {
   useEffect(() => { cargarBandeja(); }, []);
 
   const verDetalle = async (id: number) => {
-    setModalDetalle(true);
-    setCargandoDet(true);
-    try {
-      const [det, docs] = await Promise.all([
-        areasService.detalle(id),
-        documentosService.listar(id),
-      ]);
-      setDetalle({ ...det, documentos: docs });
-    } catch {
-      setError('Error al cargar el detalle.');
-    } finally {
-      setCargandoDet(false);
-    }
-  };
+  setModalDetalle(true);
+  setCargandoDet(true);
+  try {
+    const det = await areasService.detalle(id);
+    setDetalle({ ...det, documentos: det.documentos ?? [] });
+  } catch {
+    setError('Error al cargar el detalle.');
+  } finally {
+    setCargandoDet(false);
+  }
+}; 
 
   const handleTomar = async (exp: ExpedienteBandeja) => {
     setLoading(true);

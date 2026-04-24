@@ -1,10 +1,8 @@
 // src/services/email.service.ts
 // Notificaciones automáticas por email al ciudadano.
-// RF19: Al registrar expediente
-// RF20: Al cambiar estado (derivado, observado, resuelto, rechazado)
 
 import { Resend } from 'resend';
-import { env }    from '../config/env';
+import { env } from '../config/env';
 
 const resend = new Resend(env.RESEND_API_KEY);
 
@@ -25,26 +23,22 @@ const baseHtml = (titulo: string, contenido: string) => `
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        <!-- Header -->
         <tr>
           <td style="background:#1e40af;padding:28px 40px;text-align:center;">
             <p style="margin:0;color:#ffffff;font-size:18px;font-weight:bold;">Municipalidad Distrital de Carmen Alto</p>
             <p style="margin:6px 0 0;color:#93c5fd;font-size:13px;">${SISTEMA}</p>
           </td>
         </tr>
-        <!-- Título -->
         <tr>
           <td style="padding:32px 40px 0;text-align:center;">
             <p style="margin:0;color:#1e40af;font-size:20px;font-weight:bold;">${titulo}</p>
           </td>
         </tr>
-        <!-- Contenido -->
         <tr>
           <td style="padding:24px 40px 32px;">
             ${contenido}
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #e5e7eb;text-align:center;">
             <p style="margin:0;color:#9ca3af;font-size:12px;">
@@ -113,14 +107,11 @@ export const notificarRegistro = async (params: {
     ])}
     ${alerta('⚠️ Acérquese a la ventanilla de Caja con su número de expediente para realizar el pago y activar su trámite.')}
     ${boton('Consultar estado de mi trámite', `http://localhost:5173/consulta/${codigo}`)}
-    <p style="color:#6b7280;font-size:12px;text-align:center;margin:0;">
-      Guarde este correo como constancia de su presentación.
-    </p>
   `;
 
   await resend.emails.send({
     from:    FROM,
-    to:      'jhuniormaga415@gmail.com',
+    to:      email,
     subject: `✅ Trámite registrado — ${codigo} | Municipalidad Carmen Alto`,
     html:    baseHtml('¡Trámite Registrado!', contenido),
   });
@@ -144,6 +135,12 @@ export const notificarCambioEstado = async (params: {
       mensaje: 'Su trámite ha sido recibido y está siendo revisado por Mesa de Partes.',
       color:   '#1d4ed8',
       emoji:   '📋',
+    },
+    SUBSANADO: {
+      titulo:  'Documentos Subsanados',
+      mensaje: 'Sus documentos han sido revisados y aceptados por Mesa de Partes. Su trámite está en espera de ser derivado al área técnica correspondiente.',
+      color:   '#15803d',
+      emoji:   '✅',
     },
     DERIVADO: {
       titulo:  'Trámite Derivado',
@@ -184,7 +181,7 @@ export const notificarCambioEstado = async (params: {
   };
 
   const cfg = config[estado];
-  if (!cfg) return; // No notificar estados intermedios
+  if (!cfg) return;
 
   const contenido = `
     <p style="color:#374151;font-size:14px;margin:0 0 8px;">Estimado/a <strong>${nombres}</strong>,</p>

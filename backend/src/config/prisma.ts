@@ -1,9 +1,4 @@
 // src/config/prisma.ts
-// Singleton de PrismaClient.
-// En desarrollo, ts-node-dev recarga módulos en cada cambio.
-// Sin el patrón singleton, se crearían múltiples conexiones a la BD
-// y Supabase lanzaría errores de "too many connections".
-
 import { PrismaClient } from '@prisma/client';
 import { env } from './env';
 
@@ -15,6 +10,11 @@ export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: env.isDev ? ['error', 'warn'] : ['error'],
+    datasources: {
+      db: {
+        url: env.DATABASE_URL,
+      },
+    },
   });
 
 if (env.isDev) {
