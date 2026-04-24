@@ -21,6 +21,7 @@ import documentosRoutes from './routes/documentos.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import dashboardRoutes from './routes/dashboard.routes';
 import recepcionRoutes from './routes/recepcion.routes';
+import reportesRoutes from './routes/reportes.routes';
 
 
 const app = express();
@@ -54,7 +55,7 @@ app.use('/api/auditoria',   auditoriaRoutes);
 app.use('/api/documentos', documentosRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/recepcion', recepcionRoutes);
-
+app.use('/api/reportes', reportesRoutes);
 // ── Ruta no encontrada ───────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada.' });

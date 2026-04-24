@@ -11,6 +11,7 @@ import {
   subirPdfFirmado,
   archivarExpediente,
   reactivarExpediente,
+  historialExpedientes,
 } from '../controllers/areas.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { autorizar }  from '../middlewares/roles.middleware';
@@ -23,6 +24,7 @@ router.use(autenticar);
 // Bandeja y detalle — Técnico, Jefe y Admin
 router.get('/bandeja', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_DE_PARTES'), bandejaPorArea);
 router.get('/expediente/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_DE_PARTES'), detalleExpediente);
+router.get('/historial', autorizar('JEFE_AREA', 'ADMIN'), historialExpedientes);
 
 
 // Acciones del Técnico

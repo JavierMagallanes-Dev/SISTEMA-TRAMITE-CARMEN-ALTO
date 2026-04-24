@@ -3,11 +3,8 @@
 
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import {
-  LayoutDashboard, Users, FileText,
-  CreditCard, Building2, Shield,
-  LogOut, ChevronRight,
-} from 'lucide-react';
+import { LayoutDashboard, Users, FileText, CreditCard, Building2, Shield, LogOut, ChevronRight, BarChart2, Archive } from 'lucide-react';
+
 import type { NombreRol } from '../types';
 
 interface NavItem {
@@ -41,6 +38,18 @@ const navItems: NavItem[] = [
     label: 'Mi Área',
     icon:  <Building2 size={18} />,
     roles: ['TECNICO', 'JEFE_AREA', 'ADMIN'],
+  },
+  {
+  to:    '/historial',
+  label: 'Historial',
+  icon:  <Archive size={18} />,
+  roles: ['JEFE_AREA', 'ADMIN'],
+},
+  {
+    to:    '/reportes', // Nueva ruta de Reportes
+    label: 'Reportes',
+    icon:  <BarChart2 size={18} />,
+    roles: ['ADMIN', 'MESA_DE_PARTES', 'JEFE_AREA'],
   },
   {
     to:    '/usuarios',

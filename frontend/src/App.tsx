@@ -5,28 +5,26 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import type { NombreRol } from './types';
 
 // Páginas
-import LoginPage          from './pages/LoginPage';
-import DashboardPage      from './pages/DashboardPage';
-import PortalPage         from './pages/PortalPage';
-import ConsultaPage       from './pages/ConsultaPage';
+import LoginPage      from './pages/LoginPage';
+import DashboardPage  from './pages/DashboardPage';
+import PortalPage     from './pages/PortalPage';
+import ConsultaPage   from './pages/ConsultaPage';
+import CajeroPage     from './pages/CajeroPage';
+import MesaPartesPage from './pages/MesaPartesPage';
+import AreasPage      from './pages/AreasPage';
+import UsuariosPage   from './pages/UsuariosPage';
+import AuditoriaPage  from './pages/AuditoriaPage';
+import ReportesPage   from './pages/ReportesPage';
+import HistorialPage from './pages/HistorialPage';
+import MainLayout     from './layouts/MainLayout';
 
-// Módulos internos
-import CajeroPage         from './pages/CajeroPage';
-import MesaPartesPage     from './pages/MesaPartesPage';
-import AreasPage          from './pages/AreasPage';
-import UsuariosPage       from './pages/UsuariosPage';
-import AuditoriaPage      from './pages/AuditoriaPage';
-
-// Layout interno
-import MainLayout         from './layouts/MainLayout';
-
-// ── Ruta protegida por autenticación ────────────────────────────
+// ── Ruta protegida por autenticación ────────────────────────
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { usuario } = useAuth();
   return usuario ? <>{children}</> : <Navigate to="/login" replace />;
 };
 
-// ── Ruta protegida por rol ───────────────────────────────────────
+// ── Ruta protegida por rol ───────────────────────────────────
 const RolRoute = ({
   roles,
   children,
@@ -46,8 +44,8 @@ const AppRoutes = () => {
   return (
     <Routes>
       {/* Rutas públicas */}
-      <Route path="/login"   element={usuario ? <Navigate to="/dashboard" /> : <LoginPage />} />
-      <Route path="/portal"  element={<PortalPage />} />
+      <Route path="/login"             element={usuario ? <Navigate to="/dashboard" /> : <LoginPage />} />
+      <Route path="/portal"            element={<PortalPage />} />
       <Route path="/consulta/:codigo?" element={<ConsultaPage />} />
 
       {/* Rutas internas protegidas */}
@@ -77,6 +75,11 @@ const AppRoutes = () => {
             <AreasPage />
           </RolRoute>
         } />
+        <Route path="historial" element={
+  <RolRoute roles={['JEFE_AREA', 'ADMIN']}>
+    <HistorialPage />
+  </RolRoute>
+} />
 
         <Route path="usuarios" element={
           <RolRoute roles={['ADMIN']}>
@@ -87,6 +90,12 @@ const AppRoutes = () => {
         <Route path="auditoria" element={
           <RolRoute roles={['ADMIN']}>
             <AuditoriaPage />
+          </RolRoute>
+        } />
+
+        <Route path="reportes" element={
+          <RolRoute roles={['ADMIN', 'MESA_DE_PARTES', 'JEFE_AREA']}>
+            <ReportesPage />
           </RolRoute>
         } />
       </Route>

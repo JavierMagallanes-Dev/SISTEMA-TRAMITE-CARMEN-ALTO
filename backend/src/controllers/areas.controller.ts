@@ -337,6 +337,41 @@ export const archivarExpediente = async (
   } catch (err) { next(err); }
 };
 
+// ── GET /api/areas/historial ─────────────────────────────────
+export const historialExpedientes = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const { areaId, rol } = req.usuario!;
+
+    const where: any = {
+      estado: { in: ['RESUELTO', 'ARCHIVADO'] },
+    };
+
+    // Jefe solo ve su área, Admin ve todo
+    if (rol === 'JEFE_AREA' && areaId) {
+      where.areaActualId = areaId;
+    }
+
+    const expedientes = await prisma.expediente.findMany({
+      where,
+      select: {
+        id: true, codigo: true, estado: true,
+        fecha_registro: true, fecha_limite: true, fecha_resolucion: true,
+        url_pdf_firmado: true, codigo_verificacion_firma: true,
+        ciudadano:   { select: { dni: true, nombres: true, apellido_pat: true, apellido_mat: true, email: true } },
+        tipoTramite: { select: { nombre: true, plazo_dias: true, costo_soles: true } },
+        areaActual:  { select: { nombre: true, sigla: true } },
+        pagos: { where: { estado: 'VERIFICADO' }, select: { boleta: true, monto_cobrado: true, fecha_pago: true }, take: 1 },
+      },
+      orderBy: { fecha_resolucion: 'desc' },
+    });
+
+    res.json(expedientes);
+  } catch (err) { next(err); }
+};
+
+
 // ── PATCH /api/areas/reactivar/:id ───────────────────────────
 // Técnico reactiva expediente OBSERVADO → EN_PROCESO
 export const reactivarExpediente = async (
