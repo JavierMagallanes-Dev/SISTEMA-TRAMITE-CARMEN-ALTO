@@ -10,6 +10,7 @@ import {
   darVistoBueno,
   subirPdfFirmado,
   archivarExpediente,
+  reactivarExpediente,
 } from '../controllers/areas.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { autorizar }  from '../middlewares/roles.middleware';
@@ -28,9 +29,9 @@ router.get('/expediente/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_D
 router.patch('/tomar/:id',    autorizar('TECNICO', 'ADMIN'),              tomarExpediente);
 router.patch('/observar/:id', autorizar('TECNICO', 'ADMIN'),              observarExpediente);
 router.patch('/rechazar/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN'), rechazarExpediente);
-
+router.patch('/reactivar/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN'), reactivarExpediente);
 // Acciones del Jefe de Área
-router.patch('/visto-bueno/:id',      autorizar('JEFE_AREA', 'ADMIN'), darVistoBueno);
+router.patch('/visto-bueno/:id', autorizar('JEFE_AREA', 'TECNICO', 'ADMIN'), darVistoBueno);
 router.post('/subir-pdf-firmado/:id', autorizar('JEFE_AREA', 'ADMIN'), subirPdfFirmado);
 router.patch('/archivar/:id',         autorizar('JEFE_AREA', 'ADMIN'), archivarExpediente);
 

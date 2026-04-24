@@ -1,6 +1,6 @@
 // src/controllers/areas.controller.ts
 // Módulo de Áreas — Técnico y Jefe de Área.
-// Optimizado: cada función carga los datos del ciudadano en el
+// Optimizado: cada función carga los datos del ciudadano en el 
 // findUnique inicial para evitar queries extra con connection_limit=1.
 
 import { Request, Response, NextFunction } from 'express';
@@ -51,7 +51,6 @@ export const bandejaPorArea = async (
 };
 
 // ── GET /api/areas/expediente/:id ────────────────────────────
-// Queries secuenciales para evitar timeout con connection_limit=1
 export const detalleExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -99,7 +98,6 @@ export const detalleExpediente = async (
 };
 
 // ── PATCH /api/areas/tomar/:id ───────────────────────────────
-// DERIVADO → EN_PROCESO
 export const tomarExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -108,7 +106,6 @@ export const tomarExpediente = async (
     const usuarioId = req.usuario!.id;
     const areaId    = req.usuario!.areaId;
 
-    // Carga datos de notificación en el mismo query de validación
     const expediente = await prisma.expediente.findUnique({
       where:  { id },
       select: { estado: true, areaActualId: true, ...selectNotificacion },
@@ -125,7 +122,6 @@ export const tomarExpediente = async (
       });
     });
 
-    // Email con datos ya cargados — sin query extra
     notificarCambioEstado({
       email:       expediente.ciudadano.email,
       nombres:     expediente.ciudadano.nombres,
@@ -141,7 +137,6 @@ export const tomarExpediente = async (
 };
 
 // ── PATCH /api/areas/observar/:id ────────────────────────────
-// EN_PROCESO → OBSERVADO
 export const observarExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -184,7 +179,6 @@ export const observarExpediente = async (
 };
 
 // ── PATCH /api/areas/rechazar/:id ────────────────────────────
-// EN_PROCESO → RECHAZADO
 export const rechazarExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -227,7 +221,6 @@ export const rechazarExpediente = async (
 };
 
 // ── PATCH /api/areas/visto-bueno/:id ─────────────────────────
-// EN_PROCESO → LISTO_DESCARGA
 export const darVistoBueno = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -236,12 +229,13 @@ export const darVistoBueno = async (
     const usuarioId = req.usuario!.id;
     const areaId    = req.usuario!.areaId;
 
+    // Actualizado: Ahora carga los datos necesarios para la notificación
     const expediente = await prisma.expediente.findUnique({
       where:  { id },
-      select: { estado: true, areaActualId: true },
+      select: { estado: true, areaActualId: true, ...selectNotificacion },
     });
 
-    if (!expediente)                           throw new AppError(404, 'Expediente no encontrado.');
+    if (!expediente)                         throw new AppError(404, 'Expediente no encontrado.');
     if (expediente.estado !== 'EN_PROCESO')    throw new AppError(400, 'El expediente debe estar EN_PROCESO.');
     if (expediente.areaActualId !== areaId)    throw new AppError(403, 'Este expediente no pertenece a tu área.');
 
@@ -252,12 +246,22 @@ export const darVistoBueno = async (
       });
     });
 
+    // Notificación añadida después de la transacción
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email,
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'LISTO_DESCARGA',
+      comentario:  null,
+      area:        expediente.areaActual?.nombre,
+    }).catch((e) => console.warn('⚠️ Email LISTO_DESCARGA:', e));
+
     res.json({ message: 'Visto bueno otorgado. Estado: LISTO_DESCARGA.' });
   } catch (err) { next(err); }
 };
 
 // ── POST /api/areas/subir-pdf-firmado/:id ────────────────────
-// LISTO_DESCARGA → PDF_FIRMADO → RESUELTO
 export const subirPdfFirmado = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -307,7 +311,6 @@ export const subirPdfFirmado = async (
 };
 
 // ── PATCH /api/areas/archivar/:id ────────────────────────────
-// RESUELTO → ARCHIVADO
 export const archivarExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -331,5 +334,49 @@ export const archivarExpediente = async (
     });
 
     res.json({ message: 'Expediente ARCHIVADO correctamente.' });
+  } catch (err) { next(err); }
+};
+
+// ── PATCH /api/areas/reactivar/:id ───────────────────────────
+// Técnico reactiva expediente OBSERVADO → EN_PROCESO
+export const reactivarExpediente = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id        = Number(req.params['id']);
+    const usuarioId = req.usuario!.id;
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: { estado: true, areaActualId: true, ...selectNotificacion },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+    if (expediente.estado !== 'OBSERVADO') throw new AppError(400, `Solo se reactivan expedientes OBSERVADOS.`);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.expediente.update({ where: { id }, data: { estado: 'EN_PROCESO' } });
+      await tx.movimiento.create({
+        data: { 
+          expedienteId: id, 
+          usuarioId, 
+          tipo_accion: 'SUBSANACION', 
+          estado_resultado: 'EN_PROCESO', 
+          comentario: 'Documentos subsanados revisados. Expediente reactivado para evaluación.' 
+        },
+      });
+    });
+
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email,
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'SUBSANADO',
+      comentario:  'Tus documentos fueron revisados y aceptados. Tu trámite continúa en evaluación técnica.',
+      area:        expediente.areaActual?.nombre,
+    }).catch((e) => console.warn('⚠️ Email SUBSANACION areas:', e));
+
+    res.json({ message: 'Expediente reactivado. Estado: EN_PROCESO.' });
   } catch (err) { next(err); }
 };

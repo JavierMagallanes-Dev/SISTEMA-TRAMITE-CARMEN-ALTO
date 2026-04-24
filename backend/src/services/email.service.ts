@@ -84,12 +84,12 @@ const boton = (texto: string, url: string) => `
 // ── RF19: Notificación al registrar expediente ───────────────
 export const notificarRegistro = async (params: {
   email:          string;
-  nombres:        string;
-  codigo:         string;
-  tipoTramite:    string;
+  nombres:         string;
+  codigo:          string;
+  tipoTramite:     string;
   fecha_registro: Date;
-  fecha_limite:   Date;
-  costo_soles:    number;
+  fecha_limite:    Date;
+  costo_soles:     number;
 }) => {
   const { email, nombres, codigo, tipoTramite, fecha_registro, fecha_limite, costo_soles } = params;
 
@@ -100,10 +100,10 @@ export const notificarRegistro = async (params: {
     </p>
     ${infoBox([
       { label: 'Número de Expediente', value: codigo },
-      { label: 'Tipo de Trámite',      value: tipoTramite },
-      { label: 'Fecha de Registro',    value: formatFecha(fecha_registro) },
-      { label: 'Fecha Límite',         value: formatFecha(fecha_limite) },
-      { label: 'Costo del Trámite',    value: `S/ ${Number(costo_soles).toFixed(2)}` },
+      { label: 'Tipo de Trámite',       value: tipoTramite },
+      { label: 'Fecha de Registro',     value: formatFecha(fecha_registro) },
+      { label: 'Fecha Límite',          value: formatFecha(fecha_limite) },
+      { label: 'Costo del Trámite',     value: `S/ ${Number(costo_soles).toFixed(2)}` },
     ])}
     ${alerta('⚠️ Acérquese a la ventanilla de Caja con su número de expediente para realizar el pago y activar su trámite.')}
     ${boton('Consultar estado de mi trámite', `http://localhost:5173/consulta/${codigo}`)}
@@ -167,8 +167,8 @@ export const notificarCambioEstado = async (params: {
       emoji:   '❌',
     },
     RESUELTO: {
-      titulo:  '¡Trámite Resuelto!',
-      mensaje: 'Su trámite ha sido resuelto satisfactoriamente. Ya puede descargar el documento de respuesta.',
+      titulo:  '¡Trámite Resuelto y Firmado!',
+      mensaje: 'Su trámite ha sido <strong>resuelto y firmado digitalmente</strong> por el Jefe de Área con FirmaPeru. El documento oficial está disponible para descarga en el portal ciudadano.',
       color:   '#15803d',
       emoji:   '✅',
     },
@@ -177,6 +177,12 @@ export const notificarCambioEstado = async (params: {
       mensaje: 'El documento oficial de su trámite ha sido firmado digitalmente y está listo para descarga.',
       color:   '#0f766e',
       emoji:   '📄',
+    },
+    LISTO_DESCARGA: {
+      titulo:  'Trámite Listo para Firma',
+      mensaje: 'Su trámite ha sido evaluado satisfactoriamente y está siendo preparado para la firma digital por el Jefe de Área. Pronto recibirá la resolución final.',
+      color:   '#0f766e',
+      emoji:   '📋',
     },
   };
 
@@ -190,7 +196,7 @@ export const notificarCambioEstado = async (params: {
     </p>
     ${infoBox([
       { label: 'Número de Expediente', value: codigo },
-      { label: 'Tipo de Trámite',      value: tipoTramite },
+      { label: 'Tipo de Trámite',       value: tipoTramite },
       { label: 'Estado Actual',        value: estado.replace(/_/g, ' ') },
       ...(area ? [{ label: 'Área Responsable', value: area }] : []),
     ])}
@@ -201,7 +207,16 @@ export const notificarCambioEstado = async (params: {
       </div>
     ` : ''}
     ${estado === 'OBSERVADO' ? alerta('📎 Ingrese al portal de consulta para adjuntar los documentos adicionales solicitados.') : ''}
-    ${estado === 'RESUELTO' || estado === 'PDF_FIRMADO' ? alerta('📥 Su documento oficial está disponible para descarga en el portal ciudadano.', '#1d4ed8', '#eff6ff', '#bfdbfe') : ''}
+    
+    ${estado === 'RESUELTO' || estado === 'PDF_FIRMADO' ? `
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin:16px 0;text-align:center;">
+        <p style="margin:0 0 12px;color:#1e3a8a;font-size:13px;font-weight:bold;">📥 Su documento oficial está listo para descarga</p>
+        <a href="http://localhost:5173/consulta/${codigo}" style="background:#15803d;color:#ffffff;text-decoration:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;display:inline-block;">
+          Descargar documento resuelto →
+        </a>
+      </div>
+    ` : ''}
+
     ${boton('Ver mi trámite en el portal', `http://localhost:5173/consulta/${codigo}`)}
   `;
 

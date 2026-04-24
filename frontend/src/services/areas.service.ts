@@ -25,4 +25,6 @@ export const areasService = {
 
   archivar: (id: number) =>
     api.patch(`/areas/archivar/${id}`).then(r => r.data),
+  reactivar: (id: number) =>
+  api.patch(`/areas/reactivar/${id}`).then(r => r.data),
 };

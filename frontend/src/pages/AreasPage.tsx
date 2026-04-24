@@ -1,5 +1,3 @@
-// src/pages/AreasPage.tsx
-
 import { useEffect, useState, useRef } from 'react';
 import { areasService }                from '../services/areas.service';
 import { documentosService }           from '../services/documentos.service';
@@ -76,7 +74,7 @@ export default function AreasPage() {
   const [expAdjuntar,      setExpAdjuntar]      = useState<ExpedienteBandeja | null>(null);
   const [archivoAdjunto,   setArchivoAdjunto]   = useState<File | null>(null);
   const [loadingAdjunto,   setLoadingAdjunto]   = useState(false);
-  const adjuntoRef                              = useRef<HTMLInputElement>(null);
+  const adjuntoRef                               = useRef<HTMLInputElement>(null);
 
   // Modal PDF firmado con archivo real
   const [modalPdf,   setModalPdf]   = useState(false);
@@ -86,9 +84,10 @@ export default function AreasPage() {
   const fileInputRef                = useRef<HTMLInputElement>(null);
 
   // Confirms
-  const [confirmTomar,    setConfirmTomar]    = useState<ExpedienteBandeja | null>(null);
-  const [confirmVisto,    setConfirmVisto]    = useState<ExpedienteBandeja | null>(null);
-  const [confirmArchivar, setConfirmArchivar] = useState<ExpedienteBandeja | null>(null);
+  const [confirmTomar,     setConfirmTomar]     = useState<ExpedienteBandeja | null>(null);
+  const [confirmVisto,     setConfirmVisto]     = useState<ExpedienteBandeja | null>(null);
+  const [confirmArchivar,  setConfirmArchivar]  = useState<ExpedienteBandeja | null>(null);
+  const [confirmReactivar, setConfirmReactivar] = useState<ExpedienteBandeja | null>(null);
 
   const cargarBandeja = async () => {
     setCargando(true);
@@ -168,6 +167,19 @@ export default function AreasPage() {
     } finally { setLoading(false); }
   };
 
+  // ── Reactivar expediente ────────────────────────────
+  const handleReactivar = async (exp: ExpedienteBandeja) => {
+    setLoading(true);
+    try {
+      await areasService.reactivar(exp.id);
+      setSuccess(`Expediente ${exp.codigo} reactivado a EN_PROCESO.`);
+      setConfirmReactivar(null);
+      cargarBandeja();
+    } catch (err: any) {
+      setError(err?.response?.data?.error ?? 'Error al reactivar.');
+    } finally { setLoading(false); }
+  };
+
   // ── Adjuntar documento adicional ────────────────────────────
   const handleArchivoAdjuntoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -244,7 +256,7 @@ export default function AreasPage() {
         </Button>
       </div>
 
-      {error   && <Alert type="error"   message={error}   onClose={() => setError('')}   />}
+      {error    && <Alert type="error"   message={error}   onClose={() => setError('')}   />}
       {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
 
       {/* Bandeja */}
@@ -294,23 +306,36 @@ export default function AreasPage() {
                       </Button>
                     )}
 
+                    {/* Técnico: reactivar (cuando está OBSERVADO) */}
+                    {!esJefe && exp.estado === 'OBSERVADO' && (
+                      <Button size="sm" icon={<CheckCircle size={13} />}
+                        onClick={() => setConfirmReactivar(exp)}>
+                        Reactivar
+                      </Button>
+                    )}
+
                     {/* Técnico: acciones en proceso */}
                     {!esJefe && exp.estado === 'EN_PROCESO' && (
-                      <>
-                        <Button size="sm" variant="secondary" icon={<Paperclip size={13} />}
-                          onClick={() => { setExpAdjuntar(exp); setArchivoAdjunto(null); setModalAdjuntar(true); }}>
-                          Adjuntar
-                        </Button>
-                        <Button size="sm" variant="secondary" icon={<AlertCircle size={13} />}
-                          onClick={() => { setExpAccion(exp); setComentario(''); setModalObservar(true); }}>
-                          Observar
-                        </Button>
-                        <Button size="sm" variant="danger" icon={<XCircle size={13} />}
-                          onClick={() => { setExpAccion(exp); setComentario(''); setModalRechazar(true); }}>
-                          Rechazar
-                        </Button>
-                      </>
-                    )}
+  <>
+    <Button size="sm" variant="secondary" icon={<Paperclip size={13} />}
+      onClick={() => { setExpAdjuntar(exp); setArchivoAdjunto(null); setModalAdjuntar(true); }}>
+      Adjuntar
+    </Button>
+    <Button size="sm" variant="secondary" icon={<AlertCircle size={13} />}
+      onClick={() => { setExpAccion(exp); setComentario(''); setModalObservar(true); }}>
+      Observar
+    </Button>
+    <Button size="sm" variant="danger" icon={<XCircle size={13} />}
+      onClick={() => { setExpAccion(exp); setComentario(''); setModalRechazar(true); }}>
+      Rechazar
+    </Button>
+    {/* ← AGREGAR ESTE BOTÓN */}
+    <Button size="sm" icon={<CheckCircle size={13} />}
+      onClick={() => setConfirmVisto(exp)}>
+      Enviar al Jefe
+    </Button>
+  </>
+)}
 
                     {/* Jefe: visto bueno */}
                     {esJefe && exp.estado === 'EN_PROCESO' && (
@@ -552,6 +577,11 @@ export default function AreasPage() {
         onConfirm={() => confirmArchivar && handleArchivar(confirmArchivar)}
         title="Archivar expediente" message={`¿Archivar permanentemente ${confirmArchivar?.codigo}?`}
         confirmText="Archivar" loading={loading} danger />
+
+      <ConfirmModal open={!!confirmReactivar} onClose={() => setConfirmReactivar(null)}
+        onConfirm={() => confirmReactivar && handleReactivar(confirmReactivar)}
+        title="Reactivar expediente" message={`¿Confirmas que el expediente ${confirmReactivar?.codigo} ha sido subsanado y debe volver a evaluación?`}
+        confirmText="Reactivar" loading={loading} />
     </div>
   );
 }
