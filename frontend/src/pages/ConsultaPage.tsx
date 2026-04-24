@@ -1,43 +1,45 @@
 // src/pages/ConsultaPage.tsx
-// Página pública de consulta de expediente por código.
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { portalService }          from '../services/portal.service';
-import Alert                      from '../components/ui/Alert';
-import Spinner                    from '../components/ui/Spinner';
-import Button                     from '../components/ui/Button';
+import Alert                     from '../components/ui/Alert';
+import Spinner                   from '../components/ui/Spinner';
+import Button                    from '../components/ui/Button';
 import EstadoBadge                from '../components/shared/EstadoBadge';
 import TimelineMovimientos        from '../components/shared/TimelineMovimientos';
-import { formatFecha, formatFechaHora, diasRestantes, colorDiasRestantes } from '../utils/formato';
+import { formatFecha, formatFechaHora, colorDiasRestantes } from '../utils/formato';
 import type { EstadoExpediente, Movimiento } from '../types';
-import { Building2, Search, Download, ArrowLeft, Calendar, User, FileText } from 'lucide-react';
+import {
+  Building2, Search, Download, ArrowLeft,
+  Calendar, User, FileText, Printer,
+} from 'lucide-react';
 
 interface ExpedientePublico {
-  id:                       number;
-  codigo:                   string;
-  estado:                   EstadoExpediente;
-  fecha_registro:           string;
-  fecha_limite:             string;
-  fecha_resolucion:         string | null;
-  url_pdf_firmado:          string | null;
+  id:                        number;
+  codigo:                    string;
+  estado:                    EstadoExpediente;
+  fecha_registro:            string;
+  fecha_limite:              string;
+  fecha_resolucion:          string | null;
+  url_pdf_firmado:           string | null;
   codigo_verificacion_firma: string | null;
-  dias_restantes:           number;
-  vencido:                  boolean;
-  ciudadano:                { nombres: string; apellido_pat: string };
-  tipoTramite:              { nombre: string; plazo_dias: number };
-  areaActual:               { nombre: string; sigla: string } | null;
-  movimientos:              Movimiento[];
+  dias_restantes:            number;
+  vencido:                   boolean;
+  ciudadano:                 { nombres: string; apellido_pat: string };
+  tipoTramite:               { nombre: string; plazo_dias: number };
+  areaActual:                { nombre: string; sigla: string } | null;
+  movimientos:               Movimiento[];
 }
 
 export default function ConsultaPage() {
   const { codigo: codigoParam } = useParams<{ codigo: string }>();
   const navigate                = useNavigate();
 
-  const [codigo,     setCodigo]     = useState(codigoParam?.toUpperCase() ?? '');
-  const [expediente, setExpediente] = useState<ExpedientePublico | null>(null);
-  const [cargando,   setCargando]   = useState(false);
-  const [error,      setError]      = useState('');
+  const [codigo,      setCodigo]      = useState(codigoParam?.toUpperCase() ?? '');
+  const [expediente,  setExpediente]  = useState<ExpedientePublico | null>(null);
+  const [cargando,    setCargando]    = useState(false);
+  const [error,       setError]       = useState('');
 
   const consultar = async (cod: string) => {
     if (!cod.trim()) return;
@@ -57,6 +59,11 @@ export default function ConsultaPage() {
   useEffect(() => {
     if (codigoParam) consultar(codigoParam);
   }, [codigoParam]);
+
+  // ── Función de descarga simplificada ──
+  const descargarCargo = (codigoExp: string) => {
+    window.open(`http://localhost:3000/api/recepcion/cargo/publico/${codigoExp}`, '_blank');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -98,14 +105,12 @@ export default function ConsultaPage() {
           </div>
         </div>
 
-        {error && <Alert type="error" message={error} />}
-
+        {error && <Alert type="error" message={error} onClose={() => setError('')} />}
         {cargando && <Spinner text="Buscando expediente..." />}
 
         {/* Resultado */}
         {expediente && (
           <div className="space-y-4">
-            {/* Card resumen */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-100">
                 <div className="flex items-start justify-between">
@@ -133,7 +138,7 @@ export default function ConsultaPage() {
                   <div>
                     <p className="text-xs text-gray-400">Área actual</p>
                     <p className="font-medium text-gray-800">
-                      {expediente.areaActual?.nombre ?? 'Sin asignar'}
+                      {expediente.areaActual?.nombre ?? 'Mesa de Partes'}
                     </p>
                   </div>
                 </div>
@@ -152,8 +157,7 @@ export default function ConsultaPage() {
                     <p className="text-xs text-gray-400">Fecha límite</p>
                     <p className={`font-medium ${colorDiasRestantes(expediente.dias_restantes)}`}>
                       {formatFecha(expediente.fecha_limite)}
-                      {' '}
-                      <span className="text-xs">
+                      <span className="text-xs ml-1 font-normal">
                         ({expediente.vencido
                           ? `vencido hace ${Math.abs(expediente.dias_restantes)}d`
                           : `${expediente.dias_restantes}d restantes`})
@@ -163,7 +167,30 @@ export default function ConsultaPage() {
                 </div>
               </div>
 
-              {/* PDF firmado disponible */}
+              {/* Botón de Cargo de Recepción Actualizado */}
+              <div className="mx-6 mb-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                      <Printer size={15} className="text-gray-500" />
+                      Cargo de recepción
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Constancia oficial de presentación
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<Download size={13} />}
+                    onClick={() => descargarCargo(expediente.codigo)}
+                  >
+                    Descargar PDF
+                  </Button>
+                </div>
+              </div>
+
+              {/* PDF firmado (Si existe) */}
               {expediente.url_pdf_firmado && (
                 <div className="mx-6 mb-6 bg-green-50 border border-green-200 rounded-xl p-4">
                   <div className="flex items-center justify-between">
@@ -176,11 +203,6 @@ export default function ConsultaPage() {
                           Resuelto el {formatFechaHora(expediente.fecha_resolucion)}
                         </p>
                       )}
-                      {expediente.codigo_verificacion_firma && (
-                        <p className="text-xs text-gray-500 mt-1 font-mono">
-                          Código de verificación: {expediente.codigo_verificacion_firma}
-                        </p>
-                      )}
                     </div>
                     <a
                       href={expediente.url_pdf_firmado}
@@ -189,7 +211,7 @@ export default function ConsultaPage() {
                       className="flex items-center gap-2 bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-green-700"
                     >
                       <Download size={14} />
-                      Descargar PDF
+                      Descargar resolución
                     </a>
                   </div>
                 </div>
