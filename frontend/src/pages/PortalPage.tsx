@@ -27,20 +27,16 @@ export default function PortalPage() {
   const [loading, setLoading] = useState(false);
   const [codigoGenerado, setCodigoGenerado] = useState('');
 
-  // Consulta rápida
   const [codigoConsulta, setCodigoConsulta] = useState('');
 
-  // Formulario
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoTramite | null>(null);
   const [form, setForm] = useState({
     dni: '', nombres: '', apellido_pat: '', apellido_mat: '',
     email: '', telefono: '',
   });
   const [buscandoDni, setBuscandoDni] = useState(false);
-
-  // Documento PDF
-  const [archivoPdf,   setArchivoPdf]   = useState<File | null>(null);
-  const fileInputRef                    = useRef<HTMLInputElement>(null);
+  const [archivoPdf,  setArchivoPdf]  = useState<File | null>(null);
+  const fileInputRef                  = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     portalService.tiposTramite().then(setTipos).catch(() => {});
@@ -61,11 +57,8 @@ export default function PortalPage() {
           email:        c.email        || '',
         }));
       }
-    } catch {
-      // RENIEC no disponible — ingreso manual
-    } finally {
-      setBuscandoDni(false);
-    }
+    } catch { /* RENIEC no disponible */ }
+    finally { setBuscandoDni(false); }
   };
 
   const handleRegistrar = async () => {
@@ -75,31 +68,16 @@ export default function PortalPage() {
     }
     setLoading(true);
     try {
-      // 1. Registrar expediente
-      const res = await portalService.registrar({
-        ...form,
-        tipoTramiteId: String(tipoSeleccionado.id),
-      });
-
-      const expedienteId = res.expediente.id;
-
-      // 2. Subir PDF adjunto si existe
+      const res = await portalService.registrar({ ...form, tipoTramiteId: String(tipoSeleccionado.id) });
       if (archivoPdf) {
-        try {
-          await documentosService.subirDocumento(expedienteId, archivoPdf);
-        } catch {
-          // El expediente se registró OK — el PDF falló pero no bloqueamos
-          console.warn('No se pudo subir el PDF adjunto.');
-        }
+        try { await documentosService.subirDocumento(res.expediente.id, archivoPdf); }
+        catch { console.warn('No se pudo subir el PDF.'); }
       }
-
       setCodigoGenerado(res.expediente.codigo);
       setPaso(3);
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'Error al registrar el trámite.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const setF = (field: string, value: string) =>
@@ -108,121 +86,116 @@ export default function PortalPage() {
   const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setError('Solo se aceptan archivos PDF.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setError('El archivo no puede superar los 10MB.');
-      return;
-    }
+    if (file.type !== 'application/pdf') { setError('Solo se aceptan archivos PDF.'); return; }
+    if (file.size > 10 * 1024 * 1024)   { setError('El archivo no puede superar los 10MB.'); return; }
     setArchivoPdf(file);
+  };
+
+  const resetForm = () => {
+    setPaso(1); setTipoSeleccionado(null); setArchivoPdf(null);
+    setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '' });
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <header className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
+        <div className="max-w-4xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
               <Building2 size={20} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-900">Municipalidad Distrital de Carmen Alto</p>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Municipalidad Distrital de Carmen Alto</p>
               <p className="text-xs text-blue-600">Portal de Trámites Ciudadanos</p>
             </div>
           </div>
-          <button onClick={() => navigate('/login')} className="text-sm text-gray-500 hover:text-gray-700">
+          <button
+            onClick={() => navigate('/login')}
+            className="text-xs text-gray-500 hover:text-gray-700 self-end sm:self-auto"
+          >
             Acceso personal →
           </button>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 sm:px-6 sm:py-8 sm:space-y-8">
 
-        {/* Consulta rápida */}
-        <div className="bg-blue-600 rounded-2xl p-6 text-white">
-          <h2 className="text-lg font-bold mb-1">Consulta el estado de tu trámite</h2>
-          <p className="text-blue-100 text-sm mb-4">Ingresa tu código de expediente</p>
-          <div className="flex gap-3">
+        {/* ── Consulta rápida ─────────────────────────────── */}
+        <div className="bg-blue-600 rounded-2xl p-5 text-white sm:p-6">
+          <h2 className="text-base font-bold mb-1 sm:text-lg">Consulta el estado de tu trámite</h2>
+          <p className="text-blue-100 text-xs mb-4 sm:text-sm">Ingresa tu código de expediente</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
             <input
               type="text"
               placeholder="EXP-2026-000001"
               value={codigoConsulta}
               onChange={(e) => setCodigoConsulta(e.target.value.toUpperCase())}
-              className="flex-1 px-4 py-2.5 rounded-lg text-gray-900 text-sm outline-none"
+              onKeyDown={(e) => e.key === 'Enter' && codigoConsulta && navigate(`/consulta/${codigoConsulta}`)}
+              className="flex-1 px-4 py-2.5 rounded-lg text-gray-900 text-sm outline-none font-mono"
             />
             <button
               onClick={() => codigoConsulta && navigate(`/consulta/${codigoConsulta}`)}
-              className="bg-white text-blue-600 font-medium px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 flex items-center gap-2"
+              className="bg-white text-blue-600 font-medium px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 flex items-center justify-center gap-2"
             >
-              <Search size={15} />
-              Consultar
+              <Search size={15} />Consultar
             </button>
           </div>
         </div>
 
-        {/* Formulario registro */}
+        {/* ── Formulario registro ──────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-lg font-bold text-gray-900">Registrar nuevo trámite</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Completa el formulario para iniciar tu trámite</p>
+          <div className="p-5 border-b border-gray-100 sm:p-6">
+            <h2 className="text-base font-bold text-gray-900 sm:text-lg">Registrar nuevo trámite</h2>
+            <p className="text-xs text-gray-500 mt-0.5 sm:text-sm">Completa el formulario para iniciar tu trámite</p>
           </div>
 
           {/* Indicador de pasos */}
           <div className="flex border-b border-gray-100">
             {[
-              { num: 1, label: 'Seleccionar trámite' },
-              { num: 2, label: 'Datos y documento'   },
-              { num: 3, label: 'Confirmación'         },
+              { num: 1, label: 'Trámite'   },
+              { num: 2, label: 'Tus datos' },
+              { num: 3, label: '¡Listo!'   },
             ].map((p) => (
-              <div
-                key={p.num}
-                className={`flex-1 flex items-center gap-2 px-4 py-3 text-xs font-medium ${
+              <div key={p.num}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-3 text-xs font-medium sm:gap-2 sm:px-4 ${
                   paso === p.num
                     ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
                     : paso > p.num ? 'text-green-600' : 'text-gray-400'
-                }`}
-              >
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                  paso > p.num ? 'bg-green-100' : paso === p.num ? 'bg-blue-100' : 'bg-gray-100'
+                }`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                  paso > p.num ? 'bg-green-100 text-green-600' : paso === p.num ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'
                 }`}>
                   {paso > p.num ? '✓' : p.num}
                 </span>
-                {p.label}
+                <span className="hidden sm:inline">{p.label}</span>
               </div>
             ))}
           </div>
 
-          <div className="p-6">
+          <div className="p-5 sm:p-6">
             {error && <Alert type="error" message={error} onClose={() => setError('')} className="mb-4" />}
 
-            {/* Paso 1: Seleccionar trámite */}
+            {/* ── Paso 1: Seleccionar trámite ────────────── */}
             {paso === 1 && (
               <div className="space-y-3">
-                {tipos.length === 0 ? (
-                  <Spinner text="Cargando trámites..." />
-                ) : (
+                {tipos.length === 0 ? <Spinner text="Cargando trámites..." /> : (
                   tipos.map((tipo) => (
-                    <div
-                      key={tipo.id}
-                      onClick={() => setTipoSeleccionado(tipo)}
+                    <div key={tipo.id} onClick={() => setTipoSeleccionado(tipo)}
                       className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
                         tipoSeleccionado?.id === tipo.id
                           ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-blue-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-800">{tipo.nombre}</p>
-                          {tipo.descripcion && <p className="text-xs text-gray-500 mt-0.5">{tipo.descripcion}</p>}
-                          <p className="text-xs text-gray-400 mt-1">Plazo: {tipo.plazo_dias} días hábiles</p>
+                          {tipo.descripcion && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{tipo.descripcion}</p>}
+                          <p className="text-xs text-gray-400 mt-1">⏱ {tipo.plazo_dias} días hábiles</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold text-green-600">S/ {Number(tipo.costo_soles).toFixed(2)}</p>
-                          {tipoSeleccionado?.id === tipo.id && <CheckCircle size={18} className="text-blue-500 ml-auto mt-1" />}
+                        <div className="text-right shrink-0">
+                          <p className="text-base font-bold text-green-600 sm:text-lg">S/ {Number(tipo.costo_soles).toFixed(2)}</p>
+                          {tipoSeleccionado?.id === tipo.id && <CheckCircle size={16} className="text-blue-500 ml-auto mt-1" />}
                         </div>
                       </div>
                     </div>
@@ -232,14 +205,14 @@ export default function PortalPage() {
                   <Button icon={<ArrowRight size={14} />} onClick={() => {
                     if (!tipoSeleccionado) { setError('Selecciona un tipo de trámite.'); return; }
                     setError(''); setPaso(2);
-                  }}>
+                  }} className="w-full sm:w-auto justify-center">
                     Continuar
                   </Button>
                 </div>
               </div>
             )}
 
-            {/* Paso 2: Datos personales + documento */}
+            {/* ── Paso 2: Datos personales ────────────────── */}
             {paso === 2 && (
               <div className="space-y-4">
                 <div className="bg-blue-50 rounded-lg p-3 text-sm">
@@ -248,19 +221,19 @@ export default function PortalPage() {
                   <p className="text-green-600 font-bold">S/ {Number(tipoSeleccionado?.costo_soles).toFixed(2)}</p>
                 </div>
 
-                {/* DNI con búsqueda */}
-                <div className="flex gap-2 items-end">
+                <div className="flex flex-col gap-2 sm:flex-row sm:gap-2 sm:items-end">
                   <div className="flex-1">
                     <Input label="DNI" placeholder="12345678" value={form.dni}
                       onChange={(e) => setF('dni', e.target.value)} maxLength={8} required />
                   </div>
                   <Button variant="secondary" icon={<Search size={14} />} loading={buscandoDni}
-                    onClick={buscarDni} disabled={form.dni.length !== 8}>
-                    Buscar
+                    onClick={buscarDni} disabled={form.dni.length !== 8}
+                    className="w-full sm:w-auto justify-center">
+                    Buscar DNI
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input label="Nombres"          value={form.nombres}      onChange={(e) => setF('nombres', e.target.value)}      required />
                   <Input label="Apellido paterno" value={form.apellido_pat} onChange={(e) => setF('apellido_pat', e.target.value)} required />
                   <Input label="Apellido materno" value={form.apellido_mat} onChange={(e) => setF('apellido_mat', e.target.value)} />
@@ -271,13 +244,12 @@ export default function PortalPage() {
                   onChange={(e) => setF('email', e.target.value)} required
                   helper="Recibirás notificaciones en este correo" />
 
-                {/* Subida de documento PDF */}
+                {/* PDF adjunto */}
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">
                     Documento adjunto (PDF)
                     <span className="text-gray-400 font-normal ml-1">— opcional</span>
                   </label>
-
                   {archivoPdf ? (
                     <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                       <FileText size={16} className="text-green-600 shrink-0" />
@@ -285,68 +257,65 @@ export default function PortalPage() {
                         <p className="text-sm font-medium text-green-700 truncate">{archivoPdf.name}</p>
                         <p className="text-xs text-green-500">{(archivoPdf.size / 1024).toFixed(1)} KB</p>
                       </div>
-                      <button
-                        onClick={() => { setArchivoPdf(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <X size={16} />
-                      </button>
+                      <button onClick={() => { setArchivoPdf(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                        className="text-gray-400 hover:text-red-500"><X size={16} /></button>
                     </div>
                   ) : (
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                    >
-                      <Upload size={24} className="mx-auto text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-500">Haz clic para seleccionar un PDF</p>
+                    <div onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-gray-300 rounded-lg p-5 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                      <Upload size={22} className="mx-auto text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-500">Toca para seleccionar un PDF</p>
                       <p className="text-xs text-gray-400 mt-1">Máximo 10MB</p>
                     </div>
                   )}
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="application/pdf"
-                    className="hidden"
-                    onChange={handleArchivoChange}
-                  />
+                  <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleArchivoChange} />
                 </div>
 
-                <div className="flex justify-between pt-2">
-                  <Button variant="secondary" onClick={() => setPaso(1)}>← Atrás</Button>
-                  <Button loading={loading} icon={<FileText size={14} />} onClick={handleRegistrar}>
+                <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-between">
+                  <Button variant="secondary" onClick={() => setPaso(1)} className="w-full sm:w-auto justify-center">
+                    ← Atrás
+                  </Button>
+                  <Button loading={loading} icon={<FileText size={14} />} onClick={handleRegistrar}
+                    className="w-full sm:w-auto justify-center">
                     Registrar trámite
                   </Button>
                 </div>
               </div>
             )}
 
-            {/* Paso 3: Confirmación */}
+            {/* ── Paso 3: Confirmación ────────────────────── */}
             {paso === 3 && (
-              <div className="text-center py-6 space-y-4">
+              <div className="text-center py-6 space-y-5">
                 <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
                   <CheckCircle size={32} className="text-green-600" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">¡Trámite registrado!</h3>
                   <p className="text-sm text-gray-500 mt-1">Tu código de expediente es:</p>
-                  <p className="text-2xl font-mono font-bold text-blue-600 mt-2">{codigoGenerado}</p>
+                  <p className="text-2xl font-mono font-bold text-blue-600 mt-2 break-all">{codigoGenerado}</p>
+                  <p className="text-xs text-gray-400 mt-1">Guarda este código para consultar tu trámite</p>
                 </div>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-left">
-                  <p className="text-sm font-semibold text-yellow-800 mb-1">Próximo paso:</p>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-left">
+                  <p className="text-sm font-semibold text-yellow-800 mb-1">📍 Próximo paso:</p>
                   <p className="text-sm text-yellow-700">
-                    Acércate a la ventanilla de caja de la Municipalidad de Carmen Alto con este código
-                    para realizar el pago y activar tu trámite.
+                    Acércate a la ventanilla de caja de la Municipalidad de Carmen Alto
+                    con este código para realizar el pago y activar tu trámite.
                   </p>
                 </div>
-                <div className="flex gap-3 justify-center">
-                  <Button variant="secondary" onClick={() => {
-                    setPaso(1); setTipoSeleccionado(null); setArchivoPdf(null);
-                    setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '' });
-                  }}>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                  <p className="text-xs text-blue-600 font-medium">
+                    📧 Revisa tu correo — te enviamos un email con los detalles del registro.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                  <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
                     Registrar otro trámite
                   </Button>
-                  <Button icon={<Search size={14} />} onClick={() => navigate(`/consulta/${codigoGenerado}`)}>
+                  <Button icon={<Search size={14} />} onClick={() => navigate(`/consulta/${codigoGenerado}`)}
+                    className="w-full sm:w-auto justify-center">
                     Consultar estado
                   </Button>
                 </div>
@@ -354,6 +323,11 @@ export default function PortalPage() {
             )}
           </div>
         </div>
+
+        {/* ── Footer ──────────────────────────────────────── */}
+        <p className="text-center text-xs text-gray-400 pb-4">
+          © 2026 Municipalidad Distrital de Carmen Alto · Sistema de Trámite Documentario
+        </p>
       </div>
     </div>
   );

@@ -12,14 +12,12 @@ import Modal                   from '../components/ui/Modal';
 import EstadoBadge             from '../components/shared/EstadoBadge';
 import TimelineMovimientos     from '../components/shared/TimelineMovimientos';
 import { areasService }        from '../services/areas.service';
-import { formatFecha, diasRestantes, colorDiasRestantes } from '../utils/formato';
+import { formatFecha } from '../utils/formato';
 import type { EstadoExpediente, Movimiento } from '../types';
 import {
   RefreshCw, Eye, Search, Download,
   FileText, Archive, CheckCircle, Filter,
 } from 'lucide-react';
-
-const VITE_API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface Documento { id: number; nombre: string; url: string; tipo_mime: string; uploaded_at: string; }
 

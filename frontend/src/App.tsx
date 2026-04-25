@@ -4,18 +4,21 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import type { NombreRol } from './types';
 
-// Páginas
+// Páginas públicas
+import HomePage       from './pages/HomePage';
 import LoginPage      from './pages/LoginPage';
-import DashboardPage  from './pages/DashboardPage';
 import PortalPage     from './pages/PortalPage';
 import ConsultaPage   from './pages/ConsultaPage';
+
+// Páginas internas
+import DashboardPage  from './pages/DashboardPage';
 import CajeroPage     from './pages/CajeroPage';
 import MesaPartesPage from './pages/MesaPartesPage';
 import AreasPage      from './pages/AreasPage';
+import HistorialPage  from './pages/HistorialPage';
+import ReportesPage   from './pages/ReportesPage';
 import UsuariosPage   from './pages/UsuariosPage';
 import AuditoriaPage  from './pages/AuditoriaPage';
-import ReportesPage   from './pages/ReportesPage';
-import HistorialPage from './pages/HistorialPage';
 import MainLayout     from './layouts/MainLayout';
 
 // ── Ruta protegida por autenticación ────────────────────────
@@ -43,19 +46,18 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      {/* Rutas públicas */}
-      <Route path="/login"             element={usuario ? <Navigate to="/dashboard" /> : <LoginPage />} />
-      <Route path="/portal"            element={<PortalPage />} />
+      {/* ── Rutas públicas ──────────────────────────────── */}
+      <Route path="/"              element={<HomePage />} />
+      <Route path="/login"         element={usuario ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+      <Route path="/portal"        element={<PortalPage />} />
       <Route path="/consulta/:codigo?" element={<ConsultaPage />} />
 
-      {/* Rutas internas protegidas */}
+      {/* ── Rutas internas protegidas ───────────────────── */}
       <Route path="/" element={
         <PrivateRoute>
           <MainLayout />
         </PrivateRoute>
       }>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-
         <Route path="dashboard" element={<DashboardPage />} />
 
         <Route path="cajero" element={
@@ -75,11 +77,18 @@ const AppRoutes = () => {
             <AreasPage />
           </RolRoute>
         } />
+
         <Route path="historial" element={
-  <RolRoute roles={['JEFE_AREA', 'ADMIN']}>
-    <HistorialPage />
-  </RolRoute>
-} />
+          <RolRoute roles={['JEFE_AREA', 'ADMIN']}>
+            <HistorialPage />
+          </RolRoute>
+        } />
+
+        <Route path="reportes" element={
+          <RolRoute roles={['ADMIN', 'MESA_DE_PARTES', 'JEFE_AREA']}>
+            <ReportesPage />
+          </RolRoute>
+        } />
 
         <Route path="usuarios" element={
           <RolRoute roles={['ADMIN']}>
@@ -92,16 +101,10 @@ const AppRoutes = () => {
             <AuditoriaPage />
           </RolRoute>
         } />
-
-        <Route path="reportes" element={
-          <RolRoute roles={['ADMIN', 'MESA_DE_PARTES', 'JEFE_AREA']}>
-            <ReportesPage />
-          </RolRoute>
-        } />
       </Route>
 
-      {/* Ruta no encontrada */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* ── Ruta no encontrada ──────────────────────────── */}
+      <Route path="*" element={<Navigate to={usuario ? "/dashboard" : "/"} replace />} />
     </Routes>
   );
 };

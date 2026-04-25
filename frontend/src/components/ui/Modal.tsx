@@ -53,9 +53,9 @@ export default function Modal({
         </div>
 
         {/* Body */}
-        <div className="px-6 py-4">
-          {children}
-        </div>
+<div className="px-6 py-4 overflow-y-auto max-h-[70vh]">
+  {children}
+</div>
 
         {/* Footer */}
         {footer && (

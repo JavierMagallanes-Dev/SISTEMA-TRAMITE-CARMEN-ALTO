@@ -8,7 +8,7 @@ import Spinner                         from '../components/ui/Spinner';
 import Button                          from '../components/ui/Button';
 import EstadoBadge                     from '../components/shared/EstadoBadge';
 import TimelineMovimientos             from '../components/shared/TimelineMovimientos';
-import { formatFecha, formatFechaHora, diasRestantes, colorDiasRestantes } from '../utils/formato';
+import { formatFecha, formatFechaHora, colorDiasRestantes } from '../utils/formato';
 import type { EstadoExpediente, Movimiento } from '../types';
 import {
   Building2, Search, Download, ArrowLeft,
