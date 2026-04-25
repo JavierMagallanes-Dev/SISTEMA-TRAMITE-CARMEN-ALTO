@@ -2,19 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import api                     from '../services/api';
+import { useAuth }             from '../context/AuthContext';
 import { Card }                from '../components/ui/Card';
 import Button                  from '../components/ui/Button';
 import Alert                   from '../components/ui/Alert';
 import Spinner                 from '../components/ui/Spinner';
-import { FileText, Download, RefreshCw, Filter } from 'lucide-react';
+import { FileText, Download, RefreshCw, Filter, Building2 } from 'lucide-react';
 
 interface Area        { id: number; nombre: string; sigla: string }
 interface TipoTramite { id: number; nombre: string }
 
 export default function ReportesPage() {
-  const [areas,   setAreas]   = useState<Area[]>([]);
-  const [tipos,   setTipos]   = useState<TipoTramite[]>([]);
-  const [estados, setEstados] = useState<string[]>([]);
+  const { usuario }  = useAuth();
+  const esJefeArea   = usuario?.rol?.nombre === 'JEFE_AREA';
+
+  const [areas,    setAreas]    = useState<Area[]>([]);
+  const [tipos,    setTipos]    = useState<TipoTramite[]>([]);
+  const [estados,  setEstados]  = useState<string[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error,    setError]    = useState('');
 
@@ -42,7 +46,7 @@ export default function ReportesPage() {
   const buildParams = () => {
     const params = new URLSearchParams();
     if (filtros.estado)        params.append('estado',        filtros.estado);
-    if (filtros.areaId)        params.append('areaId',        filtros.areaId);
+    if (filtros.areaId && !esJefeArea) params.append('areaId', filtros.areaId);
     if (filtros.tipoTramiteId) params.append('tipoTramiteId', filtros.tipoTramiteId);
     if (filtros.fechaDesde)    params.append('fechaDesde',    filtros.fechaDesde);
     if (filtros.fechaHasta)    params.append('fechaHasta',    filtros.fechaHasta);
@@ -96,11 +100,30 @@ export default function ReportesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Reportes y Estadísticas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Exporta expedientes filtrados en Excel o PDF</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {esJefeArea
+              ? `Reportes de tu área — ${usuario?.area?.nombre ?? ''}`
+              : 'Exporta expedientes filtrados en Excel o PDF'}
+          </p>
         </div>
       </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+
+      {/* Banner área para Jefe */}
+      {esJefeArea && usuario?.area && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+          <Building2 size={18} className="text-blue-600 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-blue-800">
+              Reporte restringido a tu área
+            </p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              Solo verás los expedientes de <strong>{usuario.area.nombre}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <Card>
@@ -132,17 +155,19 @@ export default function ReportesPage() {
             </select>
           </div>
 
-          {/* Área */}
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Área responsable</label>
-            <select value={filtros.areaId} onChange={(e) => setF('areaId', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
-              <option value="">Todas las áreas</option>
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>{a.nombre} ({a.sigla})</option>
-              ))}
-            </select>
-          </div>
+          {/* Área — solo visible para ADMIN */}
+          {!esJefeArea && (
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Área responsable</label>
+              <select value={filtros.areaId} onChange={(e) => setF('areaId', e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
+                <option value="">Todas las áreas</option>
+                {areas.map((a) => (
+                  <option key={a.id} value={a.id}>{a.nombre} ({a.sigla})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Tipo trámite */}
           <div>
@@ -174,7 +199,6 @@ export default function ReportesPage() {
 
       {/* Exportar */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Excel */}
         <Card>
           <div className="flex flex-col items-center text-center p-4 space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center">
@@ -183,23 +207,19 @@ export default function ReportesPage() {
             <div>
               <p className="text-base font-bold text-gray-900">Exportar Excel</p>
               <p className="text-xs text-gray-500 mt-1">
-                Archivo .xlsx con todos los expedientes filtrados. Ideal para análisis y reportes administrativos.
+                {esJefeArea
+                  ? 'Archivo .xlsx con los expedientes de tu área.'
+                  : 'Archivo .xlsx con todos los expedientes filtrados. Incluye hoja por cada área.'}
               </p>
             </div>
-            <Button
-              variant="primary"
-              icon={<Download size={14} />}
-              loading={descargando === 'excel'}
-              onClick={() => descargar('excel')}
-              className="w-full justify-center"
-              style={{ background: '#16a34a' }}
-            >
+            <Button variant="primary" icon={<Download size={14} />}
+              loading={descargando === 'excel'} onClick={() => descargar('excel')}
+              className="w-full justify-center" style={{ background: '#16a34a' }}>
               Descargar Excel (.xlsx)
             </Button>
           </div>
         </Card>
 
-        {/* PDF */}
         <Card>
           <div className="flex flex-col items-center text-center p-4 space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center">
@@ -208,16 +228,14 @@ export default function ReportesPage() {
             <div>
               <p className="text-base font-bold text-gray-900">Exportar PDF</p>
               <p className="text-xs text-gray-500 mt-1">
-                Documento .pdf listo para impresión con encabezado institucional y tabla de expedientes.
+                {esJefeArea
+                  ? 'Reporte PDF agrupado de tu área, listo para impresión.'
+                  : 'Documento .pdf agrupado por área con encabezado institucional.'}
               </p>
             </div>
-            <Button
-              variant="danger"
-              icon={<Download size={14} />}
-              loading={descargando === 'pdf'}
-              onClick={() => descargar('pdf')}
-              className="w-full justify-center"
-            >
+            <Button variant="danger" icon={<Download size={14} />}
+              loading={descargando === 'pdf'} onClick={() => descargar('pdf')}
+              className="w-full justify-center">
               Descargar PDF (.pdf)
             </Button>
           </div>
@@ -230,8 +248,8 @@ export default function ReportesPage() {
           <RefreshCw size={16} className="text-blue-500 mt-0.5 shrink-0" />
           <div className="text-sm text-gray-600 space-y-1">
             <p className="font-medium text-gray-800">¿Cómo usar los reportes?</p>
-            <p>1. Selecciona los filtros que necesitas (estado, área, tipo de trámite, fechas).</p>
-            <p>2. Si no seleccionas filtros, el reporte incluirá <strong>todos los expedientes</strong>.</p>
+            <p>1. Selecciona los filtros que necesitas (estado, tipo de trámite, fechas).</p>
+            <p>2. Si no seleccionas filtros, el reporte incluirá <strong>todos los expedientes{esJefeArea ? ' de tu área' : ''}</strong>.</p>
             <p>3. Haz clic en <strong>Descargar Excel</strong> para análisis o <strong>Descargar PDF</strong> para impresión.</p>
           </div>
         </div>
