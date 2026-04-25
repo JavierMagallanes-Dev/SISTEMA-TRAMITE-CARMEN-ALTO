@@ -27,6 +27,7 @@
     "multer": "^2.1.1",
     "pdfkit": "^0.18.0",
     "resend": "^6.12.2",
+    "sharp": "^0.34.5",
     "uuid": "^14.0.0"
   },
   "devDependencies": {

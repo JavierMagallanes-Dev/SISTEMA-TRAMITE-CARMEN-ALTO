@@ -1,18 +1,36 @@
 // src/controllers/reportes.controller.ts
 // RF22: Reportes exportables en Excel y PDF con filtros.
+// Colores institucionales: #216ece (primario) y #4abdef (secundario)
 // ADMIN ve todas las áreas. JEFE_AREA solo ve su área.
 
 import { Request, Response, NextFunction } from 'express';
 import { prisma }  from '../config/prisma';
 import PDFDocument from 'pdfkit';
 import ExcelJS     from 'exceljs';
+import sharp       from 'sharp';
+import path        from 'path';
+
+// ── Colores institucionales ──────────────────────────────────
+const AZUL_PRIMARIO   = '#216ece';
+const AZUL_SECUNDARIO = '#4abdef';
+const AZUL_OSCURO     = '#1a4f8a';
+const AZUL_CLARO      = '#e8f4fd';
+const GRIS            = '#6b7280';
+const NEGRO           = '#111827';
+
+const LOGO_PATH = path.join(__dirname, '../assets/logoCA.webp');
+
+const getLogoPng = (): Promise<Buffer> =>
+  sharp(LOGO_PATH)
+    .resize(55, 55, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+    .png()
+    .toBuffer();
 
 // ── Helper: construir filtros ────────────────────────────────
 const buildWhere = (query: Record<string, string>, req: Request) => {
   const where: Record<string, any> = {};
   const { rol, areaId } = req.usuario!;
 
-  // JEFE_AREA solo puede ver su propia área — ignorar filtro de areaId del query
   if (rol === 'JEFE_AREA' && areaId) {
     where.areaActualId = areaId;
   } else if (rol === 'ADMIN' && query.areaId) {
@@ -31,25 +49,18 @@ const buildWhere = (query: Record<string, string>, req: Request) => {
   return where;
 };
 
-// ── Helper: obtener expedientes ──────────────────────────────
 const getExpedientes = async (where: Record<string, any>) => {
   return prisma.expediente.findMany({
     where,
     select: {
-      codigo:           true,
-      estado:           true,
-      fecha_registro:   true,
-      fecha_limite:     true,
-      fecha_resolucion: true,
+      codigo: true, estado: true,
+      fecha_registro: true, fecha_limite: true, fecha_resolucion: true,
       ciudadano:   { select: { dni: true, nombres: true, apellido_pat: true, apellido_mat: true } },
       tipoTramite: { select: { nombre: true, costo_soles: true } },
       areaActual:  { select: { nombre: true, sigla: true } },
       pagos: { where: { estado: 'VERIFICADO' }, select: { monto_cobrado: true, boleta: true }, take: 1 },
     },
-    orderBy: [
-      { areaActual: { nombre: 'asc' } },
-      { fecha_registro: 'desc' },
-    ],
+    orderBy: [{ areaActual: { nombre: 'asc' } }, { fecha_registro: 'desc' }],
   });
 };
 
@@ -62,7 +73,7 @@ const fmtFecha = (d: Date) =>
 const estadoColoresPdf: Record<string, string> = {
   RESUELTO: '#dcfce7', OBSERVADO: '#fef9c3', RECHAZADO: '#fee2e2',
   EN_PROCESO: '#ffedd5', LISTO_DESCARGA: '#cffafe', DERIVADO: '#e0e7ff',
-  PENDIENTE_PAGO: '#fef3c7', RECIBIDO: '#dbeafe',
+  PENDIENTE_PAGO: '#fef3c7', RECIBIDO: '#dbeafe', PDF_FIRMADO: '#ccfbf1',
 };
 
 const estadoColoresXls: Record<string, string> = {
@@ -77,7 +88,7 @@ export const exportarExcel = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
   try {
-    const { rol, areaId } = req.usuario!;
+    const { rol } = req.usuario!;
     const where       = buildWhere(req.query as Record<string, string>, req);
     const expedientes = await getExpedientes(where);
 
@@ -85,7 +96,6 @@ export const exportarExcel = async (
     workbook.creator = 'Municipalidad Distrital de Carmen Alto';
     workbook.created = new Date();
 
-    // Agrupar por área
     const grupos = new Map<string, typeof expedientes>();
     expedientes.forEach((exp) => {
       const area = exp.areaActual?.nombre ?? 'Sin área asignada';
@@ -96,33 +106,36 @@ export const exportarExcel = async (
     const addEncabezado = (sheet: ExcelJS.Worksheet, titulo: string, total: number) => {
       sheet.mergeCells('A1:K1');
       sheet.getCell('A1').value     = 'MUNICIPALIDAD DISTRITAL DE CARMEN ALTO';
-      sheet.getCell('A1').font      = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
-      sheet.getCell('A1').fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1e40af' } };
+      sheet.getCell('A1').font      = { bold: true, size: 14, color: { argb: 'FFFFFFFF' }, name: 'Calibri' };
+      sheet.getCell('A1').fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF216ece' } };
       sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
-      sheet.getRow(1).height        = 30;
+      sheet.getRow(1).height        = 32;
+
       sheet.mergeCells('A2:K2');
       sheet.getCell('A2').value     = titulo;
-      sheet.getCell('A2').font      = { size: 11, color: { argb: 'FF1e40af' } };
-      sheet.getCell('A2').fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFeff6ff' } };
+      sheet.getCell('A2').font      = { size: 11, color: { argb: 'FF216ece' }, name: 'Calibri' };
+      sheet.getCell('A2').fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFe8f4fd' } };
       sheet.getCell('A2').alignment = { horizontal: 'center' };
+      sheet.getRow(2).height        = 22;
+
       sheet.mergeCells('A3:K3');
       sheet.getCell('A3').value     = `Generado: ${new Date().toLocaleString('es-PE')} | Total: ${total} expedientes`;
-      sheet.getCell('A3').font      = { size: 9, color: { argb: 'FF6b7280' } };
+      sheet.getCell('A3').font      = { size: 9, color: { argb: 'FF6b7280' }, name: 'Calibri' };
       sheet.getCell('A3').alignment = { horizontal: 'center' };
       sheet.addRow([]);
     };
 
     const addHeaders = (sheet: ExcelJS.Worksheet) => {
       const headers = ['N°', 'Código', 'Ciudadano', 'DNI', 'Tipo Trámite', 'Estado', 'Área', 'Fecha y Hora Registro', 'Fecha Límite', 'Fecha Resolución', 'Monto (S/)'];
-      const widths  = [5, 20, 28, 12, 28, 18, 20, 20, 14, 16, 12];
+      const widths  = [5, 20, 28, 12, 28, 18, 22, 22, 14, 16, 12];
       sheet.columns = headers.map((h, i) => ({ header: h, key: h, width: widths[i] }));
       const headerRow = sheet.getRow(5);
       headerRow.values = headers;
       headerRow.eachCell((cell) => {
-        cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1e40af' } };
+        cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF216ece' } };
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        cell.border    = { bottom: { style: 'thin', color: { argb: 'FFbfdbfe' } } };
+        cell.border    = { bottom: { style: 'thin', color: { argb: 'FF4abdef' } } };
       });
       headerRow.height = 22;
     };
@@ -130,13 +143,11 @@ export const exportarExcel = async (
     const addFila = (sheet: ExcelJS.Worksheet, exp: typeof expedientes[0], idx: number) => {
       const pago  = exp.pagos[0];
       const color = estadoColoresXls[exp.estado] ?? 'FFFFFFFF';
-      const fila  = idx % 2 === 0 ? 'FFFFFFFF' : 'FFf8fafc';
+      const fila  = idx % 2 === 0 ? 'FFFFFFFF' : 'FFf0f7ff';
       const row   = sheet.addRow([
-        idx + 1,
-        exp.codigo,
+        idx + 1, exp.codigo,
         `${exp.ciudadano.apellido_pat} ${exp.ciudadano.apellido_mat}, ${exp.ciudadano.nombres}`,
-        exp.ciudadano.dni,
-        exp.tipoTramite.nombre,
+        exp.ciudadano.dni, exp.tipoTramite.nombre,
         exp.estado.replace(/_/g, ' '),
         exp.areaActual?.nombre ?? '—',
         fmtFechaHora(exp.fecha_registro),
@@ -145,9 +156,10 @@ export const exportarExcel = async (
         pago ? Number(pago.monto_cobrado) : 0,
       ]);
       row.eachCell((cell, colNum) => {
+        cell.font      = { name: 'Calibri', size: 9 };
         cell.alignment = { vertical: 'middle' };
         cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: colNum === 6 ? color : fila } };
-        cell.border    = { bottom: { style: 'hair', color: { argb: 'FFe5e7eb' } } };
+        cell.border    = { bottom: { style: 'hair', color: { argb: 'FFd1e9f7' } } };
       });
       row.getCell(11).numFmt = '"S/ "#,##0.00';
     };
@@ -156,22 +168,20 @@ export const exportarExcel = async (
       const total = sheet.addRow(['', label, '', '', '', '', '', '', '', '',
         exps.reduce((s, e) => s + (e.pagos[0] ? Number(e.pagos[0].monto_cobrado) : 0), 0),
       ]);
-      total.getCell(2).font    = { bold: true };
+      total.getCell(2).font    = { bold: true, name: 'Calibri', color: { argb: 'FF216ece' } };
       total.getCell(11).numFmt = '"S/ "#,##0.00';
-      total.getCell(11).font   = { bold: true };
-      total.getCell(11).fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFdcfce7' } };
+      total.getCell(11).font   = { bold: true, name: 'Calibri', color: { argb: 'FF216ece' } };
+      total.getCell(11).fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFe8f4fd' } };
     };
 
-    // Hoja general solo para ADMIN
     if (rol === 'ADMIN') {
       const sheetGeneral = workbook.addWorksheet('Todos los expedientes', { pageSetup: { paperSize: 9, orientation: 'landscape' } });
-      addEncabezado(sheetGeneral, 'Sistema de Trámite Documentario — Reporte General', expedientes.length);
+      addEncabezado(sheetGeneral, 'Sistema de Trámite Documentario — Reporte General de Expedientes', expedientes.length);
       addHeaders(sheetGeneral);
       expedientes.forEach((exp, idx) => addFila(sheetGeneral, exp, idx));
       addTotal(sheetGeneral, expedientes, 'TOTAL GENERAL');
     }
 
-    // Hojas por área
     grupos.forEach((exps, areaNombre) => {
       const sheet = workbook.addWorksheet(areaNombre.substring(0, 31), { pageSetup: { paperSize: 9, orientation: 'landscape' } });
       addEncabezado(sheet, `Expedientes — ${areaNombre}`, exps.length);
@@ -194,6 +204,7 @@ export const exportarPdf = async (
   try {
     const where       = buildWhere(req.query as Record<string, string>, req);
     const expedientes = await getExpedientes(where);
+    const logoPng     = await getLogoPng();
 
     const grupos = new Map<string, typeof expedientes>();
     expedientes.forEach((exp) => {
@@ -202,60 +213,73 @@ export const exportarPdf = async (
       grupos.get(area)!.push(exp);
     });
 
-    const doc   = new PDFDocument({ size: 'A4', margin: 40, layout: 'landscape' });
-    const azul  = '#1e40af';
-    const gris  = '#6b7280';
-    const negro = '#111827';
+    const doc = new PDFDocument({ size: 'A4', margin: 40, layout: 'landscape' });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="reporte-expedientes-${Date.now()}.pdf"`);
     doc.pipe(res);
 
     const cols = [
-      { label: 'Código',         x: 40,  w: 95  },
-      { label: 'Ciudadano',      x: 138, w: 135 },
-      { label: 'DNI',            x: 276, w: 60  },
-      { label: 'Trámite',        x: 339, w: 115 },
-      { label: 'Estado',         x: 457, w: 85  },
-      { label: 'Fecha Registro', x: 545, w: 115 },
-      { label: 'F. Límite',      x: 663, w: 72  },
-      { label: 'Monto',          x: 738, w: 64  },
+      { label: 'Código',         x: 40,  w: 90  },
+      { label: 'Ciudadano',      x: 133, w: 135 },
+      { label: 'DNI',            x: 271, w: 58  },
+      { label: 'Trámite',        x: 332, w: 115 },
+      { label: 'Estado',         x: 450, w: 88  },
+      { label: 'Fecha Registro', x: 541, w: 115 },
+      { label: 'F. Límite',      x: 659, w: 72  },
+      { label: 'Monto',          x: 734, w: 68  },
     ];
 
     const dibujarEncabezado = () => {
-      doc.rect(0, 0, 842, 65).fill(azul);
+      // Fondo principal
+      doc.rect(0, 0, 842, 70).fill(AZUL_PRIMARIO);
+      // Franja secundaria inferior
+      doc.rect(0, 60, 842, 10).fill(AZUL_OSCURO);
+      // Línea decorativa secundaria
+      doc.rect(0, 70, 842, 3).fill(AZUL_SECUNDARIO);
+
+      // Logo
+      doc.image(logoPng, 15, 7, { width: 52, height: 52 });
+
+      // Textos encabezado
       doc.fillColor('white').fontSize(13).font('Helvetica-Bold')
-         .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 40, 12, { align: 'center', width: 762 });
-      doc.fontSize(9).font('Helvetica')
-         .text('Sistema de Trámite Documentario — Reporte de Expedientes por Área', 40, 30, { align: 'center', width: 762 });
-      doc.fontSize(7)
-         .text(`Generado: ${new Date().toLocaleString('es-PE')} | Total: ${expedientes.length} expedientes`, 40, 48, { align: 'center', width: 762 });
+         .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 78, 10, { width: 690 });
+      doc.fontSize(8).font('Helvetica')
+         .text('Sistema de Trámite Documentario — Reporte de Expedientes Agrupado por Área', 78, 28, { width: 690 });
+      doc.fillColor(AZUL_SECUNDARIO).fontSize(7.5).font('Helvetica')
+         .text(`Generado: ${new Date().toLocaleString('es-PE')} | Total: ${expedientes.length} expedientes`, 78, 44, { width: 690 });
     };
 
     const dibujarCabeceras = (y: number) => {
-      doc.rect(40, y, 762, 15).fill(azul);
+      doc.rect(40, y, 762, 16).fill(AZUL_PRIMARIO);
+      // Línea inferior en azul secundario
+      doc.rect(40, y + 14, 762, 2).fill(AZUL_SECUNDARIO);
       cols.forEach((col) => {
         doc.fillColor('white').fontSize(6.5).font('Helvetica-Bold')
            .text(col.label, col.x + 2, y + 4, { width: col.w - 4 });
       });
-      return y + 15;
+      return y + 16;
     };
 
     const dibujarSubtituloArea = (area: string, total: number, y: number) => {
-      doc.rect(40, y, 762, 14).fill('#e8f0fe');
-      doc.fillColor(azul).fontSize(8).font('Helvetica-Bold')
-         .text(`ÁREA: ${area.toUpperCase()}  (${total} expediente${total !== 1 ? 's' : ''})`, 45, y + 3, { width: 750 });
-      return y + 14;
+      doc.rect(40, y, 762, 15).fill(AZUL_CLARO);
+      doc.rect(40, y, 4, 15).fill(AZUL_SECUNDARIO); // Borde izquierdo
+      doc.fillColor(AZUL_OSCURO).fontSize(8).font('Helvetica-Bold')
+         .text(`  ÁREA: ${area.toUpperCase()}`, 48, y + 3, { width: 600, continued: true });
+      doc.fillColor(GRIS).fontSize(7).font('Helvetica')
+         .text(`   (${total} expediente${total !== 1 ? 's' : ''})`, { continued: false });
+      return y + 15;
     };
 
     const dibujarPie = () => {
-      doc.rect(0, 565, 842, 25).fill(azul);
+      doc.rect(0, 560, 842, 3).fill(AZUL_SECUNDARIO);
+      doc.rect(0, 563, 842, 22).fill(AZUL_OSCURO);
       doc.fillColor('white').fontSize(7).font('Helvetica')
-         .text('Municipalidad Distrital de Carmen Alto — Sistema de Trámite Documentario', 40, 573, { align: 'center', width: 762 });
+         .text('Municipalidad Distrital de Carmen Alto — Sistema de Trámite Documentario', 40, 570, { align: 'center', width: 762 });
     };
 
     dibujarEncabezado();
-    let y = 75;
+    let y = 80;
     y = dibujarCabeceras(y);
 
     let primerGrupo = true;
@@ -266,13 +290,13 @@ export const exportarPdf = async (
         y = 40;
         y = dibujarCabeceras(y);
       } else if (!primerGrupo) {
-        y += 6;
+        y += 5;
       }
       primerGrupo = false;
       y = dibujarSubtituloArea(areaNombre, exps.length, y);
 
       exps.forEach((exp, idx) => {
-        if (y > 530) {
+        if (y > 528) {
           dibujarPie();
           doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
           y = 40;
@@ -280,22 +304,22 @@ export const exportarPdf = async (
           y = dibujarSubtituloArea(`${areaNombre} (cont.)`, exps.length, y);
         }
 
-        const bgColor  = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        const bgColor  = idx % 2 === 0 ? '#ffffff' : '#f0f7ff';
         const estColor = estadoColoresPdf[exp.estado] ?? bgColor;
         const pago     = exp.pagos[0];
 
-        doc.rect(40, y, 762, 13).fill(bgColor).stroke('#e5e7eb');
+        doc.rect(40, y, 762, 13).fill(bgColor).stroke('#d1e9f7');
         doc.rect(cols[4].x, y, cols[4].w, 13).fill(estColor);
 
         const datos = [
-          { x: cols[0].x, w: cols[0].w, text: exp.codigo,                     bold: true,  color: azul      },
-          { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`, bold: false, color: negro },
-          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni,              bold: false, color: gris      },
-          { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,         bold: false, color: negro     },
-          { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),  bold: true,  color: '#92400e' },
-          { x: cols[5].x, w: cols[5].w, text: fmtFechaHora(exp.fecha_registro), bold: false, color: gris    },
-          { x: cols[6].x, w: cols[6].w, text: fmtFecha(exp.fecha_limite),     bold: false, color: gris      },
-          { x: cols[7].x, w: cols[7].w, text: pago ? `S/ ${Number(pago.monto_cobrado).toFixed(2)}` : '—', bold: true, color: '#15803d' },
+          { x: cols[0].x, w: cols[0].w, text: exp.codigo,                        bold: true,  color: AZUL_PRIMARIO },
+          { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`, bold: false, color: NEGRO },
+          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni,                  bold: false, color: GRIS         },
+          { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,             bold: false, color: NEGRO        },
+          { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),      bold: true,  color: '#1a4f8a'    },
+          { x: cols[5].x, w: cols[5].w, text: fmtFechaHora(exp.fecha_registro),   bold: false, color: GRIS         },
+          { x: cols[6].x, w: cols[6].w, text: fmtFecha(exp.fecha_limite),         bold: false, color: GRIS         },
+          { x: cols[7].x, w: cols[7].w, text: pago ? `S/ ${Number(pago.monto_cobrado).toFixed(2)}` : '—', bold: true, color: '#1a4f8a' },
         ];
 
         datos.forEach((d) => {
@@ -308,9 +332,10 @@ export const exportarPdf = async (
 
       // Subtotal área
       const montoArea = exps.reduce((s, e) => s + (e.pagos[0] ? Number(e.pagos[0].monto_cobrado) : 0), 0);
-      doc.rect(40, y, 762, 12).fill('#f0f9ff');
-      doc.fillColor(azul).fontSize(7).font('Helvetica-Bold')
-         .text(`Subtotal ${areaNombre}: S/ ${montoArea.toFixed(2)}`, 45, y + 2, { width: 750, align: 'right' });
+      doc.rect(40, y, 762, 12).fill('#dbeafe');
+      doc.rect(40, y, 762, 2).fill(AZUL_SECUNDARIO);
+      doc.fillColor(AZUL_OSCURO).fontSize(7).font('Helvetica-Bold')
+         .text(`Subtotal — ${areaNombre}: S/ ${montoArea.toFixed(2)}`, 45, y + 3, { width: 750, align: 'right' });
       y += 12;
     });
 
@@ -321,10 +346,10 @@ export const exportarPdf = async (
       doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
       y = 40;
     }
-    y += 6;
-    doc.rect(40, y, 762, 14).fill('#dcfce7');
-    doc.fillColor('#15803d').fontSize(8).font('Helvetica-Bold')
-       .text(`TOTAL GENERAL: ${expedientes.length} expedientes | Recaudado: S/ ${montoTotal.toFixed(2)}`, 45, y + 3, { width: 750, align: 'right' });
+    y += 5;
+    doc.rect(40, y, 762, 15).fill(AZUL_PRIMARIO);
+    doc.fillColor('white').fontSize(8).font('Helvetica-Bold')
+       .text(`TOTAL GENERAL: ${expedientes.length} expedientes | Monto recaudado: S/ ${montoTotal.toFixed(2)}`, 45, y + 3, { width: 750, align: 'right' });
 
     dibujarPie();
     doc.end();
@@ -338,22 +363,24 @@ export const getDatosReporte = async (
   try {
     const { rol, areaId } = req.usuario!;
 
-    // JEFE_AREA solo ve su área en los filtros
-    const areasQuery = rol === 'JEFE_AREA' && areaId
-      ? { where: { id: areaId } }
-      : {};
-
     const areas = await prisma.area.findMany({
-  where: rol === 'JEFE_AREA' && areaId ? { id: areaId } : undefined,
-  select:  { id: true, nombre: true, sigla: true },
-  orderBy: { nombre: 'asc' },
-});
-    const tipos   = await prisma.tipoTramite.findMany({ where: { activo: true }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } });
+      where:   rol === 'JEFE_AREA' && areaId ? { id: areaId } : undefined,
+      select:  { id: true, nombre: true, sigla: true },
+      orderBy: { nombre: 'asc' },
+    });
+
+    const tipos = await prisma.tipoTramite.findMany({
+      where:   { activo: true },
+      select:  { id: true, nombre: true },
+      orderBy: { nombre: 'asc' },
+    });
+
     const estados = [
       'PENDIENTE_PAGO','RECIBIDO','EN_REVISION_MDP','DERIVADO',
       'EN_PROCESO','LISTO_DESCARGA','PDF_FIRMADO','RESUELTO',
       'OBSERVADO','RECHAZADO','ARCHIVADO',
     ];
+
     res.json({ areas, tipos, estados, rol });
   } catch (err) { next(err); }
 };

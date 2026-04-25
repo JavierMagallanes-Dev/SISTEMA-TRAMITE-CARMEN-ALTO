@@ -1,5 +1,10 @@
 // src/services/pdf.service.ts
+// Cargo de recepción con colores institucionales #216ece y #4abdef
+// Logo cargado desde src/assets/logoCA.webp via sharp → PNG buffer
+
 import PDFDocument from 'pdfkit';
+import sharp       from 'sharp';
+import path        from 'path';
 
 interface DatosCargoRecepcion {
   codigo:         string;
@@ -10,100 +15,151 @@ interface DatosCargoRecepcion {
   area:           string;
 }
 
+// Colores institucionales
+const AZUL_PRIMARIO   = '#216ece';
+const AZUL_SECUNDARIO = '#4abdef';
+const AZUL_OSCURO     = '#1a4f8a';
+const AZUL_CLARO      = '#e8f4fd';
+const GRIS            = '#6b7280';
+const NEGRO           = '#111827';
+
+const LOGO_PATH = path.join(__dirname, '../assets/logoCA.webp');
+
+// Convertir webp → PNG buffer para pdfkit
+const getLogoPng = (): Promise<Buffer> =>
+  sharp(LOGO_PATH).resize(60, 60, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer();
+
 export const pdfService = {
-  generarCargoRecepcion: (datos: DatosCargoRecepcion): Promise<Buffer> => {
-    return new Promise((resolve, reject) => {
-      const doc    = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
-      const chunks: Buffer[] = [];
+  generarCargoRecepcion: async (datos: DatosCargoRecepcion): Promise<Buffer> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const logoPng = await getLogoPng();
+        const doc     = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+        const chunks: Buffer[] = [];
 
-      doc.on('data',  (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-      doc.on('end',   () => resolve(Buffer.concat(chunks)));
-      doc.on('error', (err: Error) => reject(err));
+        doc.on('data',  (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+        doc.on('end',   () => resolve(Buffer.concat(chunks)));
+        doc.on('error', (err: Error) => reject(err));
 
-      const azul  = '#1e40af';
-      const gris  = '#6b7280';
-      const negro = '#111827';
+        // ── Encabezado con gradiente simulado ───────────────
+        doc.rect(0, 0, 595, 120).fill(AZUL_PRIMARIO);
+        doc.rect(0, 90, 595, 30).fill(AZUL_OSCURO);
 
-      // Encabezado
-      doc.rect(0, 0, 595, 110).fill(azul);
-      doc.fillColor('white').fontSize(16).font('Helvetica-Bold')
-         .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 50, 25, { align: 'center' });
-      doc.fontSize(11).font('Helvetica')
-         .text('Sistema de Trámite Documentario', 50, 50, { align: 'center' });
-      doc.fontSize(13).font('Helvetica-Bold')
-         .text('CARGO DE RECEPCIÓN', 50, 72, { align: 'center' });
+        // Logo
+        doc.image(logoPng, 50, 15, { width: 60, height: 60 });
 
-      // Número expediente
-      doc.fillColor(azul).rect(50, 130, 495, 55).stroke();
-      doc.fillColor(azul).fontSize(11).font('Helvetica').text('NÚMERO DE EXPEDIENTE', 60, 138);
-      doc.fillColor(negro).fontSize(22).font('Helvetica-Bold').text(datos.codigo, 60, 155);
+        // Texto encabezado
+        doc.fillColor('white')
+           .fontSize(15).font('Helvetica-Bold')
+           .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 120, 22, { width: 430 });
+        doc.fontSize(9).font('Helvetica')
+           .text('Dirección: Carmen Alto, Huamanga, Ayacucho — Perú', 120, 42, { width: 430 });
+        doc.fontSize(9).font('Helvetica')
+           .text('Sistema de Trámite Documentario', 120, 56, { width: 430 });
 
-      // Datos ciudadano
-      doc.fillColor(negro).fontSize(13).font('Helvetica-Bold').text('DATOS DEL CIUDADANO', 50, 210);
-      doc.moveTo(50, 227).lineTo(545, 227).strokeColor(azul).lineWidth(1.5).stroke();
+        // Título documento
+        doc.fillColor(AZUL_SECUNDARIO).fontSize(11).font('Helvetica-Bold')
+           .text('CARGO DE RECEPCIÓN DE EXPEDIENTE', 0, 98, { align: 'center', width: 595 });
 
-      const fila = (label: string, valor: string, y: number) => {
-        doc.fillColor(gris).fontSize(9).font('Helvetica').text(label, 50, y);
-        doc.fillColor(negro).fontSize(11).font('Helvetica').text(valor, 50, y + 13);
-      };
+        // Línea decorativa secundaria
+        doc.rect(0, 120, 595, 3).fill(AZUL_SECUNDARIO);
 
-      fila('Apellidos y Nombres',
-        `${datos.ciudadano.apellido_pat} ${datos.ciudadano.apellido_mat}, ${datos.ciudadano.nombres}`,
-        235);
-      fila('Número de DNI', datos.ciudadano.dni, 270);
+        // ── Número de expediente ─────────────────────────────
+        doc.rect(50, 140, 495, 50)
+           .fillAndStroke(AZUL_CLARO, AZUL_PRIMARIO);
 
-      // Datos trámite
-      doc.fillColor(negro).fontSize(13).font('Helvetica-Bold').text('DATOS DEL TRÁMITE', 50, 315);
-      doc.moveTo(50, 332).lineTo(545, 332).strokeColor(azul).lineWidth(1.5).stroke();
-      fila('Tipo de Trámite',   datos.tipoTramite.nombre, 340);
-      fila('Área Responsable',  datos.area, 375);
-      fila('Costo del Trámite', `S/ ${Number(datos.tipoTramite.costo_soles).toFixed(2)}`, 410);
-      fila('Plazo de Atención', `${datos.tipoTramite.plazo_dias} días hábiles`, 445);
+        doc.fillColor(AZUL_PRIMARIO).fontSize(9).font('Helvetica-Bold')
+           .text('NÚMERO DE EXPEDIENTE', 65, 148);
+        doc.fillColor(AZUL_OSCURO).fontSize(20).font('Helvetica-Bold')
+           .text(datos.codigo, 65, 162);
 
-      // Fechas
-      doc.fillColor(negro).fontSize(13).font('Helvetica-Bold').text('FECHAS IMPORTANTES', 50, 495);
-      doc.moveTo(50, 512).lineTo(545, 512).strokeColor(azul).lineWidth(1.5).stroke();
+        // Código QR simulado (cuadro decorativo)
+        doc.rect(505, 145, 35, 35).fill(AZUL_PRIMARIO);
+        doc.fillColor('white').fontSize(6).font('Helvetica')
+           .text('CÓDIGO\nÚNICO', 509, 153, { width: 27, align: 'center' });
 
-      const fmt = (d: Date) => new Date(d).toLocaleDateString('es-PE', {
-        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-      });
+        // ── Sección: Datos del ciudadano ─────────────────────
+        const seccionTitulo = (titulo: string, y: number) => {
+          doc.rect(50, y, 495, 20).fill(AZUL_PRIMARIO);
+          doc.fillColor('white').fontSize(9).font('Helvetica-Bold')
+             .text(`  ${titulo}`, 55, y + 5, { width: 480 });
+          return y + 20;
+        };
 
-      doc.fillColor(gris).fontSize(9).font('Helvetica')
-         .text('Fecha y Hora de Ingreso', 50, 522)
-         .text('Fecha Límite de Atención', 300, 522);
-      doc.fillColor(negro).fontSize(11).font('Helvetica')
-         .text(fmt(datos.fecha_registro), 50, 535)
-         .text(fmt(datos.fecha_limite),   300, 535);
+        const campo = (label: string, valor: string, x: number, y: number, ancho = 230) => {
+          doc.fillColor(GRIS).fontSize(7.5).font('Helvetica')
+             .text(label, x, y);
+          doc.fillColor(NEGRO).fontSize(10).font('Helvetica')
+             .text(valor, x, y + 11, { width: ancho });
+        };
 
-      // Aviso
-      doc.rect(50, 565, 495, 40).fillColor('#fef3c7').fill();
-      doc.rect(50, 565, 495, 40).strokeColor('#f59e0b').lineWidth(1).stroke();
-      doc.fillColor('#92400e').fontSize(9).font('Helvetica-Bold').text('IMPORTANTE:', 62, 573);
-      doc.fillColor('#92400e').fontSize(9).font('Helvetica')
-         .text(`Su trámite debe ser atendido antes del ${new Date(datos.fecha_limite).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })}. Conserve este cargo como constancia.`, 62, 585, { width: 470 });
+        let y = seccionTitulo('DATOS DEL CIUDADANO', 208);
+        y += 8;
+        campo('Apellidos y Nombres',
+          `${datos.ciudadano.apellido_pat} ${datos.ciudadano.apellido_mat}, ${datos.ciudadano.nombres}`,
+          55, y, 480);
+        y += 30;
+        campo('Número de DNI', datos.ciudadano.dni, 55, y);
 
-      // Instrucciones pago
-      doc.rect(50, 620, 495, 55).fillColor('#eff6ff').fill();
-      doc.rect(50, 620, 495, 55).strokeColor(azul).lineWidth(1).stroke();
-      doc.fillColor(azul).fontSize(10).font('Helvetica-Bold').text('PRÓXIMO PASO — PAGO EN VENTANILLA', 62, 630);
-      doc.fillColor('#1e3a8a').fontSize(9).font('Helvetica')
-         .text(`Acérquese a Caja con este cargo y realice el pago de S/ ${Number(datos.tipoTramite.costo_soles).toFixed(2)} para activar su trámite.`, 62, 644, { width: 470 });
+        // ── Sección: Datos del trámite ───────────────────────
+        y += 35;
+        y = seccionTitulo('DATOS DEL TRÁMITE', y);
+        y += 8;
+        campo('Tipo de Trámite',   datos.tipoTramite.nombre,                               55,  y, 480);
+        y += 30;
+        campo('Área Responsable',  datos.area,                                              55,  y);
+        campo('Costo del Trámite', `S/ ${Number(datos.tipoTramite.costo_soles).toFixed(2)}`, 300, y);
+        y += 30;
+        campo('Plazo de Atención', `${datos.tipoTramite.plazo_dias} días hábiles`,          55,  y);
 
-      // Consulta
-      doc.fillColor(gris).fontSize(9).font('Helvetica')
-         .text(`Consulte el estado de su trámite con el código ${datos.codigo} en el portal ciudadano.`, 50, 692, { align: 'center', width: 495 });
+        // ── Sección: Fechas ──────────────────────────────────
+        y += 35;
+        y = seccionTitulo('FECHAS IMPORTANTES', y);
+        y += 8;
 
-      // Firma
-      doc.moveTo(175, 755).lineTo(420, 755).strokeColor(negro).lineWidth(0.5).stroke();
-      doc.fillColor(negro).fontSize(10).font('Helvetica-Bold').text('Mesa de Partes', 50, 763, { align: 'center', width: 495 });
-      doc.fillColor(gris).fontSize(9).font('Helvetica').text('Municipalidad Distrital de Carmen Alto', 50, 777, { align: 'center', width: 495 });
+        const fmt = (d: Date) => new Date(d).toLocaleString('es-PE', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        });
 
-      // Pie
-      doc.rect(0, 805, 595, 32).fillColor(azul).fill();
-      doc.fillColor('white').fontSize(8).font('Helvetica')
-         .text(`Generado el ${new Date().toLocaleString('es-PE')} — Sistema de Trámite Documentario`, 50, 815, { align: 'center', width: 495 });
+        campo('Fecha y Hora de Ingreso',    fmt(datos.fecha_registro), 55,  y);
+        campo('Fecha Límite de Atención',   fmt(datos.fecha_limite),   300, y);
 
-      doc.end();
+        // ── Aviso pago ───────────────────────────────────────
+        y += 40;
+        doc.rect(50, y, 495, 45).fillAndStroke('#fff8e1', '#f59e0b');
+        doc.fillColor('#92400e').fontSize(8).font('Helvetica-Bold')
+           .text('⚠  PRÓXIMO PASO — PAGO EN VENTANILLA DE CAJA', 62, y + 7);
+        doc.fillColor('#78350f').fontSize(8).font('Helvetica')
+           .text(
+             `Acérquese a la ventanilla de Caja con este cargo y realice el pago de S/ ${Number(datos.tipoTramite.costo_soles).toFixed(2)} para activar su trámite. Sin el pago su expediente no será procesado.`,
+             62, y + 19, { width: 470 }
+           );
+
+        // ── Consulta en línea ────────────────────────────────
+        y += 55;
+        doc.rect(50, y, 495, 28).fillAndStroke(AZUL_CLARO, AZUL_SECUNDARIO);
+        doc.fillColor(AZUL_PRIMARIO).fontSize(8).font('Helvetica-Bold')
+           .text(`Consulte el avance de su trámite en línea con el código: ${datos.codigo}`, 62, y + 9, { width: 470, align: 'center' });
+
+        // ── Firma ────────────────────────────────────────────
+        y += 45;
+        doc.moveTo(175, y + 20).lineTo(420, y + 20).strokeColor(NEGRO).lineWidth(0.5).stroke();
+        doc.fillColor(NEGRO).fontSize(9).font('Helvetica-Bold')
+           .text('Mesa de Partes', 0, y + 25, { align: 'center', width: 595 });
+        doc.fillColor(GRIS).fontSize(8).font('Helvetica')
+           .text('Municipalidad Distrital de Carmen Alto', 0, y + 38, { align: 'center', width: 595 });
+
+        // ── Pie de página ────────────────────────────────────
+        doc.rect(0, 800, 595, 42).fill(AZUL_OSCURO);
+        doc.rect(0, 800, 595, 4).fill(AZUL_SECUNDARIO);
+        doc.fillColor('white').fontSize(7).font('Helvetica')
+           .text(`Documento generado el ${new Date().toLocaleString('es-PE')}`, 50, 810, { align: 'center', width: 495 });
+        doc.fillColor(AZUL_SECUNDARIO).fontSize(7).font('Helvetica')
+           .text('Sistema de Trámite Documentario — Municipalidad Distrital de Carmen Alto', 50, 822, { align: 'center', width: 495 });
+
+        doc.end();
+      } catch (err) { reject(err); }
     });
   },
 };
