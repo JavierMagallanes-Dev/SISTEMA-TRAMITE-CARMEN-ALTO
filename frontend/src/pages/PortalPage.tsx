@@ -6,9 +6,9 @@ import { portalService }                from '../services/portal.service';
 import { documentosService }            from '../services/documentos.service';
 import Button                           from '../components/ui/Button';
 import Input                            from '../components/ui/Input';
-import Alert                            from '../components/ui/Alert';
 import Spinner                          from '../components/ui/Spinner';
 import StripePago                       from '../components/shared/StripePago';
+import { toast }                        from '../utils/toast';
 import {
   Building2, Search, FileText,
   ArrowRight, CheckCircle, Upload, X,
@@ -29,12 +29,10 @@ export default function PortalPage() {
 
   const [paso,    setPaso]    = useState<1 | 2 | 3>(1);
   const [tipos,   setTipos]   = useState<TipoTramite[]>([]);
-  const [error,   setError]   = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [codigoGenerado,  setCodigoGenerado]  = useState('');
-  const [tipoRegistrado,  setTipoRegistrado]  = useState<TipoTramite | null>(null);
-  const [opcionPago,      setOpcionPago]      = useState<OpcionPago>('seleccion');
+  const [codigoGenerado, setCodigoGenerado] = useState('');
+  const [tipoRegistrado, setTipoRegistrado] = useState<TipoTramite | null>(null);
+  const [opcionPago,     setOpcionPago]     = useState<OpcionPago>('seleccion');
 
   const [codigoConsulta, setCodigoConsulta] = useState('');
 
@@ -47,7 +45,6 @@ export default function PortalPage() {
   const [archivoPdf,  setArchivoPdf]  = useState<File | null>(null);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
 
-  // Comprobante de pago
   const [comprobante,       setComprobante]       = useState<File | null>(null);
   const [subiendoComp,      setSubiendoComp]      = useState(false);
   const [comprobanteSubido, setComprobanteSubido] = useState(false);
@@ -78,7 +75,7 @@ export default function PortalPage() {
 
   const handleRegistrar = async () => {
     if (!form.dni || !form.nombres || !form.apellido_pat || !form.email || !tipoSeleccionado) {
-      setError('Completa todos los campos obligatorios.');
+      toast.warning({ titulo: 'Completa todos los campos obligatorios.' });
       return;
     }
     setLoading(true);
@@ -92,7 +89,7 @@ export default function PortalPage() {
       setTipoRegistrado(tipoSeleccionado);
       setPaso(3);
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al registrar el trámite.');
+      toast.error({ titulo: err?.response?.data?.error ?? 'Error al registrar el trámite.' });
     } finally { setLoading(false); }
   };
 
@@ -102,8 +99,8 @@ export default function PortalPage() {
   const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') { setError('Solo se aceptan archivos PDF.'); return; }
-    if (file.size > 10 * 1024 * 1024)   { setError('El archivo no puede superar los 10MB.'); return; }
+    if (file.type !== 'application/pdf') { toast.warning({ titulo: 'Solo se aceptan archivos PDF.' }); return; }
+    if (file.size > 10 * 1024 * 1024)   { toast.warning({ titulo: 'El archivo no puede superar los 10MB.' }); return; }
     setArchivoPdf(file);
   };
 
@@ -111,8 +108,8 @@ export default function PortalPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!tiposPermitidos.includes(file.type)) { setError('Solo se aceptan imágenes (JPG, PNG) o PDF.'); return; }
-    if (file.size > 10 * 1024 * 1024) { setError('El archivo no puede superar los 10MB.'); return; }
+    if (!tiposPermitidos.includes(file.type)) { toast.warning({ titulo: 'Solo se aceptan imágenes (JPG, PNG) o PDF.' }); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.warning({ titulo: 'El archivo no puede superar los 10MB.' }); return; }
     setComprobante(file);
     if (comprobanteInputRef.current) comprobanteInputRef.current.value = '';
   };
@@ -120,7 +117,6 @@ export default function PortalPage() {
   const handleSubirComprobante = async () => {
     if (!comprobante || !codigoGenerado) return;
     setSubiendoComp(true);
-    setError('');
     try {
       const formData = new FormData();
       formData.append('comprobante', comprobante);
@@ -133,22 +129,21 @@ export default function PortalPage() {
       }
       setComprobanteSubido(true);
       setComprobante(null);
-      setSuccess('¡Comprobante enviado! El cajero lo revisará y verificará tu pago pronto.');
+      toast.success({ titulo: '¡Comprobante enviado!', descripcion: 'El cajero lo revisará y verificará tu pago pronto.' });
     } catch (err: any) {
-      setError(err.message ?? 'Error al subir el comprobante.');
+      toast.error({ titulo: err.message ?? 'Error al subir el comprobante.' });
     } finally { setSubiendoComp(false); }
   };
 
   const resetForm = () => {
     setPaso(1); setTipoSeleccionado(null); setArchivoPdf(null);
     setTipoRegistrado(null); setComprobante(null); setOpcionPago('seleccion');
-    setComprobanteSubido(false); setError(''); setSuccess('');
+    setComprobanteSubido(false);
     setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '' });
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ── Header ─────────────────────────────────────────── */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
         <div className="max-w-4xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -169,7 +164,7 @@ export default function PortalPage() {
 
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 sm:px-6 sm:py-8 sm:space-y-8">
 
-        {/* ── Consulta rápida ─────────────────────────────── */}
+        {/* Consulta rápida */}
         <div className="bg-blue-600 rounded-2xl p-5 text-white sm:p-6">
           <h2 className="text-base font-bold mb-1 sm:text-lg">Consulta el estado de tu trámite</h2>
           <p className="text-blue-100 text-xs mb-4 sm:text-sm">Ingresa tu código de expediente</p>
@@ -185,14 +180,14 @@ export default function PortalPage() {
           </div>
         </div>
 
-        {/* ── Formulario registro ──────────────────────────── */}
+        {/* Formulario registro */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-gray-100 sm:p-6">
             <h2 className="text-base font-bold text-gray-900 sm:text-lg">Registrar nuevo trámite</h2>
             <p className="text-xs text-gray-500 mt-0.5 sm:text-sm">Completa el formulario para iniciar tu trámite</p>
           </div>
 
-          {/* Indicador de pasos */}
+          {/* Pasos */}
           <div className="flex border-b border-gray-100">
             {[{ num: 1, label: 'Trámite' }, { num: 2, label: 'Tus datos' }, { num: 3, label: 'Pago' }].map((p) => (
               <div key={p.num}
@@ -211,10 +206,8 @@ export default function PortalPage() {
           </div>
 
           <div className="p-5 sm:p-6">
-            {error   && <Alert type="error"   message={error}   onClose={() => setError('')}   className="mb-4" />}
-            {success && <Alert type="success" message={success} onClose={() => setSuccess('')} className="mb-4" />}
 
-            {/* ── Paso 1 ─────────────────────────────────── */}
+            {/* Paso 1 */}
             {paso === 1 && (
               <div className="space-y-3">
                 {tipos.length === 0 ? <Spinner text="Cargando trámites..." /> : (
@@ -239,14 +232,14 @@ export default function PortalPage() {
                 )}
                 <div className="flex justify-end pt-2">
                   <Button icon={<ArrowRight size={14} />} onClick={() => {
-                    if (!tipoSeleccionado) { setError('Selecciona un tipo de trámite.'); return; }
-                    setError(''); setPaso(2);
+                    if (!tipoSeleccionado) { toast.warning({ titulo: 'Selecciona un tipo de trámite.' }); return; }
+                    setPaso(2);
                   }} className="w-full sm:w-auto justify-center">Continuar</Button>
                 </div>
               </div>
             )}
 
-            {/* ── Paso 2 ─────────────────────────────────── */}
+            {/* Paso 2 */}
             {paso === 2 && (
               <div className="space-y-4">
                 <div className="bg-blue-50 rounded-lg p-3 text-sm">
@@ -304,20 +297,17 @@ export default function PortalPage() {
               </div>
             )}
 
-            {/* ── Paso 3: Pago ────────────────────────────── */}
+            {/* Paso 3 */}
             {paso === 3 && (
               <div className="space-y-5">
-
-                {/* ── Vista Stripe ── */}
                 {opcionPago === 'stripe' && (
                   <StripePago
                     codigo={codigoGenerado}
-                    onExito={() => { setOpcionPago('exitoso'); }}
+                    onExito={() => setOpcionPago('exitoso')}
                     onCancel={() => setOpcionPago('seleccion')}
                   />
                 )}
 
-                {/* ── Pago exitoso Stripe ── */}
                 {opcionPago === 'exitoso' && (
                   <div className="text-center py-6 space-y-4">
                     <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
@@ -327,22 +317,14 @@ export default function PortalPage() {
                     <p className="text-sm text-gray-500">Tu trámite ha sido activado automáticamente.</p>
                     <p className="text-2xl font-mono font-bold text-blue-600">{codigoGenerado}</p>
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
-                        Registrar otro trámite
-                      </Button>
-                      <Button icon={<ExternalLink size={14} />}
-                        onClick={() => navigate(`/consulta/${codigoGenerado}`)}
-                        className="w-full sm:w-auto justify-center">
-                        Ver estado de mi trámite
-                      </Button>
+                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">Registrar otro trámite</Button>
+                      <Button icon={<ExternalLink size={14} />} onClick={() => navigate(`/consulta/${codigoGenerado}`)} className="w-full sm:w-auto justify-center">Ver estado de mi trámite</Button>
                     </div>
                   </div>
                 )}
 
-                {/* ── Selección de opción de pago ── */}
                 {(opcionPago === 'seleccion' || opcionPago === 'comprobante') && (
                   <>
-                    {/* Confirmación registro */}
                     <div className="text-center space-y-2">
                       <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">
                         <CheckCircle size={28} className="text-green-600" />
@@ -353,7 +335,6 @@ export default function PortalPage() {
                       <p className="text-xs text-gray-400">Guarda este código para consultar tu trámite</p>
                     </div>
 
-                    {/* Info trámite */}
                     <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-200">
                       <div>
                         <p className="text-xs text-gray-500">Trámite</p>
@@ -374,11 +355,8 @@ export default function PortalPage() {
                     <h4 className="text-sm font-bold text-gray-800 text-center">¿Cómo deseas realizar el pago?</h4>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
-                      {/* Opción A: Comprobante */}
-                      <div className={`border-2 rounded-xl p-4 space-y-3 transition-all ${
-                        opcionPago === 'comprobante' ? 'border-orange-400 bg-orange-50' : 'border-gray-200'
-                      }`}>
+                      {/* Comprobante */}
+                      <div className={`border-2 rounded-xl p-4 space-y-3 transition-all ${opcionPago === 'comprobante' ? 'border-orange-400 bg-orange-50' : 'border-gray-200'}`}>
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
                             <ImageIcon size={16} className="text-orange-600" />
@@ -388,10 +366,7 @@ export default function PortalPage() {
                             <p className="text-xs text-gray-500">Yape, Plin, transferencia</p>
                           </div>
                         </div>
-                        <p className="text-xs text-gray-600 leading-relaxed">
-                          Realiza el pago por Yape, Plin o transferencia y adjunta la foto de tu comprobante.
-                        </p>
-
+                        <p className="text-xs text-gray-600 leading-relaxed">Realiza el pago por Yape, Plin o transferencia y adjunta la foto de tu comprobante.</p>
                         {opcionPago === 'comprobante' ? (
                           comprobanteSubido ? (
                             <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
@@ -404,9 +379,7 @@ export default function PortalPage() {
                                 <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
                                   <ImageIcon size={14} className="text-orange-500 shrink-0" />
                                   <p className="text-xs text-gray-700 truncate flex-1">{comprobante.name}</p>
-                                  <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500">
-                                    <X size={14} />
-                                  </button>
+                                  <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
                                 </div>
                               ) : (
                                 <div onClick={() => comprobanteInputRef.current?.click()}
@@ -426,10 +399,7 @@ export default function PortalPage() {
                                   Enviar comprobante
                                 </Button>
                               )}
-                              <button onClick={() => setOpcionPago('seleccion')}
-                                className="w-full text-xs text-gray-400 hover:text-gray-600">
-                                ← Volver
-                              </button>
+                              <button onClick={() => setOpcionPago('seleccion')} className="w-full text-xs text-gray-400 hover:text-gray-600">← Volver</button>
                             </>
                           )
                         ) : (
@@ -440,7 +410,7 @@ export default function PortalPage() {
                         )}
                       </div>
 
-                      {/* Opción B: Stripe */}
+                      {/* Stripe */}
                       <div className="border-2 border-blue-300 rounded-xl p-4 space-y-3">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
@@ -451,39 +421,23 @@ export default function PortalPage() {
                             <p className="text-xs text-gray-500">Tarjeta de crédito/débito</p>
                           </div>
                         </div>
-                        <p className="text-xs text-gray-600 leading-relaxed">
-                          Paga con tu tarjeta directamente. El pago se verifica automáticamente — sin pasar por caja.
-                        </p>
-                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                          <span>🔒</span>
-                          <span>Procesado por Stripe · SSL 256-bit</span>
-                        </div>
+                        <p className="text-xs text-gray-600 leading-relaxed">Paga con tu tarjeta directamente. El pago se verifica automáticamente — sin pasar por caja.</p>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400"><span>🔒</span><span>Procesado por Stripe · SSL 256-bit</span></div>
                         <button onClick={() => setOpcionPago('stripe')}
                           className="w-full py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-2">
-                          <CreditCard size={14} />
-                          Pagar con tarjeta
+                          <CreditCard size={14} />Pagar con tarjeta
                         </button>
                       </div>
                     </div>
 
-                    {/* Pago presencial */}
                     <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                       <p className="text-sm font-semibold text-yellow-800 mb-1">🏢 O paga presencialmente</p>
-                      <p className="text-sm text-yellow-700">
-                        Acércate a Caja con tu código
-                        <span className="font-mono font-bold"> {codigoGenerado}</span> y realiza el pago.
-                      </p>
+                      <p className="text-sm text-yellow-700">Acércate a Caja con tu código <span className="font-mono font-bold">{codigoGenerado}</span> y realiza el pago.</p>
                     </div>
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-between pt-2">
-                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
-                        Registrar otro trámite
-                      </Button>
-                      <Button icon={<ExternalLink size={14} />}
-                        onClick={() => navigate(`/consulta/${codigoGenerado}`)}
-                        className="w-full sm:w-auto justify-center">
-                        Ver estado de mi trámite
-                      </Button>
+                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">Registrar otro trámite</Button>
+                      <Button icon={<ExternalLink size={14} />} onClick={() => navigate(`/consulta/${codigoGenerado}`)} className="w-full sm:w-auto justify-center">Ver estado de mi trámite</Button>
                     </div>
                   </>
                 )}

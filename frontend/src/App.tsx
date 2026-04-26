@@ -20,7 +20,7 @@ import ReportesPage   from './pages/ReportesPage';
 import UsuariosPage   from './pages/UsuariosPage';
 import AuditoriaPage  from './pages/AuditoriaPage';
 import MainLayout     from './layouts/MainLayout';
-
+import Toaster from './components/ui/Toaster';
 // ── Ruta protegida por autenticación ────────────────────────
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { usuario } = useAuth();
@@ -115,6 +115,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
+      <Toaster />
     </AuthProvider>
   );
 }

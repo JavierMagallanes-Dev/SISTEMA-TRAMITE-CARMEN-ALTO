@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import api                     from '../services/api';
 import { Card }                from '../components/ui/Card';
 import Button                  from '../components/ui/Button';
-import Alert                   from '../components/ui/Alert';
+import { toast }               from '../utils/toast';
 import Spinner                 from '../components/ui/Spinner';
 import Modal                   from '../components/ui/Modal';
 import EstadoBadge             from '../components/shared/EstadoBadge';
@@ -40,8 +40,7 @@ interface Expediente {
 
 export default function HistorialPage() {
   const [expedientes, setExpedientes] = useState<Expediente[]>([]);
-  const [cargando,    setCargando]    = useState(true);
-  const [error,       setError]       = useState('');
+  const [cargando,     setCargando]    = useState(true);
 
   const [filtroEstado, setFiltroEstado] = useState<'TODOS' | 'RESUELTO' | 'ARCHIVADO'>('TODOS');
   const [busqueda,     setBusqueda]     = useState('');
@@ -56,7 +55,7 @@ export default function HistorialPage() {
       const res = await api.get('/areas/historial');
       setExpedientes(res.data);
     } catch {
-      setError('Error al cargar el historial.');
+      toast.error({ titulo: 'Error al cargar el historial.' });
     } finally {
       setCargando(false);
     }
@@ -71,7 +70,7 @@ export default function HistorialPage() {
       const det = await areasService.detalle(id);
       setDetalle({ ...det, documentos: det.documentos ?? [] });
     } catch {
-      setError('Error al cargar el detalle.');
+      toast.error({ titulo: 'Error al cargar el detalle.' });
     } finally {
       setCargandoDet(false);
     }
@@ -104,8 +103,6 @@ export default function HistorialPage() {
           Actualizar
         </Button>
       </div>
-
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-4">

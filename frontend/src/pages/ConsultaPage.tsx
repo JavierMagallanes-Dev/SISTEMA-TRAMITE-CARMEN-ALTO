@@ -3,19 +3,19 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate }      from 'react-router-dom';
 import { portalService }               from '../services/portal.service';
-import Alert                           from '../components/ui/Alert';
 import Spinner                         from '../components/ui/Spinner';
 import Button                          from '../components/ui/Button';
 import EstadoBadge                     from '../components/shared/EstadoBadge';
 import TimelineMovimientos             from '../components/shared/TimelineMovimientos';
 import StripePago                      from '../components/shared/StripePago';
+import { toast }                       from '../utils/toast';
 import { formatFecha, formatFechaHora, colorDiasRestantes } from '../utils/formato';
 import type { EstadoExpediente, Movimiento } from '../types';
 import {
   Building2, Search, Download, ArrowLeft,
   Calendar, User, FileText, Printer,
   AlertCircle, Upload, X, CheckCircle,
-  CreditCard, ImageIcon, ExternalLink,
+  CreditCard, ImageIcon,
 } from 'lucide-react';
 
 const VITE_API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -56,15 +56,11 @@ export default function ConsultaPage() {
   const [codigo,     setCodigo]     = useState(codigoParam?.toUpperCase() ?? '');
   const [expediente, setExpediente] = useState<ExpedientePublico | null>(null);
   const [cargando,   setCargando]   = useState(false);
-  const [error,      setError]      = useState('');
-  const [success,    setSuccess]    = useState('');
 
-  // Subida documentos faltantes (OBSERVADO)
   const [archivos,     setArchivos]     = useState<File[]>([]);
   const [subiendoDocs, setSubiendoDocs] = useState(false);
   const fileInputRef                    = useRef<HTMLInputElement>(null);
 
-  // Pago
   const [opcionPago,        setOpcionPago]        = useState<OpcionPago>('seleccion');
   const [comprobante,       setComprobante]        = useState<File | null>(null);
   const [subiendoComp,      setSubiendoComp]       = useState(false);
@@ -74,7 +70,6 @@ export default function ConsultaPage() {
   const consultar = async (cod: string) => {
     if (!cod.trim()) return;
     setCargando(true);
-    setError('');
     setExpediente(null);
     setOpcionPago('seleccion');
     setComprobanteSubido(false);
@@ -82,7 +77,7 @@ export default function ConsultaPage() {
       const data = await portalService.consultarEstado(cod.trim().toUpperCase());
       setExpediente(data);
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'No se encontró ningún expediente con ese código.');
+      toast.error({ titulo: err?.response?.data?.error ?? 'No se encontró ningún expediente con ese código.' });
     } finally { setCargando(false); }
   };
 
@@ -94,12 +89,11 @@ export default function ConsultaPage() {
     window.open(`${VITE_API_URL}/recepcion/cargo/publico/${codigo}`, '_blank');
   };
 
-  // Documentos faltantes (OBSERVADO)
   const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files  = Array.from(e.target.files ?? []);
+    const files   = Array.from(e.target.files ?? []);
     const validos = files.filter((f) => {
-      if (f.type !== 'application/pdf') { setError(`"${f.name}" no es un PDF.`); return false; }
-      if (f.size > 10 * 1024 * 1024)   { setError(`"${f.name}" supera los 10MB.`); return false; }
+      if (f.type !== 'application/pdf') { toast.warning({ titulo: `"${f.name}" no es un PDF.` }); return false; }
+      if (f.size > 10 * 1024 * 1024)   { toast.warning({ titulo: `"${f.name}" supera los 10MB.` }); return false; }
       return true;
     });
     setArchivos(prev => [...prev, ...validos]);
@@ -117,21 +111,20 @@ export default function ConsultaPage() {
         formData.append('archivo', archivo);
         await fetch(`${VITE_API_URL}/documentos/subir/${expediente.id}`, { method: 'POST', body: formData });
       }
-      setSuccess(`${archivos.length} documento(s) enviado(s) correctamente.`);
+      toast.success({ titulo: 'Documentos enviados', descripcion: `${archivos.length} documento(s) enviado(s) correctamente.` });
       setArchivos([]);
       consultar(expediente.codigo);
     } catch {
-      setError('Error al subir los documentos.');
+      toast.error({ titulo: 'Error al subir los documentos.' });
     } finally { setSubiendoDocs(false); }
   };
 
-  // Comprobante (PENDIENTE_PAGO)
   const handleComprobanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!tiposPermitidos.includes(file.type)) { setError('Solo se aceptan imágenes o PDF.'); return; }
-    if (file.size > 10 * 1024 * 1024) { setError('El archivo no puede superar los 10MB.'); return; }
+    if (!tiposPermitidos.includes(file.type)) { toast.warning({ titulo: 'Solo se aceptan imágenes o PDF.' }); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.warning({ titulo: 'El archivo no puede superar los 10MB.' }); return; }
     setComprobante(file);
     if (comprobanteInputRef.current) comprobanteInputRef.current.value = '';
   };
@@ -139,7 +132,6 @@ export default function ConsultaPage() {
   const handleSubirComprobante = async () => {
     if (!expediente || !comprobante) return;
     setSubiendoComp(true);
-    setError('');
     try {
       const formData = new FormData();
       formData.append('comprobante', comprobante);
@@ -152,10 +144,10 @@ export default function ConsultaPage() {
       }
       setComprobanteSubido(true);
       setComprobante(null);
-      setSuccess('¡Comprobante enviado! El cajero lo revisará pronto.');
+      toast.success({ titulo: '¡Comprobante enviado!', descripcion: 'El cajero lo revisará y verificará tu pago pronto.' });
       consultar(expediente.codigo);
     } catch (err: any) {
-      setError(err.message ?? 'Error al subir el comprobante.');
+      toast.error({ titulo: err.message ?? 'Error al subir el comprobante.' });
     } finally { setSubiendoComp(false); }
   };
 
@@ -169,7 +161,6 @@ export default function ConsultaPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -202,8 +193,6 @@ export default function ConsultaPage() {
           </div>
         </div>
 
-        {error   && <Alert type="error"   message={error}   onClose={() => setError('')}   />}
-        {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
         {cargando && <Spinner text="Buscando expediente..." />}
 
         {expediente && (
@@ -258,16 +247,14 @@ export default function ConsultaPage() {
                 </div>
               </div>
 
-              {/* ── SECCIÓN PENDIENTE_PAGO ────────────────── */}
+              {/* PENDIENTE_PAGO */}
               {expediente.estado === 'PENDIENTE_PAGO' && (
                 <div className="mx-4 my-4 sm:mx-6 sm:my-5 rounded-xl overflow-hidden border border-blue-200">
                   <div className="bg-blue-600 px-4 py-3 flex items-center gap-2">
                     <CreditCard size={16} className="text-white shrink-0" />
                     <p className="text-sm font-bold text-white">Pago del Trámite</p>
                   </div>
-
                   <div className="bg-blue-50 p-4 space-y-4">
-                    {/* Monto */}
                     <div className="bg-white rounded-lg p-3 flex items-center justify-between border border-blue-100">
                       <div>
                         <p className="text-xs text-gray-500">Monto a pagar</p>
@@ -275,17 +262,16 @@ export default function ConsultaPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-gray-500">Trámite</p>
-                        <p className="text-xs font-medium text-gray-700 max-w-150px text-right">{expediente.tipoTramite.nombre}</p>
+                        <p className="text-xs font-medium text-gray-700 max-w-[150px] text-right">{expediente.tipoTramite.nombre}</p>
                       </div>
                     </div>
 
-                    {/* Stripe activo */}
                     {opcionPago === 'stripe' && (
                       <div className="bg-white rounded-xl p-4 border border-blue-200">
                         <StripePago
                           codigo={expediente.codigo}
                           onExito={() => {
-                            setSuccess('¡Pago procesado! Tu trámite ha sido activado automáticamente.');
+                            toast.success({ titulo: '¡Pago procesado!', descripcion: 'Tu trámite ha sido activado automáticamente.' });
                             setOpcionPago('seleccion');
                             consultar(expediente.codigo);
                           }}
@@ -294,10 +280,8 @@ export default function ConsultaPage() {
                       </div>
                     )}
 
-                    {/* Selección de opciones */}
                     {opcionPago !== 'stripe' && (
                       <>
-                        {/* Ya subió comprobante */}
                         {yaSubioComprobante ? (
                           <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-3">
                             <CheckCircle size={18} className="text-green-600 shrink-0" />
@@ -309,27 +293,21 @@ export default function ConsultaPage() {
                         ) : (
                           <>
                             <p className="text-xs font-semibold text-blue-800 text-center">¿Cómo deseas pagar?</p>
-
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                              {/* Opción A: Comprobante */}
-                              <div className={`border-2 rounded-xl p-3 space-y-2 transition-all ${
-                                opcionPago === 'comprobante' ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'
-                              }`}>
+                              {/* Comprobante */}
+                              <div className={`border-2 rounded-xl p-3 space-y-2 transition-all ${opcionPago === 'comprobante' ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'}`}>
                                 <div className="flex items-center gap-2">
                                   <ImageIcon size={15} className="text-orange-500 shrink-0" />
                                   <p className="text-xs font-bold text-gray-800">Adjuntar comprobante</p>
                                 </div>
                                 <p className="text-xs text-gray-500">Yape, Plin o transferencia</p>
-
                                 {opcionPago === 'comprobante' ? (
                                   <>
                                     {comprobante ? (
                                       <div className="flex items-center gap-2 p-2 bg-white border border-orange-200 rounded-lg">
                                         <ImageIcon size={12} className="text-orange-500 shrink-0" />
                                         <p className="text-xs text-gray-700 truncate flex-1">{comprobante.name}</p>
-                                        <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500">
-                                          <X size={12} />
-                                        </button>
+                                        <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500"><X size={12} /></button>
                                       </div>
                                     ) : (
                                       <div onClick={() => comprobanteInputRef.current?.click()}
@@ -342,14 +320,12 @@ export default function ConsultaPage() {
                                       accept="image/jpeg,image/png,image/webp,application/pdf"
                                       className="hidden" onChange={handleComprobanteChange} />
                                     {comprobante && (
-                                      <button onClick={handleSubirComprobante}
-                                        disabled={subiendoComp}
+                                      <button onClick={handleSubirComprobante} disabled={subiendoComp}
                                         className="w-full py-2 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors">
                                         {subiendoComp ? 'Enviando...' : 'Enviar comprobante'}
                                       </button>
                                     )}
-                                    <button onClick={() => setOpcionPago('seleccion')}
-                                      className="w-full text-xs text-gray-400 hover:text-gray-600">← Volver</button>
+                                    <button onClick={() => setOpcionPago('seleccion')} className="w-full text-xs text-gray-400 hover:text-gray-600">← Volver</button>
                                   </>
                                 ) : (
                                   <button onClick={() => setOpcionPago('comprobante')}
@@ -359,7 +335,7 @@ export default function ConsultaPage() {
                                 )}
                               </div>
 
-                              {/* Opción B: Stripe */}
+                              {/* Stripe */}
                               <div className="border-2 border-blue-200 bg-white rounded-xl p-3 space-y-2">
                                 <div className="flex items-center gap-2">
                                   <CreditCard size={15} className="text-blue-600 shrink-0" />
@@ -374,7 +350,6 @@ export default function ConsultaPage() {
                               </div>
                             </div>
 
-                            {/* Presencial */}
                             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                               <p className="text-xs text-yellow-800 font-semibold">🏢 O paga presencialmente en Caja</p>
                             </div>
@@ -386,7 +361,7 @@ export default function ConsultaPage() {
                 </div>
               )}
 
-              {/* ── SECCIÓN OBSERVADO ─────────────────────── */}
+              {/* OBSERVADO */}
               {expediente.estado === 'OBSERVADO' && (
                 <div className="mx-4 my-4 sm:mx-6 sm:my-5 bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-4">
                   <div className="flex items-start gap-3">
@@ -410,9 +385,7 @@ export default function ConsultaPage() {
                           <div key={i} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-orange-200">
                             <FileText size={14} className="text-blue-500 shrink-0" />
                             <p className="text-xs text-gray-700 truncate flex-1">{f.name}</p>
-                            <button onClick={() => quitarArchivo(i)} className="text-gray-400 hover:text-red-500">
-                              <X size={14} />
-                            </button>
+                            <button onClick={() => quitarArchivo(i)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
                           </div>
                         ))}
                       </div>

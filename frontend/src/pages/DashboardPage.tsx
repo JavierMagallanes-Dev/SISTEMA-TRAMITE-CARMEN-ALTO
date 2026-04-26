@@ -11,7 +11,7 @@ import {
 import { useAuth }     from '../context/AuthContext';
 import { Card }        from '../components/ui/Card';
 import Spinner         from '../components/ui/Spinner';
-import Alert           from '../components/ui/Alert';
+import { toast }       from '../utils/toast';
 import EstadoBadge     from '../components/shared/EstadoBadge';
 import { ESTADO_CONFIG } from '../utils/constants';
 import {
@@ -25,6 +25,7 @@ import {
   XCircle, RefreshCw,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+
 
 // ── Tipos de respuesta del backend ──────────────────────────────────
 interface KpisMesaPartes {
@@ -72,7 +73,7 @@ interface PuntoTendencia {
 }
 
 interface DatosDashboard {
-  kpis:                KpisDashboard;
+  kpis:                 KpisDashboard;
   ultimos_expedientes?: UltimoExpediente[];
   por_estado?:          PuntoEstado[];      // ← opcional: si el backend aún no lo devuelve
   tendencia_7d?:        PuntoTendencia[];   // ← opcional: si el backend aún no lo devuelve
@@ -203,16 +204,14 @@ export default function DashboardPage() {
 
   const [datos,    setDatos]    = useState<DatosDashboard | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
-  const [error,    setError]    = useState<string>('');
 
   const cargar = async (): Promise<void> => {
     setCargando(true);
-    setError('');
     try {
       const res = await api.get<DatosDashboard>('/dashboard');
       setDatos(res.data);
     } catch {
-      setError('Error al cargar el dashboard.');
+      toast.error({ titulo: 'Error al cargar el dashboard.' });
     } finally {
       setCargando(false);
     }
@@ -264,8 +263,6 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
-
       {/* ── MESA DE PARTES / ADMIN ──────────────────────────────────── */}
       {(rol === 'MESA_DE_PARTES' || rol === 'ADMIN') && datos?.kpis && isKpisMesaPartes(datos.kpis) && (
         <>
@@ -298,7 +295,7 @@ export default function DashboardPage() {
             <KpiCard label="Registrados hoy"   value={datos.kpis.registrados_hoy} icon={<FileText size={20} />}    color="text-[color:#216ece]" bg="bg-[color:#eaf2fb]" sublabel="Nuevos expedientes" />
             <KpiCard label="Pendiente de pago" value={datos.kpis.pendiente_pago}  icon={<CreditCard size={20} />}  color="text-yellow-600"      bg="bg-yellow-100"      sublabel="En ventanilla de caja" />
             <KpiCard label="En revisión MDP"   value={datos.kpis.en_revision}     icon={<Eye size={20} />}         color="text-purple-600"      bg="bg-purple-100"      sublabel="Revisando documentación" />
-            <KpiCard label="Derivados"         value={datos.kpis.derivados}       icon={<Send size={20} />}        color="text-indigo-600"      bg="bg-indigo-100"      sublabel="Enviados a áreas técnicas" />
+            <KpiCard label="Derivados"         value={datos.kpis.derivados}       icon={<Send size={20} />}         color="text-indigo-600"      bg="bg-indigo-100"      sublabel="Enviados a áreas técnicas" />
           </div>
 
           {/* ⭐ GRÁFICOS — Recharts ───────────────────────────────── */}
@@ -433,7 +430,7 @@ export default function DashboardPage() {
       {/* ── CAJERO ──────────────────────────────────────────── */}
       {rol === 'CAJERO' && datos?.kpis && isKpisCajero(datos.kpis) && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <KpiCard label="Pagos verificados hoy" value={datos.kpis.pagos_hoy}        icon={<CheckCircle size={20} />} color="text-green-600"        bg="bg-green-100" />
+          <KpiCard label="Pagos verificados hoy" value={datos.kpis.pagos_hoy}         icon={<CheckCircle size={20} />} color="text-green-600"         bg="bg-green-100" />
           <KpiCard label="Total recaudado hoy"   value={formatMoneda(datos.kpis.monto_hoy)} icon={<TrendingUp size={20} />}  color="text-[color:#216ece]" bg="bg-[color:#eaf2fb]" />
           <KpiCard label="Pendientes de pago"    value={datos.kpis.pendientes_pago}  icon={<CreditCard size={20} />}  color="text-yellow-600"       bg="bg-yellow-100" sublabel="Esperando en ventanilla" />
         </div>
@@ -476,6 +473,4 @@ export default function DashboardPage() {
   );
 }
 
-// Suprime el aviso de unused `LucideIcon` si tu lint estricto lo pide.
-// (No lo usamos directamente — los iconos se usan como JSX.)
 export type { LucideIcon };
