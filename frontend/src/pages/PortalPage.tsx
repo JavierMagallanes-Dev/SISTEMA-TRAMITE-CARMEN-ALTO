@@ -8,6 +8,7 @@ import Button                           from '../components/ui/Button';
 import Input                            from '../components/ui/Input';
 import Alert                            from '../components/ui/Alert';
 import Spinner                          from '../components/ui/Spinner';
+import StripePago                       from '../components/shared/StripePago';
 import {
   Building2, Search, FileText,
   ArrowRight, CheckCircle, Upload, X,
@@ -21,6 +22,8 @@ interface TipoTramite {
   costo_soles: number; plazo_dias: number;
 }
 
+type OpcionPago = 'seleccion' | 'comprobante' | 'stripe' | 'exitoso';
+
 export default function PortalPage() {
   const navigate = useNavigate();
 
@@ -29,8 +32,9 @@ export default function PortalPage() {
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [codigoGenerado,     setCodigoGenerado]     = useState('');
-  const [tipoRegistrado,     setTipoRegistrado]     = useState<TipoTramite | null>(null);
+  const [codigoGenerado,  setCodigoGenerado]  = useState('');
+  const [tipoRegistrado,  setTipoRegistrado]  = useState<TipoTramite | null>(null);
+  const [opcionPago,      setOpcionPago]      = useState<OpcionPago>('seleccion');
 
   const [codigoConsulta, setCodigoConsulta] = useState('');
 
@@ -43,7 +47,7 @@ export default function PortalPage() {
   const [archivoPdf,  setArchivoPdf]  = useState<File | null>(null);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
 
-  // Comprobante de pago en paso 3
+  // Comprobante de pago
   const [comprobante,       setComprobante]       = useState<File | null>(null);
   const [subiendoComp,      setSubiendoComp]      = useState(false);
   const [comprobanteSubido, setComprobanteSubido] = useState(false);
@@ -121,8 +125,7 @@ export default function PortalPage() {
       const formData = new FormData();
       formData.append('comprobante', comprobante);
       const res = await fetch(`${VITE_API_URL}/portal/comprobante/${codigoGenerado}`, {
-        method: 'POST',
-        body:   formData,
+        method: 'POST', body: formData,
       });
       if (!res.ok) {
         const data = await res.json();
@@ -133,14 +136,12 @@ export default function PortalPage() {
       setSuccess('¡Comprobante enviado! El cajero lo revisará y verificará tu pago pronto.');
     } catch (err: any) {
       setError(err.message ?? 'Error al subir el comprobante.');
-    } finally {
-      setSubiendoComp(false);
-    }
+    } finally { setSubiendoComp(false); }
   };
 
   const resetForm = () => {
     setPaso(1); setTipoSeleccionado(null); setArchivoPdf(null);
-    setTipoRegistrado(null); setComprobante(null);
+    setTipoRegistrado(null); setComprobante(null); setOpcionPago('seleccion');
     setComprobanteSubido(false); setError(''); setSuccess('');
     setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '' });
   };
@@ -193,11 +194,7 @@ export default function PortalPage() {
 
           {/* Indicador de pasos */}
           <div className="flex border-b border-gray-100">
-            {[
-              { num: 1, label: 'Trámite'   },
-              { num: 2, label: 'Tus datos' },
-              { num: 3, label: 'Pago'      },
-            ].map((p) => (
+            {[{ num: 1, label: 'Trámite' }, { num: 2, label: 'Tus datos' }, { num: 3, label: 'Pago' }].map((p) => (
               <div key={p.num}
                 className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-3 text-xs font-medium sm:gap-2 sm:px-4 ${
                   paso === p.num ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
@@ -217,16 +214,14 @@ export default function PortalPage() {
             {error   && <Alert type="error"   message={error}   onClose={() => setError('')}   className="mb-4" />}
             {success && <Alert type="success" message={success} onClose={() => setSuccess('')} className="mb-4" />}
 
-            {/* ── Paso 1: Seleccionar trámite ────────────── */}
+            {/* ── Paso 1 ─────────────────────────────────── */}
             {paso === 1 && (
               <div className="space-y-3">
                 {tipos.length === 0 ? <Spinner text="Cargando trámites..." /> : (
                   tipos.map((tipo) => (
                     <div key={tipo.id} onClick={() => setTipoSeleccionado(tipo)}
                       className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        tipoSeleccionado?.id === tipo.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                        tipoSeleccionado?.id === tipo.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
                       }`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
@@ -246,14 +241,12 @@ export default function PortalPage() {
                   <Button icon={<ArrowRight size={14} />} onClick={() => {
                     if (!tipoSeleccionado) { setError('Selecciona un tipo de trámite.'); return; }
                     setError(''); setPaso(2);
-                  }} className="w-full sm:w-auto justify-center">
-                    Continuar
-                  </Button>
+                  }} className="w-full sm:w-auto justify-center">Continuar</Button>
                 </div>
               </div>
             )}
 
-            {/* ── Paso 2: Datos personales ────────────────── */}
+            {/* ── Paso 2 ─────────────────────────────────── */}
             {paso === 2 && (
               <div className="space-y-4">
                 <div className="bg-blue-50 rounded-lg p-3 text-sm">
@@ -261,7 +254,6 @@ export default function PortalPage() {
                   <p className="font-semibold text-blue-700">{tipoSeleccionado?.nombre}</p>
                   <p className="text-green-600 font-bold">S/ {Number(tipoSeleccionado?.costo_soles).toFixed(2)}</p>
                 </div>
-
                 <div className="flex flex-col gap-2 sm:flex-row sm:gap-2 sm:items-end">
                   <div className="flex-1">
                     <Input label="DNI" placeholder="12345678" value={form.dni}
@@ -269,27 +261,20 @@ export default function PortalPage() {
                   </div>
                   <Button variant="secondary" icon={<Search size={14} />} loading={buscandoDni}
                     onClick={buscarDni} disabled={form.dni.length !== 8}
-                    className="w-full sm:w-auto justify-center">
-                    Buscar DNI
-                  </Button>
+                    className="w-full sm:w-auto justify-center">Buscar DNI</Button>
                 </div>
-
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input label="Nombres"          value={form.nombres}      onChange={(e) => setF('nombres', e.target.value)}      required />
                   <Input label="Apellido paterno" value={form.apellido_pat} onChange={(e) => setF('apellido_pat', e.target.value)} required />
                   <Input label="Apellido materno" value={form.apellido_mat} onChange={(e) => setF('apellido_mat', e.target.value)} />
                   <Input label="Teléfono"         value={form.telefono}     onChange={(e) => setF('telefono', e.target.value)}     placeholder="987654321" />
                 </div>
-
                 <Input label="Email" type="email" value={form.email}
                   onChange={(e) => setF('email', e.target.value)} required
                   helper="Recibirás notificaciones en este correo" />
-
-                {/* PDF adjunto */}
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">
-                    Documento adjunto (PDF)
-                    <span className="text-gray-400 font-normal ml-1">— opcional</span>
+                    Documento adjunto (PDF)<span className="text-gray-400 font-normal ml-1">— opcional</span>
                   </label>
                   {archivoPdf ? (
                     <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -311,170 +296,202 @@ export default function PortalPage() {
                   )}
                   <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleArchivoChange} />
                 </div>
-
                 <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-between">
-                  <Button variant="secondary" onClick={() => setPaso(1)} className="w-full sm:w-auto justify-center">
-                    ← Atrás
-                  </Button>
+                  <Button variant="secondary" onClick={() => setPaso(1)} className="w-full sm:w-auto justify-center">← Atrás</Button>
                   <Button loading={loading} icon={<FileText size={14} />} onClick={handleRegistrar}
-                    className="w-full sm:w-auto justify-center">
-                    Registrar trámite
-                  </Button>
+                    className="w-full sm:w-auto justify-center">Registrar trámite</Button>
                 </div>
               </div>
             )}
 
-            {/* ── Paso 3: Opciones de pago ────────────────── */}
+            {/* ── Paso 3: Pago ────────────────────────────── */}
             {paso === 3 && (
               <div className="space-y-5">
-                {/* Confirmación registro */}
-                <div className="text-center space-y-2">
-                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-                    <CheckCircle size={28} className="text-green-600" />
+
+                {/* ── Vista Stripe ── */}
+                {opcionPago === 'stripe' && (
+                  <StripePago
+                    codigo={codigoGenerado}
+                    onExito={() => { setOpcionPago('exitoso'); }}
+                    onCancel={() => setOpcionPago('seleccion')}
+                  />
+                )}
+
+                {/* ── Pago exitoso Stripe ── */}
+                {opcionPago === 'exitoso' && (
+                  <div className="text-center py-6 space-y-4">
+                    <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                      <CheckCircle size={32} className="text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900">¡Pago procesado!</h3>
+                    <p className="text-sm text-gray-500">Tu trámite ha sido activado automáticamente.</p>
+                    <p className="text-2xl font-mono font-bold text-blue-600">{codigoGenerado}</p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
+                        Registrar otro trámite
+                      </Button>
+                      <Button icon={<ExternalLink size={14} />}
+                        onClick={() => navigate(`/consulta/${codigoGenerado}`)}
+                        className="w-full sm:w-auto justify-center">
+                        Ver estado de mi trámite
+                      </Button>
+                    </div>
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900">¡Trámite registrado!</h3>
-                  <p className="text-sm text-gray-500">Tu código de expediente es:</p>
-                  <p className="text-2xl font-mono font-bold text-blue-600 break-all">{codigoGenerado}</p>
-                  <p className="text-xs text-gray-400">Guarda este código — lo necesitarás para consultar tu trámite</p>
-                </div>
+                )}
 
-                {/* Info trámite */}
-                <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-200">
-                  <div>
-                    <p className="text-xs text-gray-500">Trámite</p>
-                    <p className="text-sm font-semibold text-gray-800">{tipoRegistrado?.nombre}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Monto a pagar</p>
-                    <p className="text-xl font-bold text-green-600">S/ {Number(tipoRegistrado?.costo_soles).toFixed(2)}</p>
-                  </div>
-                </div>
-
-                {/* Email confirmación */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                  <p className="text-xs text-blue-700 font-medium text-center">
-                    📧 Te enviamos un email con los detalles del registro. Revisa tu correo.
-                  </p>
-                </div>
-
-                {/* Opciones de pago */}
-                <div>
-                  <h4 className="text-sm font-bold text-gray-800 mb-3 text-center">
-                    ¿Cómo deseas realizar el pago?
-                  </h4>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
-                    {/* Opción A: Adjuntar comprobante */}
-                    <div className="border-2 border-gray-200 rounded-xl p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
-                          <ImageIcon size={16} className="text-orange-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-800">Adjuntar comprobante</p>
-                          <p className="text-xs text-gray-500">Yape, Plin, transferencia</p>
-                        </div>
+                {/* ── Selección de opción de pago ── */}
+                {(opcionPago === 'seleccion' || opcionPago === 'comprobante') && (
+                  <>
+                    {/* Confirmación registro */}
+                    <div className="text-center space-y-2">
+                      <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                        <CheckCircle size={28} className="text-green-600" />
                       </div>
+                      <h3 className="text-lg font-bold text-gray-900">¡Trámite registrado!</h3>
+                      <p className="text-sm text-gray-500">Tu código de expediente es:</p>
+                      <p className="text-2xl font-mono font-bold text-blue-600 break-all">{codigoGenerado}</p>
+                      <p className="text-xs text-gray-400">Guarda este código para consultar tu trámite</p>
+                    </div>
 
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        Realiza el pago por Yape, Plin o transferencia bancaria y adjunta la foto o captura de tu comprobante.
+                    {/* Info trámite */}
+                    <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-200">
+                      <div>
+                        <p className="text-xs text-gray-500">Trámite</p>
+                        <p className="text-sm font-semibold text-gray-800">{tipoRegistrado?.nombre}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">Monto a pagar</p>
+                        <p className="text-xl font-bold text-green-600">S/ {Number(tipoRegistrado?.costo_soles).toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                      <p className="text-xs text-blue-700 font-medium text-center">
+                        📧 Te enviamos un email con los detalles del registro. Revisa tu correo.
                       </p>
+                    </div>
 
-                      {comprobanteSubido ? (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                          <CheckCircle size={16} className="text-green-600 shrink-0" />
-                          <p className="text-xs text-green-700 font-medium">¡Comprobante enviado! El cajero lo verificará pronto.</p>
+                    <h4 className="text-sm font-bold text-gray-800 text-center">¿Cómo deseas realizar el pago?</h4>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                      {/* Opción A: Comprobante */}
+                      <div className={`border-2 rounded-xl p-4 space-y-3 transition-all ${
+                        opcionPago === 'comprobante' ? 'border-orange-400 bg-orange-50' : 'border-gray-200'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+                            <ImageIcon size={16} className="text-orange-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-800">Adjuntar comprobante</p>
+                            <p className="text-xs text-gray-500">Yape, Plin, transferencia</p>
+                          </div>
                         </div>
-                      ) : (
-                        <>
-                          {comprobante ? (
-                            <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
-                              <ImageIcon size={14} className="text-orange-500 shrink-0" />
-                              <p className="text-xs text-gray-700 truncate flex-1">{comprobante.name}</p>
-                              <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500">
-                                <X size={14} />
-                              </button>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          Realiza el pago por Yape, Plin o transferencia y adjunta la foto de tu comprobante.
+                        </p>
+
+                        {opcionPago === 'comprobante' ? (
+                          comprobanteSubido ? (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                              <CheckCircle size={16} className="text-green-600 shrink-0" />
+                              <p className="text-xs text-green-700 font-medium">¡Comprobante enviado! El cajero lo verificará pronto.</p>
                             </div>
                           ) : (
-                            <div onClick={() => comprobanteInputRef.current?.click()}
-                              className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center cursor-pointer hover:bg-orange-50 transition-colors">
-                              <Upload size={18} className="mx-auto text-orange-400 mb-1" />
-                              <p className="text-xs text-orange-600">Toca para adjuntar comprobante</p>
-                              <p className="text-xs text-gray-400 mt-0.5">JPG, PNG o PDF — Máx. 10MB</p>
-                            </div>
-                          )}
-                          <input ref={comprobanteInputRef} type="file"
-                            accept="image/jpeg,image/png,image/webp,application/pdf"
-                            className="hidden" onChange={handleComprobanteChange} />
-                          {comprobante && (
-                            <Button variant="primary" icon={<CheckCircle size={13} />}
-                              loading={subiendoComp} onClick={handleSubirComprobante}
-                              className="w-full justify-center" style={{ background: '#ea580c' }}>
-                              Enviar comprobante
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {/* Opción B: Pago en línea (próximamente) */}
-                    <div className="border-2 border-blue-200 rounded-xl p-4 space-y-3 relative overflow-hidden">
-                      {/* Badge próximamente */}
-                      <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                        Próximo
+                            <>
+                              {comprobante ? (
+                                <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                                  <ImageIcon size={14} className="text-orange-500 shrink-0" />
+                                  <p className="text-xs text-gray-700 truncate flex-1">{comprobante.name}</p>
+                                  <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500">
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div onClick={() => comprobanteInputRef.current?.click()}
+                                  className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center cursor-pointer hover:bg-orange-100 transition-colors">
+                                  <Upload size={18} className="mx-auto text-orange-400 mb-1" />
+                                  <p className="text-xs text-orange-600">Toca para adjuntar comprobante</p>
+                                  <p className="text-xs text-gray-400 mt-0.5">JPG, PNG o PDF — Máx. 10MB</p>
+                                </div>
+                              )}
+                              <input ref={comprobanteInputRef} type="file"
+                                accept="image/jpeg,image/png,image/webp,application/pdf"
+                                className="hidden" onChange={handleComprobanteChange} />
+                              {comprobante && (
+                                <Button variant="primary" icon={<CheckCircle size={13} />}
+                                  loading={subiendoComp} onClick={handleSubirComprobante}
+                                  className="w-full justify-center" style={{ background: '#ea580c' }}>
+                                  Enviar comprobante
+                                </Button>
+                              )}
+                              <button onClick={() => setOpcionPago('seleccion')}
+                                className="w-full text-xs text-gray-400 hover:text-gray-600">
+                                ← Volver
+                              </button>
+                            </>
+                          )
+                        ) : (
+                          <button onClick={() => setOpcionPago('comprobante')}
+                            className="w-full py-2 text-sm font-semibold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors">
+                            Seleccionar esta opción
+                          </button>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                          <CreditCard size={16} className="text-blue-600" />
+                      {/* Opción B: Stripe */}
+                      <div className="border-2 border-blue-300 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                            <CreditCard size={16} className="text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-800">Pago en línea</p>
+                            <p className="text-xs text-gray-500">Tarjeta de crédito/débito</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-800">Pago en línea</p>
-                          <p className="text-xs text-gray-500">Tarjeta de crédito/débito</p>
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        Paga directamente con tu tarjeta de crédito o débito. El pago se verificará automáticamente.
-                      </p>
-
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <p className="text-xs text-blue-700 text-center font-medium">
-                          🚀 Esta opción estará disponible muy pronto
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          Paga con tu tarjeta directamente. El pago se verifica automáticamente — sin pasar por caja.
                         </p>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                          <span>🔒</span>
+                          <span>Procesado por Stripe · SSL 256-bit</span>
+                        </div>
+                        <button onClick={() => setOpcionPago('stripe')}
+                          className="w-full py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-2">
+                          <CreditCard size={14} />
+                          Pagar con tarjeta
+                        </button>
                       </div>
                     </div>
 
-                  </div>
-                </div>
+                    {/* Pago presencial */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-yellow-800 mb-1">🏢 O paga presencialmente</p>
+                      <p className="text-sm text-yellow-700">
+                        Acércate a Caja con tu código
+                        <span className="font-mono font-bold"> {codigoGenerado}</span> y realiza el pago.
+                      </p>
+                    </div>
 
-                {/* Opción pago presencial */}
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-yellow-800 mb-1">🏢 O paga presencialmente</p>
-                  <p className="text-sm text-yellow-700">
-                    Acércate a la ventanilla de Caja de la Municipalidad de Carmen Alto con tu código
-                    <span className="font-mono font-bold"> {codigoGenerado}</span> y realiza el pago.
-                  </p>
-                </div>
-
-                {/* Acciones */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:justify-between pt-2">
-                  <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
-                    Registrar otro trámite
-                  </Button>
-                  <Button icon={<ExternalLink size={14} />}
-                    onClick={() => navigate(`/consulta/${codigoGenerado}`)}
-                    className="w-full sm:w-auto justify-center">
-                    Ver estado de mi trámite
-                  </Button>
-                </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between pt-2">
+                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
+                        Registrar otro trámite
+                      </Button>
+                      <Button icon={<ExternalLink size={14} />}
+                        onClick={() => navigate(`/consulta/${codigoGenerado}`)}
+                        className="w-full sm:w-auto justify-center">
+                        Ver estado de mi trámite
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* ── Footer ──────────────────────────────────────── */}
         <p className="text-center text-xs text-gray-400 pb-4">
           © 2026 Municipalidad Distrital de Carmen Alto · Sistema de Trámite Documentario
         </p>

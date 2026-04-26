@@ -8,13 +8,14 @@ import Spinner                         from '../components/ui/Spinner';
 import Button                          from '../components/ui/Button';
 import EstadoBadge                     from '../components/shared/EstadoBadge';
 import TimelineMovimientos             from '../components/shared/TimelineMovimientos';
+import StripePago                      from '../components/shared/StripePago';
 import { formatFecha, formatFechaHora, colorDiasRestantes } from '../utils/formato';
 import type { EstadoExpediente, Movimiento } from '../types';
 import {
   Building2, Search, Download, ArrowLeft,
   Calendar, User, FileText, Printer,
   AlertCircle, Upload, X, CheckCircle,
-  CreditCard, ImageIcon,
+  CreditCard, ImageIcon, ExternalLink,
 } from 'lucide-react';
 
 const VITE_API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -46,6 +47,8 @@ interface ExpedientePublico {
   movimientos:               Movimiento[];
 }
 
+type OpcionPago = 'seleccion' | 'comprobante' | 'stripe';
+
 export default function ConsultaPage() {
   const { codigo: codigoParam } = useParams<{ codigo: string }>();
   const navigate                = useNavigate();
@@ -56,29 +59,31 @@ export default function ConsultaPage() {
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
 
-  // Subida de documentos faltantes (OBSERVADO)
+  // Subida documentos faltantes (OBSERVADO)
   const [archivos,     setArchivos]     = useState<File[]>([]);
   const [subiendoDocs, setSubiendoDocs] = useState(false);
   const fileInputRef                    = useRef<HTMLInputElement>(null);
 
-  // Subida de comprobante de pago (PENDIENTE_PAGO)
-  const [comprobante,       setComprobante]       = useState<File | null>(null);
-  const [subiendoComp,      setSubiendoComp]      = useState(false);
-  const comprobanteInputRef                        = useRef<HTMLInputElement>(null);
+  // Pago
+  const [opcionPago,        setOpcionPago]        = useState<OpcionPago>('seleccion');
+  const [comprobante,       setComprobante]        = useState<File | null>(null);
+  const [subiendoComp,      setSubiendoComp]       = useState(false);
+  const [comprobanteSubido, setComprobanteSubido]  = useState(false);
+  const comprobanteInputRef                         = useRef<HTMLInputElement>(null);
 
   const consultar = async (cod: string) => {
     if (!cod.trim()) return;
     setCargando(true);
     setError('');
     setExpediente(null);
+    setOpcionPago('seleccion');
+    setComprobanteSubido(false);
     try {
       const data = await portalService.consultarEstado(cod.trim().toUpperCase());
       setExpediente(data);
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'No se encontró ningún expediente con ese código.');
-    } finally {
-      setCargando(false);
-    }
+    } finally { setCargando(false); }
   };
 
   useEffect(() => {
@@ -89,9 +94,9 @@ export default function ConsultaPage() {
     window.open(`${VITE_API_URL}/recepcion/cargo/publico/${codigo}`, '_blank');
   };
 
-  // ── Documentos faltantes (OBSERVADO) ────────────────────────
+  // Documentos faltantes (OBSERVADO)
   const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
+    const files  = Array.from(e.target.files ?? []);
     const validos = files.filter((f) => {
       if (f.type !== 'application/pdf') { setError(`"${f.name}" no es un PDF.`); return false; }
       if (f.size > 10 * 1024 * 1024)   { setError(`"${f.name}" supera los 10MB.`); return false; }
@@ -112,29 +117,21 @@ export default function ConsultaPage() {
         formData.append('archivo', archivo);
         await fetch(`${VITE_API_URL}/documentos/subir/${expediente.id}`, { method: 'POST', body: formData });
       }
-      setSuccess(`${archivos.length} documento(s) enviado(s) correctamente. La municipalidad los revisará pronto.`);
+      setSuccess(`${archivos.length} documento(s) enviado(s) correctamente.`);
       setArchivos([]);
       consultar(expediente.codigo);
     } catch {
-      setError('Error al subir los documentos. Intenta nuevamente.');
-    } finally {
-      setSubiendoDocs(false);
-    }
+      setError('Error al subir los documentos.');
+    } finally { setSubiendoDocs(false); }
   };
 
-  // ── Comprobante de pago (PENDIENTE_PAGO) ────────────────────
+  // Comprobante (PENDIENTE_PAGO)
   const handleComprobanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!tiposPermitidos.includes(file.type)) {
-      setError('Solo se aceptan imágenes (JPG, PNG) o PDF.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setError('El archivo no puede superar los 10MB.');
-      return;
-    }
+    if (!tiposPermitidos.includes(file.type)) { setError('Solo se aceptan imágenes o PDF.'); return; }
+    if (file.size > 10 * 1024 * 1024) { setError('El archivo no puede superar los 10MB.'); return; }
     setComprobante(file);
     if (comprobanteInputRef.current) comprobanteInputRef.current.value = '';
   };
@@ -147,21 +144,19 @@ export default function ConsultaPage() {
       const formData = new FormData();
       formData.append('comprobante', comprobante);
       const res = await fetch(`${VITE_API_URL}/portal/comprobante/${expediente.codigo}`, {
-        method: 'POST',
-        body:   formData,
+        method: 'POST', body: formData,
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? 'Error al subir el comprobante.');
       }
-      setSuccess('¡Comprobante enviado! El cajero revisará y verificará tu pago pronto.');
+      setComprobanteSubido(true);
       setComprobante(null);
+      setSuccess('¡Comprobante enviado! El cajero lo revisará pronto.');
       consultar(expediente.codigo);
     } catch (err: any) {
-      setError(err.message ?? 'Error al subir el comprobante. Intenta nuevamente.');
-    } finally {
-      setSubiendoComp(false);
-    }
+      setError(err.message ?? 'Error al subir el comprobante.');
+    } finally { setSubiendoComp(false); }
   };
 
   const obtenerObservacion = () => {
@@ -170,7 +165,6 @@ export default function ConsultaPage() {
     return movObs?.comentario ?? null;
   };
 
-  // Verificar si ya subió comprobante
   const yaSubioComprobante = expediente?.pagos?.some((p) => p.url_comprobante) ?? false;
 
   return (
@@ -199,18 +193,12 @@ export default function ConsultaPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
           <h2 className="text-base font-bold text-gray-900 mb-4">Consultar estado del expediente</h2>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <input
-              type="text"
-              placeholder="EXP-2026-000001"
-              value={codigo}
+            <input type="text" placeholder="EXP-2026-000001" value={codigo}
               onChange={(e) => setCodigo(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && consultar(codigo)}
-              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
-            />
+              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 font-mono" />
             <Button icon={<Search size={14} />} onClick={() => consultar(codigo)} loading={cargando}
-              className="w-full sm:w-auto justify-center">
-              Consultar
-            </Button>
+              className="w-full sm:w-auto justify-center">Consultar</Button>
           </div>
         </div>
 
@@ -218,7 +206,6 @@ export default function ConsultaPage() {
         {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
         {cargando && <Spinner text="Buscando expediente..." />}
 
-        {/* Resultado */}
         {expediente && (
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -271,10 +258,9 @@ export default function ConsultaPage() {
                 </div>
               </div>
 
-              {/* ── SECCIÓN PENDIENTE_PAGO — Subir comprobante ── */}
+              {/* ── SECCIÓN PENDIENTE_PAGO ────────────────── */}
               {expediente.estado === 'PENDIENTE_PAGO' && (
                 <div className="mx-4 my-4 sm:mx-6 sm:my-5 rounded-xl overflow-hidden border border-blue-200">
-                  {/* Header sección */}
                   <div className="bg-blue-600 px-4 py-3 flex items-center gap-2">
                     <CreditCard size={16} className="text-white shrink-0" />
                     <p className="text-sm font-bold text-white">Pago del Trámite</p>
@@ -285,9 +271,7 @@ export default function ConsultaPage() {
                     <div className="bg-white rounded-lg p-3 flex items-center justify-between border border-blue-100">
                       <div>
                         <p className="text-xs text-gray-500">Monto a pagar</p>
-                        <p className="text-xl font-bold text-blue-700">
-                          S/ {Number(expediente.tipoTramite.costo_soles).toFixed(2)}
-                        </p>
+                        <p className="text-xl font-bold text-blue-700">S/ {Number(expediente.tipoTramite.costo_soles).toFixed(2)}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-gray-500">Trámite</p>
@@ -295,71 +279,106 @@ export default function ConsultaPage() {
                       </div>
                     </div>
 
-                    {/* Opciones de pago */}
-                    <div className="bg-white rounded-lg p-3 border border-blue-100">
-                      <p className="text-xs font-semibold text-gray-700 mb-2">Opciones de pago:</p>
-                      <div className="space-y-1 text-xs text-gray-600">
-                        <p>🏦 Depósito o transferencia bancaria</p>
-                        <p>📱 Yape o Plin al número de la municipalidad</p>
-                        <p>🏢 Presencialmente en ventanilla de Caja</p>
+                    {/* Stripe activo */}
+                    {opcionPago === 'stripe' && (
+                      <div className="bg-white rounded-xl p-4 border border-blue-200">
+                        <StripePago
+                          codigo={expediente.codigo}
+                          onExito={() => {
+                            setSuccess('¡Pago procesado! Tu trámite ha sido activado automáticamente.');
+                            setOpcionPago('seleccion');
+                            consultar(expediente.codigo);
+                          }}
+                          onCancel={() => setOpcionPago('seleccion')}
+                        />
                       </div>
-                    </div>
+                    )}
 
-                    {/* Ya subió comprobante */}
-                    {yaSubioComprobante ? (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-3">
-                        <CheckCircle size={18} className="text-green-600 shrink-0" />
-                        <div>
-                          <p className="text-sm font-semibold text-green-800">Comprobante recibido</p>
-                          <p className="text-xs text-green-600 mt-0.5">El cajero revisará y verificará tu pago pronto.</p>
-                        </div>
-                      </div>
-                    ) : (
+                    {/* Selección de opciones */}
+                    {opcionPago !== 'stripe' && (
                       <>
-                        <p className="text-xs font-semibold text-blue-800">
-                          Adjunta tu comprobante de pago para agilizar la verificación:
-                        </p>
-
-                        {comprobante ? (
-                          <div className="flex items-center gap-3 p-3 bg-white border border-blue-200 rounded-lg">
-                            <ImageIcon size={16} className="text-blue-500 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-blue-700 truncate">{comprobante.name}</p>
-                              <p className="text-xs text-gray-400">{(comprobante.size / 1024).toFixed(1)} KB</p>
+                        {/* Ya subió comprobante */}
+                        {yaSubioComprobante ? (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-3">
+                            <CheckCircle size={18} className="text-green-600 shrink-0" />
+                            <div>
+                              <p className="text-sm font-semibold text-green-800">Comprobante recibido</p>
+                              <p className="text-xs text-green-600 mt-0.5">El cajero revisará y verificará tu pago pronto.</p>
                             </div>
-                            <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500">
-                              <X size={16} />
-                            </button>
                           </div>
                         ) : (
-                          <div
-                            onClick={() => comprobanteInputRef.current?.click()}
-                            className="border-2 border-dashed border-blue-300 rounded-lg p-5 text-center cursor-pointer hover:bg-blue-100 transition-colors"
-                          >
-                            <Upload size={22} className="mx-auto text-blue-400 mb-2" />
-                            <p className="text-sm text-blue-600 font-medium">Toca para adjuntar comprobante</p>
-                            <p className="text-xs text-blue-400 mt-1">JPG, PNG o PDF — Máx. 10MB</p>
-                          </div>
-                        )}
+                          <>
+                            <p className="text-xs font-semibold text-blue-800 text-center">¿Cómo deseas pagar?</p>
 
-                        <input
-                          ref={comprobanteInputRef}
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,application/pdf"
-                          className="hidden"
-                          onChange={handleComprobanteChange}
-                        />
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              {/* Opción A: Comprobante */}
+                              <div className={`border-2 rounded-xl p-3 space-y-2 transition-all ${
+                                opcionPago === 'comprobante' ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'
+                              }`}>
+                                <div className="flex items-center gap-2">
+                                  <ImageIcon size={15} className="text-orange-500 shrink-0" />
+                                  <p className="text-xs font-bold text-gray-800">Adjuntar comprobante</p>
+                                </div>
+                                <p className="text-xs text-gray-500">Yape, Plin o transferencia</p>
 
-                        {comprobante && (
-                          <Button
-                            variant="primary"
-                            icon={<CheckCircle size={14} />}
-                            loading={subiendoComp}
-                            onClick={handleSubirComprobante}
-                            className="w-full justify-center"
-                          >
-                            Enviar comprobante al cajero
-                          </Button>
+                                {opcionPago === 'comprobante' ? (
+                                  <>
+                                    {comprobante ? (
+                                      <div className="flex items-center gap-2 p-2 bg-white border border-orange-200 rounded-lg">
+                                        <ImageIcon size={12} className="text-orange-500 shrink-0" />
+                                        <p className="text-xs text-gray-700 truncate flex-1">{comprobante.name}</p>
+                                        <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500">
+                                          <X size={12} />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div onClick={() => comprobanteInputRef.current?.click()}
+                                        className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center cursor-pointer hover:bg-orange-100 transition-colors">
+                                        <Upload size={16} className="mx-auto text-orange-400 mb-1" />
+                                        <p className="text-xs text-orange-600">Toca para adjuntar</p>
+                                      </div>
+                                    )}
+                                    <input ref={comprobanteInputRef} type="file"
+                                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                                      className="hidden" onChange={handleComprobanteChange} />
+                                    {comprobante && (
+                                      <button onClick={handleSubirComprobante}
+                                        disabled={subiendoComp}
+                                        className="w-full py-2 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors">
+                                        {subiendoComp ? 'Enviando...' : 'Enviar comprobante'}
+                                      </button>
+                                    )}
+                                    <button onClick={() => setOpcionPago('seleccion')}
+                                      className="w-full text-xs text-gray-400 hover:text-gray-600">← Volver</button>
+                                  </>
+                                ) : (
+                                  <button onClick={() => setOpcionPago('comprobante')}
+                                    className="w-full py-1.5 text-xs font-semibold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors">
+                                    Adjuntar comprobante
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Opción B: Stripe */}
+                              <div className="border-2 border-blue-200 bg-white rounded-xl p-3 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <CreditCard size={15} className="text-blue-600 shrink-0" />
+                                  <p className="text-xs font-bold text-gray-800">Pago en línea</p>
+                                </div>
+                                <p className="text-xs text-gray-500">Tarjeta de crédito/débito</p>
+                                <div className="text-xs text-gray-400">🔒 Procesado por Stripe</div>
+                                <button onClick={() => setOpcionPago('stripe')}
+                                  className="w-full py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                                  <CreditCard size={12} />Pagar con tarjeta
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Presencial */}
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                              <p className="text-xs text-yellow-800 font-semibold">🏢 O paga presencialmente en Caja</p>
+                            </div>
+                          </>
                         )}
                       </>
                     )}
@@ -374,22 +393,17 @@ export default function ConsultaPage() {
                     <AlertCircle size={18} className="text-orange-500 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-bold text-orange-800">Tu trámite fue observado</p>
-                      <p className="text-xs text-orange-600 mt-0.5">
-                        La municipalidad requiere documentos adicionales para continuar.
-                      </p>
+                      <p className="text-xs text-orange-600 mt-0.5">Se requieren documentos adicionales.</p>
                     </div>
                   </div>
-
                   {obtenerObservacion() && (
                     <div className="bg-white border border-orange-200 rounded-lg p-3">
                       <p className="text-xs text-gray-500 font-medium mb-1">Documentos requeridos:</p>
                       <p className="text-sm text-gray-800">{obtenerObservacion()}</p>
                     </div>
                   )}
-
                   <div className="space-y-3">
                     <p className="text-xs font-semibold text-orange-700">Adjunta los documentos solicitados (PDF):</p>
-
                     {archivos.length > 0 && (
                       <div className="space-y-2">
                         {archivos.map((f, i) => (
@@ -403,21 +417,17 @@ export default function ConsultaPage() {
                         ))}
                       </div>
                     )}
-
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-orange-300 rounded-lg p-4 text-center cursor-pointer hover:bg-orange-100 transition-colors"
-                    >
+                    <div onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-orange-300 rounded-lg p-4 text-center cursor-pointer hover:bg-orange-100 transition-colors">
                       <Upload size={20} className="mx-auto text-orange-400 mb-1" />
                       <p className="text-xs text-orange-600">Haz clic para agregar PDFs (Máx 10MB c/u)</p>
                     </div>
                     <input ref={fileInputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={handleArchivoChange} />
-
                     {archivos.length > 0 && (
                       <Button variant="primary" icon={<CheckCircle size={14} />}
                         loading={subiendoDocs} onClick={handleSubirDocumentos}
                         className="w-full justify-center">
-                        Enviar {archivos.length} documento(s) a la municipalidad
+                        Enviar {archivos.length} documento(s)
                       </Button>
                     )}
                   </div>
@@ -429,15 +439,12 @@ export default function ConsultaPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                      <Printer size={15} className="text-gray-500" />
-                      Cargo de recepción
+                      <Printer size={15} className="text-gray-500" />Cargo de recepción
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">Constancia oficial de presentación de tu trámite</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Constancia oficial de presentación</p>
                   </div>
                   <Button size="sm" variant="secondary" icon={<Download size={13} />}
-                    onClick={() => descargarCargo(expediente.codigo)}>
-                    Descargar
-                  </Button>
+                    onClick={() => descargarCargo(expediente.codigo)}>Descargar</Button>
                 </div>
               </div>
 

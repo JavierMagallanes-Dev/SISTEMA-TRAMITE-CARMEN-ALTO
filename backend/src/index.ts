@@ -17,14 +17,21 @@ import areasRoutes      from './routes/areas.routes';
 import portalRoutes     from './routes/portal.routes';
 import auditoriaRoutes  from './routes/auditoria.routes';
 import documentosRoutes from './routes/documentos.routes';
+import dashboardRoutes  from './routes/dashboard.routes';
+import recepcionRoutes  from './routes/recepcion.routes';
+import reportesRoutes   from './routes/reportes.routes';
+import stripeRoutes     from './routes/stripe.routes';
+
 // ── Middleware de error ──────────────────────────────────────────
 import { errorHandler } from './middlewares/error.middleware';
-import dashboardRoutes from './routes/dashboard.routes';
-import recepcionRoutes from './routes/recepcion.routes';
-import reportesRoutes from './routes/reportes.routes';
-
 
 const app = express();
+
+// ── IMPORTANTE: El webhook de Stripe DEBE registrarse ANTES de express.json()
+// porque necesita el raw body para verificar la firma de Stripe
+app.use('/api/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+);
 
 // ── Middlewares globales ─────────────────────────────────────────
 app.use(cors({
@@ -52,10 +59,12 @@ app.use('/api/mesa-partes', mesaPartesRoutes);
 app.use('/api/areas',       areasRoutes);
 app.use('/api/portal',      portalRoutes);
 app.use('/api/auditoria',   auditoriaRoutes);
-app.use('/api/documentos', documentosRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/recepcion', recepcionRoutes);
-app.use('/api/reportes', reportesRoutes);
+app.use('/api/documentos',  documentosRoutes);
+app.use('/api/dashboard',   dashboardRoutes);
+app.use('/api/recepcion',   recepcionRoutes);
+app.use('/api/reportes',    reportesRoutes);
+app.use('/api/stripe',      stripeRoutes);
+
 // ── Ruta no encontrada ───────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada.' });
