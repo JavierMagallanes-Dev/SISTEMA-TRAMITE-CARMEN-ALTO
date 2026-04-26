@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { cajeroService }       from '../services/cajero.service';
-import { Card, CardTitle } from '../components/ui/Card';
+import { Card, CardTitle }     from '../components/ui/Card';
 import Button      from '../components/ui/Button';
 import Input       from '../components/ui/Input';
 import Modal       from '../components/ui/Modal';
@@ -10,7 +10,14 @@ import Alert       from '../components/ui/Alert';
 import Spinner     from '../components/ui/Spinner';
 import Table       from '../components/ui/Table';
 import { formatFecha, formatFechaHora, formatMoneda } from '../utils/formato';
-import { CreditCard, History, RefreshCw, Ban } from 'lucide-react';
+import { CreditCard, History, RefreshCw, Ban, Eye, FileImage, ExternalLink, CheckCircle } from 'lucide-react';
+
+interface PagoComprobante {
+  id:              number;
+  url_comprobante: string | null;
+  boleta:          string;
+  fecha_pago:      string;
+}
 
 interface ExpedientePendiente {
   id:             number;
@@ -25,17 +32,19 @@ interface ExpedientePendiente {
     nombre:      string;
     costo_soles: number;
   };
+  pagos: PagoComprobante[];
 }
 
 interface PagoHistorial {
-  id:            number;
-  boleta:        string;
-  monto_cobrado: number;
-  estado:        string;
-  fecha_pago:    string;
+  id:              number;
+  boleta:          string;
+  monto_cobrado:   number;
+  estado:          string;
+  fecha_pago:      string;
+  url_comprobante: string | null;
   expediente: {
-    codigo:      string;
-    ciudadano:   { nombres: string; apellido_pat: string };
+    codigo:    string;
+    ciudadano: { nombres: string; apellido_pat: string };
   };
 }
 
@@ -48,7 +57,7 @@ export default function CajeroPage() {
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
 
-  // Modal pago
+  // Modal verificar pago
   const [modalPago,       setModalPago]       = useState(false);
   const [expSeleccionado, setExpSeleccionado] = useState<ExpedientePendiente | null>(null);
   const [boleta,          setBoleta]          = useState('');
@@ -60,6 +69,11 @@ export default function CajeroPage() {
   const [pagoSeleccionado, setPagoSeleccionado] = useState<PagoHistorial | null>(null);
   const [motivo,           setMotivo]           = useState('');
   const [loadingAnular,    setLoadingAnular]    = useState(false);
+
+  // Modal ver comprobante
+  const [modalComprobante, setModalComprobante] = useState(false);
+  const [urlComprobante,   setUrlComprobante]   = useState('');
+  const [esImagen,         setEsImagen]         = useState(false);
 
   const cargarDatos = async () => {
     setCargando(true);
@@ -124,6 +138,12 @@ export default function CajeroPage() {
     }
   };
 
+  const verComprobante = (url: string) => {
+    setUrlComprobante(url);
+    setEsImagen(!url.endsWith('.pdf'));
+    setModalComprobante(true);
+  };
+
   if (cargando) return <Spinner text="Cargando módulo cajero..." />;
 
   return (
@@ -162,9 +182,7 @@ export default function CajeroPage() {
                 <CreditCard size={18} className="text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatMoneda(resumenHoy.total_recaudado_hoy)}
-                </p>
+                <p className="text-2xl font-bold text-gray-900">{formatMoneda(resumenHoy.total_recaudado_hoy)}</p>
                 <p className="text-xs text-gray-500">Total recaudado hoy</p>
               </div>
             </div>
@@ -175,15 +193,10 @@ export default function CajeroPage() {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
         {(['pendientes', 'historial'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
+          <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-              tab === t
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
+              tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}>
             {t === 'historial' && <History size={13} />}
             {t === 'pendientes' ? `Pendientes de pago (${pendientes.length})` : 'Historial'}
           </button>
@@ -200,7 +213,18 @@ export default function CajeroPage() {
             columns={[
               {
                 key: 'codigo', header: 'Código',
-                render: (r) => <span className="font-mono text-xs text-blue-600 font-semibold">{r.codigo}</span>,
+                render: (r) => (
+                  <div>
+                    <span className="font-mono text-xs text-blue-600 font-semibold">{r.codigo}</span>
+                    {/* Badge si tiene comprobante adjunto */}
+                    {r.pagos?.[0]?.url_comprobante && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <FileImage size={11} className="text-green-500" />
+                        <span className="text-xs text-green-600 font-medium">Comprobante adjunto</span>
+                      </div>
+                    )}
+                  </div>
+                ),
               },
               {
                 key: 'ciudadano', header: 'Ciudadano',
@@ -227,9 +251,19 @@ export default function CajeroPage() {
               {
                 key: 'acciones', header: '',
                 render: (r) => (
-                  <Button size="sm" icon={<CreditCard size={12} />} onClick={() => abrirModalPago(r)}>
-                    Verificar pago
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {/* Botón ver comprobante */}
+                    {r.pagos?.[0]?.url_comprobante && (
+                      <Button size="sm" variant="secondary"
+                        icon={<Eye size={12} />}
+                        onClick={() => verComprobante(r.pagos[0].url_comprobante!)}>
+                        Ver comprobante
+                      </Button>
+                    )}
+                    <Button size="sm" icon={<CreditCard size={12} />} onClick={() => abrirModalPago(r)}>
+                      Verificar pago
+                    </Button>
+                  </div>
                 ),
               },
             ]}
@@ -278,6 +312,15 @@ export default function CajeroPage() {
                 ),
               },
               {
+                key: 'comprobante', header: 'Comprobante',
+                render: (r) => r.url_comprobante ? (
+                  <button onClick={() => verComprobante(r.url_comprobante!)}
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                    <FileImage size={12} />Ver
+                  </button>
+                ) : <span className="text-xs text-gray-400">—</span>,
+              },
+              {
                 key: 'fecha_pago', header: 'Fecha',
                 render: (r) => <span className="text-xs text-gray-500">{formatFechaHora(r.fecha_pago)}</span>,
               },
@@ -294,27 +337,17 @@ export default function CajeroPage() {
         </Card>
       )}
 
-      {/* Modal verificar pago */}
-      <Modal
-        open={modalPago}
-        onClose={() => setModalPago(false)}
-        title="Verificar pago"
-        size="sm"
+      {/* ── Modal verificar pago ─────────────────────────────── */}
+      <Modal open={modalPago} onClose={() => setModalPago(false)} title="Verificar pago" size="sm"
         footer={
           <>
             <Button variant="secondary" onClick={() => setModalPago(false)}>Cancelar</Button>
-            <Button
-              variant="primary"
-              loading={loadingPago}
-              icon={<CreditCard size={14} />}
-              onClick={handleVerificarPago}
-              disabled={!boleta.trim() || !monto}
-            >
+            <Button variant="primary" loading={loadingPago} icon={<CreditCard size={14} />}
+              onClick={handleVerificarPago} disabled={!boleta.trim() || !monto}>
               Confirmar pago
             </Button>
           </>
-        }
-      >
+        }>
         {expSeleccionado && (
           <div className="space-y-4">
             <div className="bg-blue-50 rounded-lg p-3 space-y-1">
@@ -324,33 +357,46 @@ export default function CajeroPage() {
               <p className="text-sm text-gray-600">{expSeleccionado.tipoTramite.nombre}</p>
               <p className="text-base font-bold text-green-600">Monto: {formatMoneda(expSeleccionado.tipoTramite.costo_soles)}</p>
             </div>
-            <Input label="Número de boleta" placeholder="B001-000123" value={boleta} onChange={(e) => setBoleta(e.target.value)} required autoFocus />
-            <Input label="Monto cobrado (S/)" type="number" value={monto} onChange={(e) => setMonto(e.target.value)} required />
+
+            {/* Comprobante adjunto por el ciudadano */}
+            {expSeleccionado.pagos?.[0]?.url_comprobante && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle size={16} className="text-green-600 shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-green-800">El ciudadano adjuntó comprobante</p>
+                      <p className="text-xs text-green-600 mt-0.5">Revísalo antes de verificar el pago</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => verComprobante(expSeleccionado.pagos[0].url_comprobante!)}
+                    className="flex items-center gap-1.5 text-xs text-blue-600 font-medium hover:underline bg-white border border-blue-200 px-3 py-1.5 rounded-lg">
+                    <Eye size={12} />Ver comprobante
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <Input label="Número de boleta" placeholder="B001-000123"
+              value={boleta} onChange={(e) => setBoleta(e.target.value)} required autoFocus />
+            <Input label="Monto cobrado (S/)" type="number"
+              value={monto} onChange={(e) => setMonto(e.target.value)} required />
           </div>
         )}
       </Modal>
 
-      {/* Modal anular pago */}
-      <Modal
-        open={modalAnular}
-        onClose={() => setModalAnular(false)}
-        title="Anular pago"
-        size="sm"
+      {/* ── Modal anular pago ────────────────────────────────── */}
+      <Modal open={modalAnular} onClose={() => setModalAnular(false)} title="Anular pago" size="sm"
         footer={
           <>
             <Button variant="secondary" onClick={() => setModalAnular(false)}>Cancelar</Button>
-            <Button
-              variant="danger"
-              loading={loadingAnular}
-              icon={<Ban size={14} />}
-              onClick={handleAnularPago}
-              disabled={!motivo.trim()}
-            >
+            <Button variant="danger" loading={loadingAnular} icon={<Ban size={14} />}
+              onClick={handleAnularPago} disabled={!motivo.trim()}>
               Anular pago
             </Button>
           </>
-        }
-      >
+        }>
         {pagoSeleccionado && (
           <div className="space-y-4">
             <div className="bg-red-50 rounded-lg p-3 space-y-1">
@@ -359,9 +405,31 @@ export default function CajeroPage() {
               <p className="text-sm text-gray-700">Boleta: {pagoSeleccionado.boleta}</p>
               <p className="text-sm font-bold text-red-600">{formatMoneda(pagoSeleccionado.monto_cobrado)}</p>
             </div>
-            <Input label="Motivo de anulación" placeholder="Describe el motivo..." value={motivo} onChange={(e) => setMotivo(e.target.value)} required autoFocus />
+            <Input label="Motivo de anulación" placeholder="Describe el motivo..."
+              value={motivo} onChange={(e) => setMotivo(e.target.value)} required autoFocus />
           </div>
         )}
+      </Modal>
+
+      {/* ── Modal ver comprobante ────────────────────────────── */}
+      <Modal open={modalComprobante} onClose={() => setModalComprobante(false)}
+        title="Comprobante de pago" size="lg"
+        footer={
+          <a href={urlComprobante} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 text-sm text-blue-600 hover:underline font-medium">
+            <ExternalLink size={14} />Abrir en nueva pestaña
+          </a>
+        }>
+        <div className="flex flex-col items-center gap-4">
+          {esImagen ? (
+            <img src={urlComprobante} alt="Comprobante de pago"
+              className="max-w-full max-h-[60vh] object-contain rounded-lg border border-gray-200" />
+          ) : (
+            <div className="w-full h-[60vh]">
+              <iframe src={urlComprobante} className="w-full h-full rounded-lg border border-gray-200" title="Comprobante PDF" />
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

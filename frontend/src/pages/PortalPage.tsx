@@ -11,7 +11,10 @@ import Spinner                          from '../components/ui/Spinner';
 import {
   Building2, Search, FileText,
   ArrowRight, CheckCircle, Upload, X,
+  CreditCard, ImageIcon, ExternalLink,
 } from 'lucide-react';
+
+const VITE_API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
 interface TipoTramite {
   id: number; nombre: string; descripcion: string | null;
@@ -24,8 +27,10 @@ export default function PortalPage() {
   const [paso,    setPaso]    = useState<1 | 2 | 3>(1);
   const [tipos,   setTipos]   = useState<TipoTramite[]>([]);
   const [error,   setError]   = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [codigoGenerado, setCodigoGenerado] = useState('');
+  const [codigoGenerado,     setCodigoGenerado]     = useState('');
+  const [tipoRegistrado,     setTipoRegistrado]     = useState<TipoTramite | null>(null);
 
   const [codigoConsulta, setCodigoConsulta] = useState('');
 
@@ -37,6 +42,12 @@ export default function PortalPage() {
   const [buscandoDni, setBuscandoDni] = useState(false);
   const [archivoPdf,  setArchivoPdf]  = useState<File | null>(null);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
+
+  // Comprobante de pago en paso 3
+  const [comprobante,       setComprobante]       = useState<File | null>(null);
+  const [subiendoComp,      setSubiendoComp]      = useState(false);
+  const [comprobanteSubido, setComprobanteSubido] = useState(false);
+  const comprobanteInputRef                        = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     portalService.tiposTramite().then(setTipos).catch(() => {});
@@ -74,6 +85,7 @@ export default function PortalPage() {
         catch { console.warn('No se pudo subir el PDF.'); }
       }
       setCodigoGenerado(res.expediente.codigo);
+      setTipoRegistrado(tipoSeleccionado);
       setPaso(3);
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'Error al registrar el trámite.');
@@ -91,8 +103,45 @@ export default function PortalPage() {
     setArchivoPdf(file);
   };
 
+  const handleComprobanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!tiposPermitidos.includes(file.type)) { setError('Solo se aceptan imágenes (JPG, PNG) o PDF.'); return; }
+    if (file.size > 10 * 1024 * 1024) { setError('El archivo no puede superar los 10MB.'); return; }
+    setComprobante(file);
+    if (comprobanteInputRef.current) comprobanteInputRef.current.value = '';
+  };
+
+  const handleSubirComprobante = async () => {
+    if (!comprobante || !codigoGenerado) return;
+    setSubiendoComp(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('comprobante', comprobante);
+      const res = await fetch(`${VITE_API_URL}/portal/comprobante/${codigoGenerado}`, {
+        method: 'POST',
+        body:   formData,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? 'Error al subir el comprobante.');
+      }
+      setComprobanteSubido(true);
+      setComprobante(null);
+      setSuccess('¡Comprobante enviado! El cajero lo revisará y verificará tu pago pronto.');
+    } catch (err: any) {
+      setError(err.message ?? 'Error al subir el comprobante.');
+    } finally {
+      setSubiendoComp(false);
+    }
+  };
+
   const resetForm = () => {
     setPaso(1); setTipoSeleccionado(null); setArchivoPdf(null);
+    setTipoRegistrado(null); setComprobante(null);
+    setComprobanteSubido(false); setError(''); setSuccess('');
     setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '' });
   };
 
@@ -110,10 +159,8 @@ export default function PortalPage() {
               <p className="text-xs text-blue-600">Portal de Trámites Ciudadanos</p>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/login')}
-            className="text-xs text-gray-500 hover:text-gray-700 self-end sm:self-auto"
-          >
+          <button onClick={() => navigate('/login')}
+            className="text-xs text-gray-500 hover:text-gray-700 self-end sm:self-auto">
             Acceso personal →
           </button>
         </div>
@@ -126,18 +173,12 @@ export default function PortalPage() {
           <h2 className="text-base font-bold mb-1 sm:text-lg">Consulta el estado de tu trámite</h2>
           <p className="text-blue-100 text-xs mb-4 sm:text-sm">Ingresa tu código de expediente</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <input
-              type="text"
-              placeholder="EXP-2026-000001"
-              value={codigoConsulta}
+            <input type="text" placeholder="EXP-2026-000001" value={codigoConsulta}
               onChange={(e) => setCodigoConsulta(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && codigoConsulta && navigate(`/consulta/${codigoConsulta}`)}
-              className="flex-1 px-4 py-2.5 rounded-lg text-gray-900 text-sm outline-none font-mono"
-            />
-            <button
-              onClick={() => codigoConsulta && navigate(`/consulta/${codigoConsulta}`)}
-              className="bg-white text-blue-600 font-medium px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 flex items-center justify-center gap-2"
-            >
+              className="flex-1 px-4 py-2.5 rounded-lg text-gray-900 text-sm outline-none font-mono" />
+            <button onClick={() => codigoConsulta && navigate(`/consulta/${codigoConsulta}`)}
+              className="bg-white text-blue-600 font-medium px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 flex items-center justify-center gap-2">
               <Search size={15} />Consultar
             </button>
           </div>
@@ -155,13 +196,12 @@ export default function PortalPage() {
             {[
               { num: 1, label: 'Trámite'   },
               { num: 2, label: 'Tus datos' },
-              { num: 3, label: '¡Listo!'   },
+              { num: 3, label: 'Pago'      },
             ].map((p) => (
               <div key={p.num}
                 className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-3 text-xs font-medium sm:gap-2 sm:px-4 ${
-                  paso === p.num
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                    : paso > p.num ? 'text-green-600' : 'text-gray-400'
+                  paso === p.num ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : paso > p.num ? 'text-green-600' : 'text-gray-400'
                 }`}>
                 <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                   paso > p.num ? 'bg-green-100 text-green-600' : paso === p.num ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'
@@ -174,7 +214,8 @@ export default function PortalPage() {
           </div>
 
           <div className="p-5 sm:p-6">
-            {error && <Alert type="error" message={error} onClose={() => setError('')} className="mb-4" />}
+            {error   && <Alert type="error"   message={error}   onClose={() => setError('')}   className="mb-4" />}
+            {success && <Alert type="success" message={success} onClose={() => setSuccess('')} className="mb-4" />}
 
             {/* ── Paso 1: Seleccionar trámite ────────────── */}
             {paso === 1 && (
@@ -283,40 +324,149 @@ export default function PortalPage() {
               </div>
             )}
 
-            {/* ── Paso 3: Confirmación ────────────────────── */}
+            {/* ── Paso 3: Opciones de pago ────────────────── */}
             {paso === 3 && (
-              <div className="text-center py-6 space-y-5">
-                <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-                  <CheckCircle size={32} className="text-green-600" />
-                </div>
-                <div>
+              <div className="space-y-5">
+                {/* Confirmación registro */}
+                <div className="text-center space-y-2">
+                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                    <CheckCircle size={28} className="text-green-600" />
+                  </div>
                   <h3 className="text-lg font-bold text-gray-900">¡Trámite registrado!</h3>
-                  <p className="text-sm text-gray-500 mt-1">Tu código de expediente es:</p>
-                  <p className="text-2xl font-mono font-bold text-blue-600 mt-2 break-all">{codigoGenerado}</p>
-                  <p className="text-xs text-gray-400 mt-1">Guarda este código para consultar tu trámite</p>
+                  <p className="text-sm text-gray-500">Tu código de expediente es:</p>
+                  <p className="text-2xl font-mono font-bold text-blue-600 break-all">{codigoGenerado}</p>
+                  <p className="text-xs text-gray-400">Guarda este código — lo necesitarás para consultar tu trámite</p>
                 </div>
 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-left">
-                  <p className="text-sm font-semibold text-yellow-800 mb-1">📍 Próximo paso:</p>
-                  <p className="text-sm text-yellow-700">
-                    Acércate a la ventanilla de caja de la Municipalidad de Carmen Alto
-                    con este código para realizar el pago y activar tu trámite.
-                  </p>
+                {/* Info trámite */}
+                <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-200">
+                  <div>
+                    <p className="text-xs text-gray-500">Trámite</p>
+                    <p className="text-sm font-semibold text-gray-800">{tipoRegistrado?.nombre}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">Monto a pagar</p>
+                    <p className="text-xl font-bold text-green-600">S/ {Number(tipoRegistrado?.costo_soles).toFixed(2)}</p>
+                  </div>
                 </div>
 
+                {/* Email confirmación */}
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                  <p className="text-xs text-blue-600 font-medium">
-                    📧 Revisa tu correo — te enviamos un email con los detalles del registro.
+                  <p className="text-xs text-blue-700 font-medium text-center">
+                    📧 Te enviamos un email con los detalles del registro. Revisa tu correo.
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                {/* Opciones de pago */}
+                <div>
+                  <h4 className="text-sm font-bold text-gray-800 mb-3 text-center">
+                    ¿Cómo deseas realizar el pago?
+                  </h4>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                    {/* Opción A: Adjuntar comprobante */}
+                    <div className="border-2 border-gray-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+                          <ImageIcon size={16} className="text-orange-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-gray-800">Adjuntar comprobante</p>
+                          <p className="text-xs text-gray-500">Yape, Plin, transferencia</p>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        Realiza el pago por Yape, Plin o transferencia bancaria y adjunta la foto o captura de tu comprobante.
+                      </p>
+
+                      {comprobanteSubido ? (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                          <CheckCircle size={16} className="text-green-600 shrink-0" />
+                          <p className="text-xs text-green-700 font-medium">¡Comprobante enviado! El cajero lo verificará pronto.</p>
+                        </div>
+                      ) : (
+                        <>
+                          {comprobante ? (
+                            <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                              <ImageIcon size={14} className="text-orange-500 shrink-0" />
+                              <p className="text-xs text-gray-700 truncate flex-1">{comprobante.name}</p>
+                              <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div onClick={() => comprobanteInputRef.current?.click()}
+                              className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center cursor-pointer hover:bg-orange-50 transition-colors">
+                              <Upload size={18} className="mx-auto text-orange-400 mb-1" />
+                              <p className="text-xs text-orange-600">Toca para adjuntar comprobante</p>
+                              <p className="text-xs text-gray-400 mt-0.5">JPG, PNG o PDF — Máx. 10MB</p>
+                            </div>
+                          )}
+                          <input ref={comprobanteInputRef} type="file"
+                            accept="image/jpeg,image/png,image/webp,application/pdf"
+                            className="hidden" onChange={handleComprobanteChange} />
+                          {comprobante && (
+                            <Button variant="primary" icon={<CheckCircle size={13} />}
+                              loading={subiendoComp} onClick={handleSubirComprobante}
+                              className="w-full justify-center" style={{ background: '#ea580c' }}>
+                              Enviar comprobante
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Opción B: Pago en línea (próximamente) */}
+                    <div className="border-2 border-blue-200 rounded-xl p-4 space-y-3 relative overflow-hidden">
+                      {/* Badge próximamente */}
+                      <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                        Próximo
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                          <CreditCard size={16} className="text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-gray-800">Pago en línea</p>
+                          <p className="text-xs text-gray-500">Tarjeta de crédito/débito</p>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        Paga directamente con tu tarjeta de crédito o débito. El pago se verificará automáticamente.
+                      </p>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-xs text-blue-700 text-center font-medium">
+                          🚀 Esta opción estará disponible muy pronto
+                        </p>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Opción pago presencial */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-yellow-800 mb-1">🏢 O paga presencialmente</p>
+                  <p className="text-sm text-yellow-700">
+                    Acércate a la ventanilla de Caja de la Municipalidad de Carmen Alto con tu código
+                    <span className="font-mono font-bold"> {codigoGenerado}</span> y realiza el pago.
+                  </p>
+                </div>
+
+                {/* Acciones */}
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-between pt-2">
                   <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
                     Registrar otro trámite
                   </Button>
-                  <Button icon={<Search size={14} />} onClick={() => navigate(`/consulta/${codigoGenerado}`)}
+                  <Button icon={<ExternalLink size={14} />}
+                    onClick={() => navigate(`/consulta/${codigoGenerado}`)}
                     className="w-full sm:w-auto justify-center">
-                    Consultar estado
+                    Ver estado de mi trámite
                   </Button>
                 </div>
               </div>

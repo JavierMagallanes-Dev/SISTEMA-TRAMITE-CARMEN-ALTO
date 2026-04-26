@@ -18,6 +18,13 @@ export const listarPendientesPago = async (
         fecha_registro: true, fecha_limite: true,
         ciudadano:   { select: { dni: true, nombres: true, apellido_pat: true, apellido_mat: true, email: true, telefono: true } },
         tipoTramite: { select: { nombre: true, costo_soles: true } },
+        // Incluir comprobante PENDIENTE si el ciudadano ya lo subió
+        pagos: {
+          where:   { estado: 'PENDIENTE' },
+          select:  { id: true, url_comprobante: true, boleta: true, fecha_pago: true },
+          orderBy: { fecha_pago: 'desc' },
+          take:    1,
+        },
       },
       orderBy: { fecha_registro: 'asc' },
     });
@@ -40,25 +47,73 @@ export const verificarPago = async (
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
     if (expediente.estado !== 'PENDIENTE_PAGO') throw new AppError(400, `Solo se verifican pagos en PENDIENTE_PAGO. Estado: ${expediente.estado}.`);
 
-    const pagoExistente = await prisma.pago.findFirst({ where: { expedienteId: Number(expedienteId), estado: 'VERIFICADO' } });
-    if (pagoExistente) throw new AppError(409, 'Este expediente ya tiene un pago verificado.');
+    // Verificar si ya existe un pago VERIFICADO
+    const pagoVerificado = await prisma.pago.findFirst({
+      where: { expedienteId: Number(expedienteId), estado: 'VERIFICADO' },
+    });
+    if (pagoVerificado) throw new AppError(409, 'Este expediente ya tiene un pago verificado.');
+
+    // Buscar si el ciudadano ya subió un comprobante (pago en PENDIENTE)
+    const comprobantePendiente = await prisma.pago.findFirst({
+      where:  { expedienteId: Number(expedienteId), estado: 'PENDIENTE' },
+      select: { id: true, url_comprobante: true },
+    });
 
     const resultado = await prisma.$transaction(async (tx) => {
-      const pago = await tx.pago.create({
-        data: { expedienteId: Number(expedienteId), cajeroId, boleta: boleta.trim(), monto_cobrado: Number(monto_cobrado), estado: 'VERIFICADO' },
+      let pago;
+
+      if (comprobantePendiente) {
+        // Actualizar el pago existente con los datos del cajero y marcarlo como VERIFICADO
+        pago = await tx.pago.update({
+          where: { id: comprobantePendiente.id },
+          data: {
+            cajeroId,
+            boleta:        boleta.trim(),
+            monto_cobrado: Number(monto_cobrado),
+            estado:        'VERIFICADO',
+            fecha_pago:    new Date(),
+          },
+        });
+      } else {
+        // No hay comprobante — cajero registra pago directamente (pago en ventanilla)
+        pago = await tx.pago.create({
+          data: {
+            expedienteId:  Number(expedienteId),
+            cajeroId,
+            boleta:        boleta.trim(),
+            monto_cobrado: Number(monto_cobrado),
+            estado:        'VERIFICADO',
+          },
+        });
+      }
+
+      await tx.expediente.update({
+        where: { id: Number(expedienteId) },
+        data:  { estado: 'RECIBIDO' },
       });
-      await tx.expediente.update({ where: { id: Number(expedienteId) }, data: { estado: 'RECIBIDO' } });
+
       await tx.movimiento.create({
-        data: { expedienteId: Number(expedienteId), usuarioId: cajeroId, tipo_accion: 'VERIFICACION_PAGO', estado_resultado: 'RECIBIDO', comentario: `Pago verificado. Boleta: ${boleta.trim()} | Monto: S/ ${monto_cobrado}` },
+        data: {
+          expedienteId:     Number(expedienteId),
+          usuarioId:        cajeroId,
+          tipo_accion:      'VERIFICACION_PAGO',
+          estado_resultado: 'RECIBIDO',
+          comentario:       `Pago verificado. Boleta: ${boleta.trim()} | Monto: S/ ${monto_cobrado}${comprobantePendiente ? ' | Comprobante del ciudadano revisado' : ''}`,
+        },
       });
+
       return pago;
     });
 
-    // RF20 — Notificar al ciudadano que su pago fue recibido
+    // RF20 — Notificar al ciudadano
     try {
       const datos = await prisma.expediente.findUnique({
-        where: { id: Number(expedienteId) },
-        select: { codigo: true, ciudadano: { select: { email: true, nombres: true } }, tipoTramite: { select: { nombre: true } } },
+        where:  { id: Number(expedienteId) },
+        select: {
+          codigo:      true,
+          ciudadano:   { select: { email: true, nombres: true } },
+          tipoTramite: { select: { nombre: true } },
+        },
       });
       if (datos) {
         await notificarCambioEstado({
@@ -91,10 +146,22 @@ export const anularPago = async (
     if (pago.estado === 'ANULADO') throw new AppError(400, 'Este pago ya está anulado.');
 
     await prisma.$transaction(async (tx) => {
-      await tx.pago.update({ where: { id: Number(pagoId) }, data: { estado: 'ANULADO', motivo_anulacion: motivo.trim() } });
-      await tx.expediente.update({ where: { id: pago.expedienteId }, data: { estado: 'PENDIENTE_PAGO' } });
+      await tx.pago.update({
+        where: { id: Number(pagoId) },
+        data:  { estado: 'ANULADO', motivo_anulacion: motivo.trim() },
+      });
+      await tx.expediente.update({
+        where: { id: pago.expedienteId },
+        data:  { estado: 'PENDIENTE_PAGO' },
+      });
       await tx.movimiento.create({
-        data: { expedienteId: pago.expedienteId, usuarioId: cajeroId, tipo_accion: 'ANULACION_PAGO', estado_resultado: 'PENDIENTE_PAGO', comentario: `Pago anulado. Motivo: ${motivo.trim()}` },
+        data: {
+          expedienteId:     pago.expedienteId,
+          usuarioId:        cajeroId,
+          tipo_accion:      'ANULACION_PAGO',
+          estado_resultado: 'PENDIENTE_PAGO',
+          comentario:       `Pago anulado. Motivo: ${motivo.trim()}`,
+        },
       });
     });
 
@@ -108,14 +175,23 @@ export const historialPagos = async (
 ): Promise<void> => {
   try {
     const { fecha } = req.query;
-    const whereDate = fecha ? { fecha_pago: { gte: new Date(`${fecha}T00:00:00.000Z`), lte: new Date(`${fecha}T23:59:59.999Z`) } } : {};
+    const whereDate = fecha
+      ? { fecha_pago: { gte: new Date(`${fecha}T00:00:00.000Z`), lte: new Date(`${fecha}T23:59:59.999Z`) } }
+      : {};
 
     const pagos = await prisma.pago.findMany({
       where:   { estado: 'VERIFICADO', ...whereDate },
       select: {
-        id: true, boleta: true, monto_cobrado: true, estado: true, fecha_pago: true,
+        id: true, boleta: true, monto_cobrado: true,
+        estado: true, fecha_pago: true, url_comprobante: true,
         cajero:     { select: { nombre_completo: true } },
-        expediente: { select: { codigo: true, tipoTramite: { select: { nombre: true } }, ciudadano: { select: { dni: true, nombres: true, apellido_pat: true } } } },
+        expediente: {
+          select: {
+            codigo:      true,
+            tipoTramite: { select: { nombre: true } },
+            ciudadano:   { select: { dni: true, nombres: true, apellido_pat: true } },
+          },
+        },
       },
       orderBy: { fecha_pago: 'desc' },
     });

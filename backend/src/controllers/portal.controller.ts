@@ -8,6 +8,7 @@ import { AppError } from '../middlewares/error.middleware';
 import { generarCodigoExpediente } from '../utils/codigo';
 import { consultarReniec }         from '../utils/reniec';
 import { notificarRegistro }       from '../services/email.service';
+import { storageService }          from '../services/storage.service';
 
 // ── GET /api/portal/tipos-tramite ────────────────────────────
 export const listarTiposTramitePublico = async (
@@ -45,7 +46,6 @@ export const consultarDniPublico = async (
 };
 
 // ── POST /api/portal/registrar ───────────────────────────────
-// RF19: Envía email al ciudadano al registrar desde el portal
 export const registrarTramitePublico = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -99,7 +99,6 @@ export const registrarTramitePublico = async (
       return exp;
     });
 
-    // RF19 — Notificar al ciudadano
     console.log('📧 Enviando email de registro al ciudadano:', ciudadano.email);
     try {
       await notificarRegistro({
@@ -140,9 +139,23 @@ export const consultarEstado = async (
         fecha_registro: true, fecha_limite: true,
         fecha_resolucion: true, url_pdf_firmado: true,
         codigo_verificacion_firma: true,
-        ciudadano:  { select: { nombres: true, apellido_pat: true } },
-        tipoTramite: { select: { nombre: true, plazo_dias: true } },
+        ciudadano:   { select: { nombres: true, apellido_pat: true } },
+        tipoTramite: { select: { nombre: true, plazo_dias: true, costo_soles: true } },
         areaActual:  { select: { nombre: true, sigla: true } },
+        // Incluir pagos para saber si ya subió comprobante
+        pagos: {
+          select: {
+            id: true, boleta: true, monto_cobrado: true,
+            estado: true, fecha_pago: true,
+            url_comprobante: true,
+          },
+          orderBy: { fecha_pago: 'desc' },
+          take: 1,
+        },
+        documentos: {
+          select: { id: true, nombre: true, url: true, uploaded_at: true },
+          orderBy: { uploaded_at: 'desc' },
+        },
         movimientos: {
           select: {
             tipo_accion: true, estado_resultado: true,
@@ -160,6 +173,82 @@ export const consultarEstado = async (
     const diasRestantes = Math.ceil((expediente.fecha_limite.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 
     res.json({ ...expediente, dias_restantes: diasRestantes, vencido: diasRestantes < 0 });
+  } catch (err) { next(err); }
+};
+
+// ── POST /api/portal/comprobante/:codigo ─────────────────────
+// Ciudadano sube comprobante de pago desde el portal de consulta.
+// El pago queda en estado PENDIENTE hasta que el cajero lo verifique.
+export const subirComprobantePago = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const codigo = String(req.params['codigo']).toUpperCase();
+    const file   = req.file;
+
+    if (!file) throw new AppError(400, 'No se recibió ningún archivo.');
+
+    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!tiposPermitidos.includes(file.mimetype)) {
+      throw new AppError(400, 'Solo se aceptan imágenes (JPG, PNG, WebP) o PDF.');
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      throw new AppError(400, 'El archivo no puede superar los 10MB.');
+    }
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { codigo },
+      select: { id: true, estado: true, tipoTramite: { select: { costo_soles: true } } },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+    if (expediente.estado !== 'PENDIENTE_PAGO') {
+      throw new AppError(400, 'Solo se puede subir comprobante cuando el trámite está en estado PENDIENTE DE PAGO.');
+    }
+
+    // Verificar que no haya ya un comprobante pendiente
+    const comprobanteExistente = await prisma.pago.findFirst({
+      where: { expedienteId: expediente.id, estado: 'PENDIENTE' },
+    });
+    if (comprobanteExistente) {
+      throw new AppError(400, 'Ya enviaste un comprobante. Espera a que el cajero lo revise.');
+    }
+
+    // Subir archivo a Supabase Storage en carpeta comprobantes/
+    const url = await storageService.subirArchivo(file.buffer, file.mimetype, 'comprobantes');
+
+    // Crear pago en estado PENDIENTE — el cajero lo verificará
+    const pago = await prisma.pago.create({
+      data: {
+        expedienteId:    expediente.id,
+        cajeroId:        1, // sistema — el cajero real lo tomará al verificar
+        boleta:          `COMP-${codigo}-${Date.now()}`,
+        monto_cobrado:   expediente.tipoTramite.costo_soles,
+        estado:          'PENDIENTE',
+        url_comprobante: url,
+        fecha_pago:      new Date(),
+      },
+    });
+
+    // Registrar movimiento informativo
+    await prisma.movimiento.create({
+      data: {
+        expedienteId:     expediente.id,
+        usuarioId:        1,
+        tipo_accion:      'REGISTRO',
+        estado_resultado: 'PENDIENTE_PAGO',
+        comentario:       'Ciudadano adjuntó comprobante de pago. En espera de verificación por cajero.',
+      },
+    });
+
+    console.log(`📎 Comprobante subido para ${codigo}: ${url}`);
+
+    res.json({
+      message:         'Comprobante enviado exitosamente. El cajero revisará y verificará tu pago pronto.',
+      pago_id:         pago.id,
+      url_comprobante: url,
+    });
   } catch (err) { next(err); }
 };
 

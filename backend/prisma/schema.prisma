@@ -31,6 +31,7 @@ enum EstadoExpediente {
 }
 
 enum EstadoPago {
+    PENDIENTE
     VERIFICADO
     ANULADO
 }
@@ -197,6 +198,7 @@ model Pago {
     estado           EstadoPago @default(VERIFICADO)
     motivo_anulacion String?    @db.VarChar(200)
     fecha_pago       DateTime   @default(now())
+    url_comprobante  String?    @db.VarChar(500) // ← AGREGAR ESTO
 
     expediente Expediente @relation(fields: [expedienteId], references: [id])
     cajero     Usuario    @relation("PagoVerificadoPor", fields: [cajeroId], references: [id])
