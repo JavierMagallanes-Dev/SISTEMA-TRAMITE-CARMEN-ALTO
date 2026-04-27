@@ -117,12 +117,7 @@ function FormPago({ clientSecret, paymentIntentId, codigo, monto, tramite, onExi
         </div>
       </div>
 
-      {/* Tarjeta de prueba */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-        <p className="text-xs font-semibold text-yellow-800 mb-1">🧪 Modo sandbox — Tarjeta de prueba:</p>
-        <p className="text-xs font-mono text-yellow-700">4242 4242 4242 4242</p>
-        <p className="text-xs text-yellow-600 mt-0.5">Vencimiento: cualquier fecha futura · CVC: cualquier 3 dígitos</p>
-      </div>
+     
 
       {/* Formulario */}
       <div className="space-y-3">
@@ -173,7 +168,7 @@ function FormPago({ clientSecret, paymentIntentId, codigo, monto, tramite, onExi
 
       <div className="flex items-center justify-center gap-1.5 text-xs text-gray-400">
         <Lock size={11} />
-        <span>Pago seguro procesado por Stripe · SSL 256-bit</span>
+        <span>Pago seguro procesado por Stripe</span>
       </div>
     </div>
   );

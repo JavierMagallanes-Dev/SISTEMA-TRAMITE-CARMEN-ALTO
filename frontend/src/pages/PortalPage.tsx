@@ -1,4 +1,5 @@
 // src/pages/PortalPage.tsx
+import '../styles/portal.css';
 
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate }                  from 'react-router-dom';
@@ -10,9 +11,8 @@ import Spinner                          from '../components/ui/Spinner';
 import StripePago                       from '../components/shared/StripePago';
 import { toast }                        from '../utils/toast';
 import {
-  Building2, Search, FileText,
-  ArrowRight, CheckCircle, Upload, X,
-  CreditCard, ImageIcon, ExternalLink,
+  Search, FileText, ArrowRight, CheckCircle,
+  Upload, X, CreditCard, ImageIcon, ExternalLink,
 } from 'lucide-react';
 
 const VITE_API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -27,28 +27,25 @@ type OpcionPago = 'seleccion' | 'comprobante' | 'stripe' | 'exitoso';
 export default function PortalPage() {
   const navigate = useNavigate();
 
-  const [paso,    setPaso]    = useState<1 | 2 | 3>(1);
-  const [tipos,   setTipos]   = useState<TipoTramite[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [paso,           setPaso]           = useState<1 | 2 | 3>(1);
+  const [tipos,          setTipos]          = useState<TipoTramite[]>([]);
+  const [loading,        setLoading]        = useState(false);
   const [codigoGenerado, setCodigoGenerado] = useState('');
   const [tipoRegistrado, setTipoRegistrado] = useState<TipoTramite | null>(null);
   const [opcionPago,     setOpcionPago]     = useState<OpcionPago>('seleccion');
-
   const [codigoConsulta, setCodigoConsulta] = useState('');
-
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoTramite | null>(null);
   const [form, setForm] = useState({
     dni: '', nombres: '', apellido_pat: '', apellido_mat: '',
     email: '', telefono: '',
   });
-  const [buscandoDni, setBuscandoDni] = useState(false);
-  const [archivoPdf,  setArchivoPdf]  = useState<File | null>(null);
-  const fileInputRef                  = useRef<HTMLInputElement>(null);
-
+  const [buscandoDni,       setBuscandoDni]       = useState(false);
+  const [archivoPdf,        setArchivoPdf]        = useState<File | null>(null);
   const [comprobante,       setComprobante]       = useState<File | null>(null);
   const [subiendoComp,      setSubiendoComp]      = useState(false);
   const [comprobanteSubido, setComprobanteSubido] = useState(false);
-  const comprobanteInputRef                        = useRef<HTMLInputElement>(null);
+  const fileInputRef        = useRef<HTMLInputElement>(null);
+  const comprobanteInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     portalService.tiposTramite().then(setTipos).catch(() => {});
@@ -60,23 +57,20 @@ export default function PortalPage() {
     try {
       const res = await portalService.consultarDni(form.dni);
       const c   = res.datos || res.ciudadano;
-      if (c) {
-        setForm(prev => ({
-          ...prev,
-          nombres:      c.nombres      || '',
-          apellido_pat: c.apellido_pat || c.apellidoPat || '',
-          apellido_mat: c.apellido_mat || c.apellidoMat || '',
-          email:        c.email        || '',
-        }));
-      }
+      if (c) setForm(prev => ({
+        ...prev,
+        nombres:      c.nombres      || '',
+        apellido_pat: c.apellido_pat || c.apellidoPat || '',
+        apellido_mat: c.apellido_mat || c.apellidoMat || '',
+        email:        c.email        || '',
+      }));
     } catch { /* RENIEC no disponible */ }
     finally { setBuscandoDni(false); }
   };
 
   const handleRegistrar = async () => {
     if (!form.dni || !form.nombres || !form.apellido_pat || !form.email || !tipoSeleccionado) {
-      toast.warning({ titulo: 'Completa todos los campos obligatorios.' });
-      return;
+      toast.warning({ titulo: 'Completa todos los campos obligatorios.' }); return;
     }
     setLoading(true);
     try {
@@ -107,8 +101,8 @@ export default function PortalPage() {
   const handleComprobanteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!tiposPermitidos.includes(file.type)) { toast.warning({ titulo: 'Solo se aceptan imágenes (JPG, PNG) o PDF.' }); return; }
+    const tipos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!tipos.includes(file.type)) { toast.warning({ titulo: 'Solo se aceptan imágenes o PDF.' }); return; }
     if (file.size > 10 * 1024 * 1024) { toast.warning({ titulo: 'El archivo no puede superar los 10MB.' }); return; }
     setComprobante(file);
     if (comprobanteInputRef.current) comprobanteInputRef.current.value = '';
@@ -142,113 +136,122 @@ export default function PortalPage() {
     setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '' });
   };
 
+  // Helper para clases de pasos
+  const stepClass = (n: number) => {
+    if (paso === n) return 'portal-step active';
+    if (paso > n)  return 'portal-step done';
+    return 'portal-step';
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 sm:px-6 sm:py-8 sm:space-y-8">
-        {/* Consulta rápida */}
-        <div className="bg-blue-600 rounded-2xl p-5 text-white sm:p-6">
-          <h2 className="text-base font-bold mb-1 sm:text-lg">Consulta el estado de tu trámite</h2>
-          <p className="text-blue-100 text-xs mb-4 sm:text-sm">Ingresa tu código de expediente</p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            <input type="text" placeholder="EXP-2026-000001" value={codigoConsulta}
-              onChange={(e) => setCodigoConsulta(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && codigoConsulta && navigate(`/consulta/${codigoConsulta}`)}
-              className="flex-1 px-4 py-2.5 rounded-lg text-gray-900 text-sm outline-none font-mono" />
-            <button onClick={() => codigoConsulta && navigate(`/consulta/${codigoConsulta}`)}
-              className="bg-white text-blue-600 font-medium px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 flex items-center justify-center gap-2">
-              <Search size={15} />Consultar
-            </button>
-          </div>
-        </div>
+      <div className="max-w-2xl mx-auto px-4 py-8 sm:px-6">
 
-        {/* Formulario registro */}
+        
+
+        {/* ── Card principal ───────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-gray-100 sm:p-6">
-            <h2 className="text-base font-bold text-gray-900 sm:text-lg">Registrar nuevo trámite</h2>
-            <p className="text-xs text-gray-500 mt-0.5 sm:text-sm">Completa el formulario para iniciar tu trámite</p>
+
+          {/* Cabecera */}
+          <div className="px-6 py-4 border-b border-gray-100">
+            <p className="text-base font-semibold text-gray-900">Registrar nuevo trámite</p>
+            <p className="text-xs text-gray-500 mt-0.5">Completa el formulario en 3 pasos</p>
           </div>
 
-          {/* Pasos */}
-          <div className="flex border-b border-gray-100">
-            {[{ num: 1, label: 'Trámite' }, { num: 2, label: 'Tus datos' }, { num: 3, label: 'Pago' }].map((p) => (
-              <div key={p.num}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-3 text-xs font-medium sm:gap-2 sm:px-4 ${
-                  paso === p.num ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                  : paso > p.num ? 'text-green-600' : 'text-gray-400'
-                }`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                  paso > p.num ? 'bg-green-100 text-green-600' : paso === p.num ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'
-                }`}>
-                  {paso > p.num ? '✓' : p.num}
-                </span>
-                <span className="hidden sm:inline">{p.label}</span>
+          {/* Indicador de pasos */}
+          <div className="portal-steps">
+            {[{ n: 1, label: 'Trámite' }, { n: 2, label: 'Tus datos' }, { n: 3, label: 'Pago' }].map((s) => (
+              <div key={s.n} className={stepClass(s.n)}>
+                <div className="portal-step-num">{paso > s.n ? '✓' : s.n}</div>
+                <span className="hidden sm:inline">{s.label}</span>
               </div>
             ))}
           </div>
 
-          <div className="p-5 sm:p-6">
+          {/* Contenido */}
+          <div className="p-6">
 
-            {/* Paso 1 */}
+            {/* ── PASO 1: Seleccionar trámite ─────────────── */}
             {paso === 1 && (
-              <div className="space-y-3">
+              <div className="portal-panel space-y-2">
+                <p className="text-xs text-gray-500 mb-3">Selecciona el trámite que necesitas realizar:</p>
                 {tipos.length === 0 ? <Spinner text="Cargando trámites..." /> : (
                   tipos.map((tipo) => (
-                    <div key={tipo.id} onClick={() => setTipoSeleccionado(tipo)}
-                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        tipoSeleccionado?.id === tipo.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-                      }`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800">{tipo.nombre}</p>
-                          {tipo.descripcion && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{tipo.descripcion}</p>}
-                          <p className="text-xs text-gray-400 mt-1">⏱ {tipo.plazo_dias} días hábiles</p>
+                    <div key={tipo.id}
+                      className={`tipo-card ${tipoSeleccionado?.id === tipo.id ? 'selected' : ''}`}
+                      onClick={() => setTipoSeleccionado(tipo)}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{tipo.nombre}</p>
+                        {tipo.descripcion && (
+                          <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{tipo.descripcion}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-0.5"> {tipo.plazo_dias} días hábiles</p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-green-600">S/ {Number(tipo.costo_soles).toFixed(2)}</p>
                         </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-base font-bold text-green-600 sm:text-lg">S/ {Number(tipo.costo_soles).toFixed(2)}</p>
-                          {tipoSeleccionado?.id === tipo.id && <CheckCircle size={16} className="text-blue-500 ml-auto mt-1" />}
+                        <div className="tipo-card-check">
+                          <CheckCircle size={13} color="white" />
                         </div>
                       </div>
                     </div>
                   ))
                 )}
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end pt-3">
                   <Button icon={<ArrowRight size={14} />} onClick={() => {
                     if (!tipoSeleccionado) { toast.warning({ titulo: 'Selecciona un tipo de trámite.' }); return; }
                     setPaso(2);
-                  }} className="w-full sm:w-auto justify-center">Continuar</Button>
+                  }} className="w-full sm:w-auto justify-center">
+                    Continuar
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* Paso 2 */}
+            {/* ── PASO 2: Datos personales ─────────────────── */}
             {paso === 2 && (
-              <div className="space-y-4">
-                <div className="bg-blue-50 rounded-lg p-3 text-sm">
-                  <p className="text-xs text-gray-500">Trámite seleccionado</p>
-                  <p className="font-semibold text-blue-700">{tipoSeleccionado?.nombre}</p>
-                  <p className="text-green-600 font-bold">S/ {Number(tipoSeleccionado?.costo_soles).toFixed(2)}</p>
+              <div className="portal-panel space-y-4">
+                {/* Badge trámite seleccionado */}
+                <div className="sel-tramite-badge">
+                  <div>
+                    <p className="text-xs text-gray-500">Trámite seleccionado</p>
+                    <p className="text-sm font-semibold text-blue-700">{tipoSeleccionado?.nombre}</p>
+                  </div>
+                  <p className="text-base font-bold text-green-600">
+                    S/ {Number(tipoSeleccionado?.costo_soles).toFixed(2)}
+                  </p>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:gap-2 sm:items-end">
+
+                {/* DNI */}
+                <div className="flex gap-2 items-end">
                   <div className="flex-1">
                     <Input label="DNI" placeholder="12345678" value={form.dni}
                       onChange={(e) => setF('dni', e.target.value)} maxLength={8} required />
                   </div>
                   <Button variant="secondary" icon={<Search size={14} />} loading={buscandoDni}
                     onClick={buscarDni} disabled={form.dni.length !== 8}
-                    className="w-full sm:w-auto justify-center">Buscar DNI</Button>
+                    className="w-auto justify-center shrink-0">
+                    Buscar
+                  </Button>
                 </div>
+
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input label="Nombres"          value={form.nombres}      onChange={(e) => setF('nombres', e.target.value)}      required />
                   <Input label="Apellido paterno" value={form.apellido_pat} onChange={(e) => setF('apellido_pat', e.target.value)} required />
                   <Input label="Apellido materno" value={form.apellido_mat} onChange={(e) => setF('apellido_mat', e.target.value)} />
                   <Input label="Teléfono"         value={form.telefono}     onChange={(e) => setF('telefono', e.target.value)}     placeholder="987654321" />
                 </div>
+
                 <Input label="Email" type="email" value={form.email}
                   onChange={(e) => setF('email', e.target.value)} required
                   helper="Recibirás notificaciones en este correo" />
+
+                {/* PDF adjunto */}
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">
-                    Documento adjunto (PDF)<span className="text-gray-400 font-normal ml-1">— opcional</span>
+                    Documento adjunto (PDF)
+                    <span className="text-gray-400 font-normal ml-1">— opcional</span>
                   </label>
                   {archivoPdf ? (
                     <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -261,26 +264,32 @@ export default function PortalPage() {
                         className="text-gray-400 hover:text-red-500"><X size={16} /></button>
                     </div>
                   ) : (
-                    <div onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-gray-300 rounded-lg p-5 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                      <Upload size={22} className="mx-auto text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-500">Toca para seleccionar un PDF</p>
+                    <div className="drop-zone" onClick={() => fileInputRef.current?.click()}>
+                      <Upload size={20} className="mx-auto text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-500">Haz clic para seleccionar un PDF</p>
                       <p className="text-xs text-gray-400 mt-1">Máximo 10MB</p>
                     </div>
                   )}
                   <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleArchivoChange} />
                 </div>
-                <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-between">
-                  <Button variant="secondary" onClick={() => setPaso(1)} className="w-full sm:w-auto justify-center">← Atrás</Button>
+
+                <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-between">
+                  <Button variant="secondary" onClick={() => setPaso(1)} className="w-full sm:w-auto justify-center">
+                    ← Atrás
+                  </Button>
                   <Button loading={loading} icon={<FileText size={14} />} onClick={handleRegistrar}
-                    className="w-full sm:w-auto justify-center">Registrar trámite</Button>
+                    className="w-full sm:w-auto justify-center">
+                    Registrar trámite
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* Paso 3 */}
+            {/* ── PASO 3: Pago ─────────────────────────────── */}
             {paso === 3 && (
-              <div className="space-y-5">
+              <div className="portal-panel space-y-5">
+
+                {/* Pago con Stripe */}
                 {opcionPago === 'stripe' && (
                   <StripePago
                     codigo={codigoGenerado}
@@ -289,141 +298,155 @@ export default function PortalPage() {
                   />
                 )}
 
+                {/* Pago exitoso */}
                 {opcionPago === 'exitoso' && (
-                  <div className="text-center py-6 space-y-4">
-                    <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-                      <CheckCircle size={32} className="text-green-600" />
+                  <div className="exito-wrap portal-panel">
+                    <div className="exito-icon-circle">
+                      <CheckCircle size={28} color="#16a34a" />
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900">¡Pago procesado!</h3>
-                    <p className="text-sm text-gray-500">Tu trámite ha sido activado automáticamente.</p>
-                    <p className="text-2xl font-mono font-bold text-blue-600">{codigoGenerado}</p>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">Registrar otro trámite</Button>
-                      <Button icon={<ExternalLink size={14} />} onClick={() => navigate(`/consulta/${codigoGenerado}`)} className="w-full sm:w-auto justify-center">Ver estado de mi trámite</Button>
+                    <p className="text-lg font-semibold text-gray-900">¡Pago procesado!</p>
+                    <p className="text-sm text-gray-500 mt-1">Tu trámite ha sido activado automáticamente.</p>
+                    <p className="exito-codigo">{codigoGenerado}</p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-center mt-4">
+                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
+                        Registrar otro trámite
+                      </Button>
+                      <Button icon={<ExternalLink size={14} />}
+                        onClick={() => navigate(`/consulta/${codigoGenerado}`)}
+                        className="w-full sm:w-auto justify-center">
+                        Ver estado de mi trámite
+                      </Button>
                     </div>
                   </div>
                 )}
 
+                {/* Selección de pago */}
                 {(opcionPago === 'seleccion' || opcionPago === 'comprobante') && (
                   <>
-                    <div className="text-center space-y-2">
-                      <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-                        <CheckCircle size={28} className="text-green-600" />
+                    {/* Confirmación */}
+                    <div className="text-center space-y-1">
+                      <div className="exito-icon-circle" style={{ width: 52, height: 52 }}>
+                        <CheckCircle size={24} color="#16a34a" />
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900">¡Trámite registrado!</h3>
-                      <p className="text-sm text-gray-500">Tu código de expediente es:</p>
-                      <p className="text-2xl font-mono font-bold text-blue-600 break-all">{codigoGenerado}</p>
+                      <p className="text-base font-semibold text-gray-900">¡Trámite registrado!</p>
+                      <p className="text-xs text-gray-500">Tu código de expediente es:</p>
+                      <p className="exito-codigo">{codigoGenerado}</p>
                       <p className="text-xs text-gray-400">Guarda este código para consultar tu trámite</p>
                     </div>
 
-                    <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-200">
+                    {/* Badge trámite */}
+                    <div className="sel-tramite-badge">
                       <div>
                         <p className="text-xs text-gray-500">Trámite</p>
                         <p className="text-sm font-semibold text-gray-800">{tipoRegistrado?.nombre}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-gray-500">Monto a pagar</p>
-                        <p className="text-xl font-bold text-green-600">S/ {Number(tipoRegistrado?.costo_soles).toFixed(2)}</p>
+                        <p className="text-xs text-gray-500">Monto</p>
+                        <p className="text-base font-bold text-green-600">
+                          S/ {Number(tipoRegistrado?.costo_soles).toFixed(2)}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                      <p className="text-xs text-blue-700 font-medium text-center">
-                        📧 Te enviamos un email con los detalles del registro. Revisa tu correo.
+                    {/* Email */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+                      <p className="text-xs text-blue-700 font-medium">
+                        Te enviamos un email con los detalles. Revisa tu correo.
                       </p>
                     </div>
 
-                    <h4 className="text-sm font-bold text-gray-800 text-center">¿Cómo deseas realizar el pago?</h4>
+                    <p className="text-sm font-semibold text-gray-800 text-center">¿Cómo deseas realizar el pago?</p>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {/* Opciones de pago */}
+                    <div className="pago-grid">
                       {/* Comprobante */}
-                      <div className={`border-2 rounded-xl p-4 space-y-3 transition-all ${opcionPago === 'comprobante' ? 'border-orange-400 bg-orange-50' : 'border-gray-200'}`}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
-                            <ImageIcon size={16} className="text-orange-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-800">Adjuntar comprobante</p>
-                            <p className="text-xs text-gray-500">Yape, Plin, transferencia</p>
-                          </div>
+                      <div className={`pago-option ${opcionPago === 'comprobante' ? 'active-comprobante' : 'comprobante'}`}>
+                        <div className="pago-icon-wrap" style={{ background: '#fff7ed' }}>
+                          <ImageIcon size={18} color="#ea580c" />
                         </div>
-                        <p className="text-xs text-gray-600 leading-relaxed">Realiza el pago por Yape, Plin o transferencia y adjunta la foto de tu comprobante.</p>
+                        <p className="text-sm font-semibold text-gray-800">Adjuntar comprobante</p>
+                        <p className="text-xs text-gray-500 mt-1">Yape, Plin, transferencia</p>
+
                         {opcionPago === 'comprobante' ? (
                           comprobanteSubido ? (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                              <CheckCircle size={16} className="text-green-600 shrink-0" />
-                              <p className="text-xs text-green-700 font-medium">¡Comprobante enviado! El cajero lo verificará pronto.</p>
+                            <div className="comp-subido mt-3">
+                              <CheckCircle size={16} color="#16a34a" />
+                              <p className="text-xs text-green-700 font-medium">¡Enviado! El cajero lo verificará pronto.</p>
                             </div>
                           ) : (
-                            <>
+                            <div className="mt-3 space-y-2">
                               {comprobante ? (
-                                <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
-                                  <ImageIcon size={14} className="text-orange-500 shrink-0" />
+                                <div className="flex items-center gap-2 p-2 bg-white border border-orange-200 rounded-lg">
+                                  <ImageIcon size={12} color="#ea580c" />
                                   <p className="text-xs text-gray-700 truncate flex-1">{comprobante.name}</p>
-                                  <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500"><X size={14} /></button>
+                                  <button onClick={() => setComprobante(null)} className="text-gray-400 hover:text-red-500"><X size={12} /></button>
                                 </div>
                               ) : (
-                                <div onClick={() => comprobanteInputRef.current?.click()}
-                                  className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center cursor-pointer hover:bg-orange-100 transition-colors">
-                                  <Upload size={18} className="mx-auto text-orange-400 mb-1" />
-                                  <p className="text-xs text-orange-600">Toca para adjuntar comprobante</p>
-                                  <p className="text-xs text-gray-400 mt-0.5">JPG, PNG o PDF — Máx. 10MB</p>
+                                <div className="drop-zone" onClick={() => comprobanteInputRef.current?.click()}>
+                                  <Upload size={14} className="mx-auto text-orange-400 mb-1" />
+                                  <p className="text-xs text-orange-600">Toca para adjuntar</p>
                                 </div>
                               )}
                               <input ref={comprobanteInputRef} type="file"
                                 accept="image/jpeg,image/png,image/webp,application/pdf"
                                 className="hidden" onChange={handleComprobanteChange} />
                               {comprobante && (
-                                <Button variant="primary" icon={<CheckCircle size={13} />}
-                                  loading={subiendoComp} onClick={handleSubirComprobante}
-                                  className="w-full justify-center" style={{ background: '#ea580c' }}>
-                                  Enviar comprobante
-                                </Button>
+                                <button
+                                  disabled={subiendoComp}
+                                  onClick={handleSubirComprobante}
+                                  className="w-full py-2 text-xs font-semibold text-white rounded-lg transition-opacity hover:opacity-90"
+                                  style={{ background: '#ea580c' }}>
+                                  {subiendoComp ? 'Enviando...' : 'Enviar comprobante'}
+                                </button>
                               )}
-                              <button onClick={() => setOpcionPago('seleccion')} className="w-full text-xs text-gray-400 hover:text-gray-600">← Volver</button>
-                            </>
+                              <button onClick={() => setOpcionPago('seleccion')}
+                                className="w-full text-xs text-gray-400 hover:text-gray-600">← Volver</button>
+                            </div>
                           )
                         ) : (
                           <button onClick={() => setOpcionPago('comprobante')}
-                            className="w-full py-2 text-sm font-semibold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors">
-                            Seleccionar esta opción
+                            className="mt-3 w-full py-2 text-xs font-semibold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors">
+                            Seleccionar
                           </button>
                         )}
                       </div>
 
                       {/* Stripe */}
-                      <div className="border-2 border-blue-300 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                            <CreditCard size={16} className="text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-800">Pago en línea</p>
-                            <p className="text-xs text-gray-500">Tarjeta de crédito/débito</p>
-                          </div>
+                      <div className="pago-option stripe">
+                        <div className="pago-icon-wrap" style={{ background: '#eff6ff' }}>
+                          <CreditCard size={18} color="#2563eb" />
                         </div>
-                        <p className="text-xs text-gray-600 leading-relaxed">Paga con tu tarjeta directamente. El pago se verifica automáticamente — sin pasar por caja.</p>
-                        <div className="flex items-center gap-1.5 text-xs text-gray-400"><span>🔒</span><span>Procesado por Stripe · SSL 256-bit</span></div>
+                        <p className="text-sm font-semibold text-gray-800">Pago en línea</p>
+                        <p className="text-xs text-gray-500 mt-1">Tarjeta de crédito/débito</p>
+                        <p className="text-xs text-gray-400 mt-1">🔒 Stripe · SSL 256-bit</p>
                         <button onClick={() => setOpcionPago('stripe')}
-                          className="w-full py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-2">
-                          <CreditCard size={14} />Pagar con tarjeta
+                          className="mt-3 w-full py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                          <CreditCard size={12} />Pagar con tarjeta
                         </button>
                       </div>
                     </div>
 
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                      <p className="text-sm font-semibold text-yellow-800 mb-1">🏢 O paga presencialmente</p>
-                      <p className="text-sm text-yellow-700">Acércate a Caja con tu código <span className="font-mono font-bold">{codigoGenerado}</span> y realiza el pago.</p>
+                    {/* Presencial */}
+                    <div className="pago-presencial">
+                      O paga presencialmente en Caja con tu código{' '}
+                      <strong className="font-mono">{codigoGenerado}</strong>
                     </div>
 
-                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between pt-2">
-                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">Registrar otro trámite</Button>
-                      <Button icon={<ExternalLink size={14} />} onClick={() => navigate(`/consulta/${codigoGenerado}`)} className="w-full sm:w-auto justify-center">Ver estado de mi trámite</Button>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+                      <Button variant="secondary" onClick={resetForm} className="w-full sm:w-auto justify-center">
+                        Registrar otro trámite
+                      </Button>
+                      <Button icon={<ExternalLink size={14} />}
+                        onClick={() => navigate(`/consulta/${codigoGenerado}`)}
+                        className="w-full sm:w-auto justify-center">
+                        Ver estado de mi trámite
+                      </Button>
                     </div>
                   </>
                 )}
               </div>
             )}
+
           </div>
         </div>
       </div>
