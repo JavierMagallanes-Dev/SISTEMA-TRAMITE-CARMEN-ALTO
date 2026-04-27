@@ -4,11 +4,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import type { NombreRol } from './types';
 
+// Layouts
+import PublicLayout from './layouts/PublicLayout';
+import MainLayout   from './layouts/MainLayout';
+
 // Páginas públicas
-import HomePage       from './pages/HomePage';
-import LoginPage      from './pages/LoginPage';
-import PortalPage     from './pages/PortalPage';
-import ConsultaPage   from './pages/ConsultaPage';
+import HomePage     from './pages/HomePage';
+import LoginPage    from './pages/LoginPage';
+import PortalPage   from './pages/PortalPage';
+import ConsultaPage from './pages/ConsultaPage';
 
 // Páginas internas
 import DashboardPage  from './pages/DashboardPage';
@@ -19,8 +23,8 @@ import HistorialPage  from './pages/HistorialPage';
 import ReportesPage   from './pages/ReportesPage';
 import UsuariosPage   from './pages/UsuariosPage';
 import AuditoriaPage  from './pages/AuditoriaPage';
-import MainLayout     from './layouts/MainLayout';
-import Toaster from './components/ui/Toaster';
+import Toaster        from './components/ui/Toaster';
+
 // ── Ruta protegida por autenticación ────────────────────────
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { usuario } = useAuth();
@@ -29,8 +33,7 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
 
 // ── Ruta protegida por rol ───────────────────────────────────
 const RolRoute = ({
-  roles,
-  children,
+  roles, children,
 }: {
   roles: NombreRol[];
   children: React.ReactNode;
@@ -46,11 +49,17 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      {/* ── Rutas públicas ──────────────────────────────── */}
-      <Route path="/"              element={<HomePage />} />
-      <Route path="/login"         element={usuario ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-      <Route path="/portal"        element={<PortalPage />} />
-      <Route path="/consulta/:codigo?" element={<ConsultaPage />} />
+      {/* ── Rutas públicas con navbar + footer ─────────── */}
+      <Route element={<PublicLayout />}>
+        <Route path="/"                  element={<HomePage />} />
+        <Route path="/portal"            element={<PortalPage />} />
+        <Route path="/consulta/:codigo?" element={<ConsultaPage />} />
+      </Route>
+
+      {/* ── Login sin layout público ────────────────────── */}
+      <Route path="/login" element={
+        usuario ? <Navigate to="/dashboard" replace /> : <LoginPage />
+      } />
 
       {/* ── Rutas internas protegidas ───────────────────── */}
       <Route path="/" element={
@@ -59,47 +68,26 @@ const AppRoutes = () => {
         </PrivateRoute>
       }>
         <Route path="dashboard" element={<DashboardPage />} />
-
         <Route path="cajero" element={
-          <RolRoute roles={['CAJERO', 'ADMIN']}>
-            <CajeroPage />
-          </RolRoute>
+          <RolRoute roles={['CAJERO', 'ADMIN']}><CajeroPage /></RolRoute>
         } />
-
         <Route path="mesa-partes" element={
-          <RolRoute roles={['MESA_DE_PARTES', 'ADMIN']}>
-            <MesaPartesPage />
-          </RolRoute>
+          <RolRoute roles={['MESA_DE_PARTES', 'ADMIN']}><MesaPartesPage /></RolRoute>
         } />
-
         <Route path="areas" element={
-          <RolRoute roles={['TECNICO', 'JEFE_AREA', 'ADMIN']}>
-            <AreasPage />
-          </RolRoute>
+          <RolRoute roles={['TECNICO', 'JEFE_AREA', 'ADMIN']}><AreasPage /></RolRoute>
         } />
-
         <Route path="historial" element={
-          <RolRoute roles={['JEFE_AREA', 'ADMIN']}>
-            <HistorialPage />
-          </RolRoute>
+          <RolRoute roles={['JEFE_AREA', 'ADMIN']}><HistorialPage /></RolRoute>
         } />
-
         <Route path="reportes" element={
-          <RolRoute roles={['ADMIN', 'MESA_DE_PARTES', 'JEFE_AREA']}>
-            <ReportesPage />
-          </RolRoute>
+          <RolRoute roles={['ADMIN', 'MESA_DE_PARTES', 'JEFE_AREA']}><ReportesPage /></RolRoute>
         } />
-
         <Route path="usuarios" element={
-          <RolRoute roles={['ADMIN']}>
-            <UsuariosPage />
-          </RolRoute>
+          <RolRoute roles={['ADMIN']}><UsuariosPage /></RolRoute>
         } />
-
         <Route path="auditoria" element={
-          <RolRoute roles={['ADMIN']}>
-            <AuditoriaPage />
-          </RolRoute>
+          <RolRoute roles={['ADMIN']}><AuditoriaPage /></RolRoute>
         } />
       </Route>
 

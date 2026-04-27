@@ -144,26 +144,7 @@ export default function PortalPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
-        <div className="max-w-4xl mx-auto flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-              <Building2 size={20} className="text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-900 leading-tight">Municipalidad Distrital de Carmen Alto</p>
-              <p className="text-xs text-blue-600">Portal de Trámites Ciudadanos</p>
-            </div>
-          </div>
-          <button onClick={() => navigate('/login')}
-            className="text-xs text-gray-500 hover:text-gray-700 self-end sm:self-auto">
-            Acceso personal →
-          </button>
-        </div>
-      </header>
-
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6 sm:px-6 sm:py-8 sm:space-y-8">
-
         {/* Consulta rápida */}
         <div className="bg-blue-600 rounded-2xl p-5 text-white sm:p-6">
           <h2 className="text-base font-bold mb-1 sm:text-lg">Consulta el estado de tu trámite</h2>
@@ -445,10 +426,6 @@ export default function PortalPage() {
             )}
           </div>
         </div>
-
-        <p className="text-center text-xs text-gray-400 pb-4">
-          © 2026 Municipalidad Distrital de Carmen Alto · Sistema de Trámite Documentario
-        </p>
       </div>
     </div>
   );
