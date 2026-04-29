@@ -1,0 +1,336 @@
+/* src/styles/paso3.css */
+/* Estilos del Paso 3 — hero, success block, opciones de pago */
+
+/* ── Hero ───────────────────────────────────────────────────── */
+.p3-hero {
+  background: linear-gradient(135deg, #042C53 0%, #185FA5 55%, #1a7bc4 100%);
+  padding: 48px 40px 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.p3-hero::before {
+  content: '';
+  position: absolute;
+  top: -80px; right: -80px;
+  width: 380px; height: 380px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.05);
+  pointer-events: none;
+}
+
+.p3-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -50px; left: 38%;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.04);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) { .p3-hero { padding: 32px 20px 0; } }
+
+.p3-label {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,255,255,.14); color: #fff;
+  font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 5px 14px; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.22);
+  margin-bottom: 16px;
+}
+
+.p3-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #1D9E75;
+  animation: p3pulse 2s ease-in-out infinite;
+}
+
+@keyframes p3pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+.p3-title {
+  font-size: 28px; font-weight: 700; color: #fff;
+  line-height: 1.22; margin-bottom: 10px; max-width: 520px;
+}
+
+.p3-sub {
+  font-size: 14px; color: rgba(255,255,255,.72);
+  line-height: 1.65; margin-bottom: 36px; max-width: 460px;
+}
+
+@media (max-width: 640px) {
+  .p3-title { font-size: 22px; }
+  .p3-sub   { font-size: 13px; margin-bottom: 24px; }
+}
+
+/* ── Step tabs ──────────────────────────────────────────────── */
+.p3-tabs {
+  display: flex; align-items: center;
+  position: relative; z-index: 1;
+  margin-bottom: -1px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.p3-tabs::-webkit-scrollbar { display: none; }
+
+.p3-tab {
+  padding: 13px 22px 18px;
+  border-radius: 14px 14px 0 0;
+  font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 9px;
+  white-space: nowrap;
+}
+
+.p3-tab.done     { background: rgba(255,255,255,.12); color: rgba(255,255,255,.75); }
+.p3-tab.active   { background: #fff; color: #042C53; }
+.p3-tab.inactive { background: rgba(255,255,255,.06); color: rgba(255,255,255,.4); }
+
+.p3-tab-num {
+  width: 23px; height: 23px; border-radius: 50%;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.p3-tab.done     .p3-tab-num { background: #1D9E75; color: #fff; }
+.p3-tab.active   .p3-tab-num { background: #185FA5; color: #fff; }
+.p3-tab.inactive .p3-tab-num { background: rgba(255,255,255,.15); color: rgba(255,255,255,.5); }
+
+.p3-tab-sep { color: rgba(255,255,255,.28); font-size: 18px; margin: 0 4px; padding-bottom: 4px; }
+
+/* ── Main ───────────────────────────────────────────────────── */
+.p3-main {
+  background: #fff;
+  padding: 40px 40px 52px;
+  animation: p3fadeIn .3s cubic-bezier(.22,.61,.36,1);
+}
+
+@keyframes p3fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) { .p3-main { padding: 28px 20px 40px; } }
+
+/* ── Success block ──────────────────────────────────────────── */
+.p3-success-block {
+  text-align: center;
+  padding: 8px 0 36px;
+  border-bottom: 1px solid #EEF0F4;
+  margin-bottom: 36px;
+}
+
+.p3-success-icon {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: #E1F5EE;
+  border: 3px solid #9FE1CB;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px;
+  animation: p3popIn .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+@keyframes p3popIn {
+  from { transform: scale(.5); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+
+.p3-success-title { font-size: 22px; font-weight: 700; color: #042C53; margin-bottom: 6px; }
+.p3-success-sub   { font-size: 14px; color: #5C6278; margin-bottom: 18px; }
+
+.p3-exp-code {
+  display: inline-block;
+  font-size: 26px; font-weight: 700; letter-spacing: 2px;
+  color: #185FA5;
+  background: #E6F1FB;
+  border: 1.5px solid #B5D4F4;
+  border-radius: 12px;
+  padding: 10px 28px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: background .2s;
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+}
+
+.p3-exp-code:hover { background: #B5D4F4; }
+
+.p3-copy-hint {
+  font-size: 12px; color: #9CA3B0;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+
+/* ── Resumen ────────────────────────────────────────────────── */
+.p3-resumen {
+  background: #E6F1FB;
+  border: 1.5px solid #B5D4F4;
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap; gap: 8px;
+}
+
+.p3-resumen-label { font-size: 11px; color: #9CA3B0; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 4px; }
+.p3-resumen-name  { font-size: 15px; font-weight: 700; color: #0C447C; }
+.p3-resumen-monto { font-size: 20px; font-weight: 700; color: #185FA5; text-align: right; }
+
+/* ── Email notice ───────────────────────────────────────────── */
+.p3-email-notice {
+  background: #E6F1FB;
+  border: 1px solid #B5D4F4;
+  border-radius: 10px;
+  padding: 11px 16px;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; color: #0C447C; font-weight: 500;
+  margin-bottom: 36px;
+}
+
+/* ── Section label ──────────────────────────────────────────── */
+.p3-section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase;
+  color: #9CA3B0; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+
+.p3-section-label::after {
+  content: ''; flex: 1; height: 1px; background: #EEF0F4;
+}
+
+/* ── Payment grid ───────────────────────────────────────────── */
+.p3-payment-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 520px) { .p3-payment-grid { grid-template-columns: 1fr; } }
+
+.p3-pay-card {
+  border: 2px solid #EEF0F4;
+  border-radius: 16px; padding: 22px 20px;
+  cursor: pointer; background: #fff;
+  transition: all .22s; position: relative;
+}
+
+.p3-pay-card:hover { border-color: #85B7EB; background: #E6F1FB; transform: translateY(-2px); }
+.p3-pay-card.selected { border-color: #185FA5; background: #E6F1FB; }
+
+.p3-sel-dot {
+  display: none; position: absolute; top: 14px; right: 14px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #185FA5;
+  align-items: center; justify-content: center;
+}
+
+.p3-pay-card.selected .p3-sel-dot { display: flex; }
+
+.p3-pay-icon {
+  width: 42px; height: 42px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 14px;
+}
+
+.p3-pay-icon.ic-amber { background: #FEF3C7; }
+.p3-pay-icon.ic-blue  { background: #E6F1FB; }
+
+.p3-pay-title { font-size: 15px; font-weight: 700; color: #1A1D2E; margin-bottom: 4px; }
+.p3-pay-sub   { font-size: 12px; color: #9CA3B0; margin-bottom: 16px; }
+
+.p3-pay-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 20px;
+  background: #E1F5EE; color: #1D9E75;
+}
+
+/* Upload dentro de card */
+.p3-upload-zone {
+  border: 2px dashed #D1D5E0; border-radius: 11px;
+  padding: 22px 16px; text-align: center;
+  cursor: pointer; background: #fff;
+  transition: all .2s; margin-top: 12px;
+}
+
+.p3-upload-zone:hover { border-color: #D97706; background: #FEF3C7; }
+.p3-upload-zone.has-file { border-style: solid; border-color: #9FE1CB; background: #E1F5EE; }
+
+.p3-uz-title { font-size: 13px; font-weight: 600; color: #2D3048; margin-bottom: 3px; }
+.p3-uz-sub   { font-size: 11px; color: #9CA3B0; }
+.p3-upload-zone.has-file .p3-uz-title { color: #1D9E75; }
+
+/* Comprobante adjunto */
+.p3-file-attached {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: #E1F5EE; border: 1.5px solid #9FE1CB;
+  border-radius: 10px; margin-top: 12px;
+}
+
+/* Botón enviar comprobante */
+.p3-btn-enviar {
+  width: 100%; height: 42px; border-radius: 10px;
+  background: #D97706; color: #fff;
+  font-size: 13px; font-weight: 700; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: all .2s; margin-top: 10px;
+}
+
+.p3-btn-enviar:hover   { background: #B45309; }
+.p3-btn-enviar:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Botón pagar tarjeta */
+.p3-btn-pay {
+  width: 100%; height: 42px; border-radius: 10px;
+  background: #185FA5; color: #fff;
+  font-size: 13px; font-weight: 700; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: all .2s; margin-top: 12px;
+}
+
+.p3-btn-pay:hover  { background: #042C53; }
+.p3-btn-pay:active { transform: scale(.98); }
+
+/* ── Caja notice ────────────────────────────────────────────── */
+.p3-caja-notice {
+  background: #FEF3C7;
+  border: 1px solid #FDE68A;
+  border-radius: 11px; padding: 13px 18px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: #D97706; font-weight: 500;
+  margin-bottom: 36px;
+}
+
+/* ── Divider ────────────────────────────────────────────────── */
+.p3-divider { height: 1px; background: #EEF0F4; margin: 32px 0; }
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.p3-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap;
+}
+
+.p3-btn-secondary {
+  height: 46px; padding: 0 22px; border-radius: 11px;
+  border: 1.5px solid #D1D5E0; background: #fff;
+  color: #5C6278; font-size: 14px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+  transition: all .2s;
+}
+
+.p3-btn-secondary:hover { background: #F8F9FB; border-color: #9CA3B0; color: #1A1D2E; }
+
+.p3-btn-primary {
+  height: 46px; padding: 0 28px; border-radius: 11px;
+  background: #185FA5; color: #fff;
+  font-size: 14px; font-weight: 700; border: none; cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  transition: all .2s;
+}
+
+.p3-btn-primary:hover  { background: #042C53; }
+.p3-btn-primary:active { transform: scale(.98); }
+
+/* Comprobante enviado */
+.p3-comp-enviado {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; margin-top: 12px;
+  background: #E1F5EE; border: 1px solid #9FE1CB;
+  border-radius: 10px; font-size: 13px; font-weight: 600; color: #1D9E75;
+}

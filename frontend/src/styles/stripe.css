@@ -1,0 +1,314 @@
+/* src/styles/stripe.css */
+/* Estilos del formulario de pago con Stripe — diseño institucional */
+
+/* ── Hero Stripe ────────────────────────────────────────────── */
+.sp-hero {
+  background: linear-gradient(135deg, #042C53 0%, #185FA5 55%, #1a7bc4 100%);
+  padding: 48px 40px 0;
+  position: relative; overflow: hidden;
+}
+
+.sp-hero::before {
+  content: ''; position: absolute; top: -80px; right: -80px;
+  width: 380px; height: 380px; border-radius: 50%;
+  background: rgba(255,255,255,.05); pointer-events: none;
+}
+
+.sp-hero::after {
+  content: ''; position: absolute; bottom: -50px; left: 38%;
+  width: 220px; height: 220px; border-radius: 50%;
+  background: rgba(255,255,255,.04); pointer-events: none;
+}
+
+@media (max-width: 640px) { .sp-hero { padding: 32px 20px 0; } }
+
+.sp-label {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,255,255,.14); color: #fff;
+  font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 5px 14px; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.22);
+  margin-bottom: 16px;
+}
+
+.sp-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #1D9E75;
+  animation: sppulse 2s ease-in-out infinite;
+}
+
+@keyframes sppulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+.sp-title {
+  font-size: 28px; font-weight: 700; color: #fff;
+  line-height: 1.22; margin-bottom: 10px; max-width: 520px;
+}
+
+.sp-sub {
+  font-size: 14px; color: rgba(255,255,255,.72);
+  line-height: 1.65; margin-bottom: 36px; max-width: 460px;
+}
+
+@media (max-width: 640px) {
+  .sp-title { font-size: 22px; }
+  .sp-sub { font-size: 13px; margin-bottom: 24px; }
+}
+
+/* ── Step tabs ──────────────────────────────────────────────── */
+.sp-tabs {
+  display: flex; align-items: center;
+  position: relative; z-index: 1;
+  margin-bottom: -1px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.sp-tabs::-webkit-scrollbar { display: none; }
+
+.sp-tab {
+  padding: 13px 22px 18px;
+  border-radius: 14px 14px 0 0;
+  font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 9px;
+  white-space: nowrap;
+}
+
+.sp-tab.done     { background: rgba(255,255,255,.12); color: rgba(255,255,255,.75); }
+.sp-tab.active   { background: #fff; color: #042C53; }
+
+.sp-tab-num {
+  width: 23px; height: 23px; border-radius: 50%;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+.sp-tab.done   .sp-tab-num { background: #1D9E75; color: #fff; }
+.sp-tab.active .sp-tab-num { background: #185FA5; color: #fff; }
+
+.sp-tab-sep { color: rgba(255,255,255,.28); font-size: 18px; margin: 0 4px; padding-bottom: 4px; }
+
+/* ── Main ───────────────────────────────────────────────────── */
+.sp-main {
+  background: #fff;
+  padding: 40px 40px 52px;
+  animation: spFadeIn .3s cubic-bezier(.22,.61,.36,1);
+}
+
+@keyframes spFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) { .sp-main { padding: 28px 20px 40px; } }
+
+/* ── Resumen box ────────────────────────────────────────────── */
+.sp-resumen {
+  background: #E6F1FB; border: 1.5px solid #B5D4F4;
+  border-radius: 14px; padding: 18px 22px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 36px; flex-wrap: wrap; gap: 12px;
+}
+
+.sp-resumen-left { display: flex; align-items: center; gap: 14px; }
+
+.sp-resumen-icon {
+  width: 42px; height: 42px; border-radius: 11px;
+  background: #B5D4F4;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+.sp-res-label { font-size: 11px; color: #9CA3B0; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 3px; }
+.sp-res-name  { font-size: 15px; font-weight: 700; color: #0C447C; margin-bottom: 2px; }
+.sp-res-exp   { font-size: 12px; color: #9CA3B0; font-weight: 500; letter-spacing: .4px; }
+.sp-res-total-label { font-size: 11px; color: #9CA3B0; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 4px; text-align: right; }
+.sp-res-total-price { font-size: 26px; font-weight: 700; color: #185FA5; }
+
+/* ── Section label ──────────────────────────────────────────── */
+.sp-section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase;
+  color: #9CA3B0; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 10px;
+}
+
+.sp-section-label::after { content: ''; flex: 1; height: 1px; background: #EEF0F4; }
+
+/* ── Card types ─────────────────────────────────────────────── */
+.sp-card-types { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+
+.sp-card-badge {
+  height: 28px; padding: 0 10px; border-radius: 7px;
+  border: 1.5px solid #EEF0F4; background: #fff;
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600; color: #5C6278;
+}
+
+/* ── Card preview + fields ──────────────────────────────────── */
+.sp-card-wrap {
+  display: flex; gap: 24px; align-items: flex-start;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 600px) { .sp-card-wrap { flex-direction: column; } }
+
+.sp-card-visual {
+  width: 200px; flex-shrink: 0;
+  height: 122px; border-radius: 14px;
+  background: linear-gradient(135deg, #042C53 0%, #185FA5 100%);
+  padding: 16px 18px; position: relative; overflow: hidden;
+  box-shadow: 0 8px 24px rgba(4,44,83,.22);
+}
+
+.sp-card-visual::before {
+  content: ''; position: absolute; top: -30px; right: -30px;
+  width: 110px; height: 110px; border-radius: 50%;
+  background: rgba(255,255,255,.07);
+}
+
+.sp-card-visual::after {
+  content: ''; position: absolute; bottom: -20px; left: -20px;
+  width: 90px; height: 90px; border-radius: 50%;
+  background: rgba(255,255,255,.05);
+}
+
+.sp-cv-chip {
+  width: 28px; height: 20px; border-radius: 4px;
+  background: linear-gradient(135deg, #e8b84b, #c8922a);
+  margin-bottom: 14px;
+}
+
+.sp-cv-number {
+  font-size: 13px; font-weight: 600;
+  color: rgba(255,255,255,.85); letter-spacing: 2px; margin-bottom: 10px;
+  font-family: ui-monospace, monospace;
+}
+
+.sp-cv-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+.sp-cv-label  { font-size: 9px; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .6px; }
+.sp-cv-value  { font-size: 12px; font-weight: 600; color: #fff; }
+.sp-cv-brand  { font-size: 18px; font-weight: 700; color: rgba(255,255,255,.9); font-style: italic; }
+
+.sp-card-fields { flex: 1; }
+
+/* ── Form fields ────────────────────────────────────────────── */
+.sp-field { margin-bottom: 20px; }
+.sp-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+@media (max-width: 480px) { .sp-field-row { grid-template-columns: 1fr; } }
+
+.sp-field-label {
+  display: block; font-size: 12.5px; font-weight: 600;
+  color: #2D3048; margin-bottom: 7px;
+}
+
+.sp-field-label .req { color: #D94040; margin-left: 2px; }
+
+/* Wrapper para Stripe Elements */
+.sp-stripe-wrap {
+  height: 46px; padding: 0 14px;
+  border: 1.5px solid #D1D5E0; border-radius: 11px;
+  background: #fff;
+  display: flex; align-items: center;
+  transition: border-color .2s, box-shadow .2s;
+}
+
+.sp-stripe-wrap:focus-within {
+  border-color: #378ADD;
+  box-shadow: 0 0 0 3px rgba(55,138,221,.12);
+}
+
+.sp-stripe-inner { width: 100%; }
+
+/* ── Error ──────────────────────────────────────────────────── */
+.sp-error {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px;
+  background: #FEF0F0; border: 1px solid #FECACA;
+  border-radius: 10px; margin-bottom: 16px;
+  font-size: 13px; color: #D94040; font-weight: 500;
+}
+
+/* ── Divider ────────────────────────────────────────────────── */
+.sp-divider { height: 1px; background: #EEF0F4; margin: 28px 0; }
+
+/* ── Pay button ─────────────────────────────────────────────── */
+.sp-btn-pay {
+  width: 100%; height: 52px; border-radius: 13px;
+  background: #185FA5; color: #fff;
+  font-size: 16px; font-weight: 700; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .2s; margin-bottom: 14px;
+}
+
+.sp-btn-pay:hover   { background: #042C53; }
+.sp-btn-pay:active  { transform: scale(.985); }
+.sp-btn-pay:disabled { background: #D1D5E0; color: #9CA3B0; cursor: not-allowed; }
+
+/* ── Security note ──────────────────────────────────────────── */
+.sp-security {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-size: 12px; color: #9CA3B0; margin-bottom: 16px;
+}
+
+/* ── Back link ──────────────────────────────────────────────── */
+.sp-back {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 13px; color: #9CA3B0; font-weight: 500; cursor: pointer;
+  background: none; border: none; width: 100%;
+  transition: color .18s;
+}
+
+.sp-back:hover { color: #185FA5; }
+
+/* ── Success overlay ────────────────────────────────────────── */
+.sp-success {
+  text-align: center; padding: 20px 0 10px;
+  animation: spFadeIn .4s ease both;
+}
+
+.sp-success-icon {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: #E1F5EE; border: 3px solid #9FE1CB;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 20px;
+  animation: spPopIn .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+@keyframes spPopIn {
+  from { transform: scale(.5); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+
+.sp-success-title { font-size: 22px; font-weight: 700; color: #042C53; margin-bottom: 8px; }
+.sp-success-sub   { font-size: 14px; color: #5C6278; margin-bottom: 28px; line-height: 1.6; }
+
+.sp-receipt {
+  background: #E1F5EE; border: 1.5px solid #9FE1CB;
+  border-radius: 14px; padding: 18px 22px; text-align: left;
+  margin-bottom: 28px;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px;
+}
+
+.sp-receipt-label { font-size: 11px; color: #1D9E75; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 4px; }
+.sp-receipt-name  { font-size: 15px; font-weight: 700; color: #042C53; }
+.sp-receipt-price { font-size: 22px; font-weight: 700; color: #1D9E75; }
+
+.sp-btn-done {
+  width: 100%; height: 50px; border-radius: 13px;
+  background: #185FA5; color: #fff;
+  font-size: 15px; font-weight: 700; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  transition: all .2s;
+}
+
+.sp-btn-done:hover { background: #042C53; }
+
+/* ── Loading/Error states ───────────────────────────────────── */
+.sp-loading {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 0; gap: 14px;
+  color: #5C6278; font-size: 14px;
+}
+
+.sp-init-error {
+  background: #FEF0F0; border: 1.5px solid #FECACA;
+  border-radius: 14px; padding: 20px 22px; margin-bottom: 20px;
+}
