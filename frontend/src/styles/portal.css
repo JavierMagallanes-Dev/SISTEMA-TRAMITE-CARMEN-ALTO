@@ -1,5 +1,5 @@
 /* src/styles/portal.css */
-/* Estilos para PortalPage — pasos, cards de trámite, opciones de pago */
+/* Estilos para PortalPage — pasos, cards de trámite, opciones de pago, captcha */
 
 /* ── Indicador de pasos ─────────────────────────────────────── */
 .portal-steps {
@@ -28,9 +28,7 @@
   background: #eaf2fb;
 }
 
-.portal-step.done {
-  color: #16a34a;
-}
+.portal-step.done { color: #16a34a; }
 
 .portal-step-num {
   width: 22px;
@@ -47,15 +45,8 @@
   transition: all .25s;
 }
 
-.portal-step.active .portal-step-num {
-  background: #216ece;
-  color: #fff;
-}
-
-.portal-step.done .portal-step-num {
-  background: #dcfce7;
-  color: #16a34a;
-}
+.portal-step.active .portal-step-num { background: #216ece; color: #fff; }
+.portal-step.done   .portal-step-num { background: #dcfce7; color: #16a34a; }
 
 /* ── Panel fade in ──────────────────────────────────────────── */
 .portal-panel {
@@ -79,16 +70,8 @@
   transition: border-color .2s, background .2s, transform .2s;
 }
 
-.tipo-card:hover {
-  border-color: #216ece;
-  background: #f0f7ff;
-  transform: translateX(2px);
-}
-
-.tipo-card.selected {
-  border-color: #216ece;
-  background: #eaf2fb;
-}
+.tipo-card:hover     { border-color: #216ece; background: #f0f7ff; transform: translateX(2px); }
+.tipo-card.selected  { border-color: #216ece; background: #eaf2fb; }
 
 .tipo-card-check {
   width: 22px;
@@ -104,10 +87,7 @@
   transition: opacity .2s, transform .2s;
 }
 
-.tipo-card.selected .tipo-card-check {
-  opacity: 1;
-  transform: scale(1);
-}
+.tipo-card.selected .tipo-card-check { opacity: 1; transform: scale(1); }
 
 /* ── Badge trámite seleccionado ─────────────────────────────── */
 .sel-tramite-badge {
@@ -131,10 +111,7 @@
   transition: border-color .2s, background .2s;
 }
 
-.drop-zone:hover {
-  border-color: #216ece;
-  background: #f0f7ff;
-}
+.drop-zone:hover { border-color: #216ece; background: #f0f7ff; }
 
 /* ── Opciones de pago ───────────────────────────────────────── */
 .pago-grid {
@@ -153,24 +130,10 @@
   background: #fff;
 }
 
-.pago-option:hover {
-  transform: translateY(-2px);
-}
-
-.pago-option.comprobante {
-  border-color: #fed7aa;
-  background: #fff7ed;
-}
-
-.pago-option.stripe {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-.pago-option.active-comprobante {
-  border-color: #f97316;
-  background: #fff7ed;
-}
+.pago-option:hover            { transform: translateY(-2px); }
+.pago-option.comprobante      { border-color: #fed7aa; background: #fff7ed; }
+.pago-option.stripe           { border-color: #bfdbfe; background: #eff6ff; }
+.pago-option.active-comprobante { border-color: #f97316; background: #fff7ed; }
 
 .pago-icon-wrap {
   width: 38px;
@@ -193,11 +156,8 @@
   border-radius: 10px;
 }
 
-/* ── Exito Stripe ───────────────────────────────────────────── */
-.exito-wrap {
-  text-align: center;
-  padding: 24px 0 16px;
-}
+/* ── Éxito ──────────────────────────────────────────────────── */
+.exito-wrap { text-align: center; padding: 24px 0 16px; }
 
 .exito-icon-circle {
   width: 60px;
@@ -235,3 +195,100 @@
   color: #92400e;
   margin-bottom: 14px;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   CAPTCHA
+══════════════════════════════════════════════════════════════ */
+.captcha-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fafafa;
+}
+
+.captcha-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 10px;
+}
+
+.captcha-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.captcha-canvas-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.captcha-canvas {
+  display: block;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  user-select: none;
+}
+
+.captcha-refresh {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background .2s, color .2s;
+}
+
+.captcha-refresh:hover {
+  background: #216ece;
+  color: #fff;
+  border-color: #216ece;
+}
+
+.captcha-input {
+  flex: 1;
+  min-width: 150px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #d1d5db;
+  font-size: 16px;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #111827;
+  background: #fff;
+  outline: none;
+  transition: border-color .2s;
+}
+
+.captcha-input:focus  { border-color: #216ece; }
+.captcha-input.captcha-ok    { border-color: #16a34a; background: #f0fdf4; }
+.captcha-input.captcha-error { border-color: #dc2626; background: #fef2f2; animation: shake .3s; }
+
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25%      { transform: translateX(-5px); }
+  75%      { transform: translateX(5px); }
+}
+
+.captcha-msg {
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+.captcha-msg-ok    { color: #16a34a; }
+.captcha-msg-error { color: #dc2626; }
+.captcha-hint      { font-size: 11px; color: #9ca3af; margin-top: 6px; }

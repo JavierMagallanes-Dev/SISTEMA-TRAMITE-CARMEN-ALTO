@@ -9,6 +9,7 @@ import Button                           from '../components/ui/Button';
 import Input                            from '../components/ui/Input';
 import Spinner                          from '../components/ui/Spinner';
 import StripePago                       from '../components/shared/StripePago';
+import Turnstile                        from '../components/shared/Turnstile';
 import { toast }                        from '../utils/toast';
 import {
   Search, FileText, ArrowRight, CheckCircle,
@@ -27,23 +28,27 @@ type OpcionPago = 'seleccion' | 'comprobante' | 'stripe' | 'exitoso';
 export default function PortalPage() {
   const navigate = useNavigate();
 
-  const [paso,           setPaso]           = useState<1 | 2 | 3>(1);
-  const [tipos,          setTipos]          = useState<TipoTramite[]>([]);
-  const [loading,        setLoading]        = useState(false);
-  const [codigoGenerado, setCodigoGenerado] = useState('');
-  const [tipoRegistrado, setTipoRegistrado] = useState<TipoTramite | null>(null);
-  const [opcionPago,     setOpcionPago]     = useState<OpcionPago>('seleccion');
-  const [codigoConsulta, setCodigoConsulta] = useState('');
+  const [paso,             setPaso]             = useState<1 | 2 | 3>(1);
+  const [tipos,            setTipos]            = useState<TipoTramite[]>([]);
+  const [loading,          setLoading]          = useState(false);
+  const [codigoGenerado,   setCodigoGenerado]   = useState('');
+  const [tipoRegistrado,   setTipoRegistrado]   = useState<TipoTramite | null>(null);
+  const [opcionPago,       setOpcionPago]       = useState<OpcionPago>('seleccion');
+  const [codigoConsulta,   setCodigoConsulta]   = useState('');
   const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoTramite | null>(null);
+  const [turnstileToken,   setTurnstileToken]   = useState<string>('');
+
   const [form, setForm] = useState({
     dni: '', nombres: '', apellido_pat: '', apellido_mat: '',
     email: '', telefono: '',
   });
+
   const [buscandoDni,       setBuscandoDni]       = useState(false);
   const [archivoPdf,        setArchivoPdf]        = useState<File | null>(null);
   const [comprobante,       setComprobante]       = useState<File | null>(null);
   const [subiendoComp,      setSubiendoComp]      = useState(false);
   const [comprobanteSubido, setComprobanteSubido] = useState(false);
+
   const fileInputRef        = useRef<HTMLInputElement>(null);
   const comprobanteInputRef = useRef<HTMLInputElement>(null);
 
@@ -72,9 +77,16 @@ export default function PortalPage() {
     if (!form.dni || !form.nombres || !form.apellido_pat || !form.email || !tipoSeleccionado) {
       toast.warning({ titulo: 'Completa todos los campos obligatorios.' }); return;
     }
+    if (!turnstileToken) {
+      toast.warning({ titulo: 'Completa la verificación de seguridad.' }); return;
+    }
     setLoading(true);
     try {
-      const res = await portalService.registrar({ ...form, tipoTramiteId: String(tipoSeleccionado.id) });
+      const res = await portalService.registrar({
+        ...form,
+        tipoTramiteId:          String(tipoSeleccionado.id),
+        'cf-turnstile-response': turnstileToken,
+      });
       if (archivoPdf) {
         try { await documentosService.subirDocumento(res.expediente.id, archivoPdf); }
         catch { console.warn('No se pudo subir el PDF.'); }
@@ -84,6 +96,7 @@ export default function PortalPage() {
       setPaso(3);
     } catch (err: any) {
       toast.error({ titulo: err?.response?.data?.error ?? 'Error al registrar el trámite.' });
+      setTurnstileToken(''); // Resetear token tras error
     } finally { setLoading(false); }
   };
 
@@ -123,7 +136,7 @@ export default function PortalPage() {
       }
       setComprobanteSubido(true);
       setComprobante(null);
-      toast.success({ titulo: '¡Comprobante enviado!', descripcion: 'El cajero lo revisará y verificará tu pago pronto.' });
+      toast.success({ titulo: '¡Comprobante enviado!', descripcion: 'El cajero lo revisará pronto.' });
     } catch (err: any) {
       toast.error({ titulo: err.message ?? 'Error al subir el comprobante.' });
     } finally { setSubiendoComp(false); }
@@ -132,11 +145,10 @@ export default function PortalPage() {
   const resetForm = () => {
     setPaso(1); setTipoSeleccionado(null); setArchivoPdf(null);
     setTipoRegistrado(null); setComprobante(null); setOpcionPago('seleccion');
-    setComprobanteSubido(false);
+    setComprobanteSubido(false); setTurnstileToken('');
     setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '' });
   };
 
-  // Helper para clases de pasos
   const stepClass = (n: number) => {
     if (paso === n) return 'portal-step active';
     if (paso > n)  return 'portal-step done';
@@ -147,18 +159,14 @@ export default function PortalPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 py-8 sm:px-6">
 
-        
-
-        {/* ── Card principal ───────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
 
-          {/* Cabecera */}
           <div className="px-6 py-4 border-b border-gray-100">
             <p className="text-base font-semibold text-gray-900">Registrar nuevo trámite</p>
             <p className="text-xs text-gray-500 mt-0.5">Completa el formulario en 3 pasos</p>
           </div>
 
-          {/* Indicador de pasos */}
+          {/* Pasos */}
           <div className="portal-steps">
             {[{ n: 1, label: 'Trámite' }, { n: 2, label: 'Tus datos' }, { n: 3, label: 'Pago' }].map((s) => (
               <div key={s.n} className={stepClass(s.n)}>
@@ -168,10 +176,9 @@ export default function PortalPage() {
             ))}
           </div>
 
-          {/* Contenido */}
           <div className="p-6">
 
-            {/* ── PASO 1: Seleccionar trámite ─────────────── */}
+            {/* ── PASO 1 ──────────────────────────────────── */}
             {paso === 1 && (
               <div className="portal-panel space-y-2">
                 <p className="text-xs text-gray-500 mb-3">Selecciona el trámite que necesitas realizar:</p>
@@ -188,9 +195,9 @@ export default function PortalPage() {
                         <p className="text-xs text-gray-400 mt-0.5"> {tipo.plazo_dias} días hábiles</p>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-green-600">S/ {Number(tipo.costo_soles).toFixed(2)}</p>
-                        </div>
+                        <p className="text-sm font-semibold text-green-600">
+                          S/ {Number(tipo.costo_soles).toFixed(2)}
+                        </p>
                         <div className="tipo-card-check">
                           <CheckCircle size={13} color="white" />
                         </div>
@@ -209,10 +216,10 @@ export default function PortalPage() {
               </div>
             )}
 
-            {/* ── PASO 2: Datos personales ─────────────────── */}
+            {/* ── PASO 2 ──────────────────────────────────── */}
             {paso === 2 && (
               <div className="portal-panel space-y-4">
-                {/* Badge trámite seleccionado */}
+
                 <div className="sel-tramite-badge">
                   <div>
                     <p className="text-xs text-gray-500">Trámite seleccionado</p>
@@ -223,7 +230,6 @@ export default function PortalPage() {
                   </p>
                 </div>
 
-                {/* DNI */}
                 <div className="flex gap-2 items-end">
                   <div className="flex-1">
                     <Input label="DNI" placeholder="12345678" value={form.dni}
@@ -251,7 +257,6 @@ export default function PortalPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">
                     Documento adjunto (PDF)
-                    <span className="text-gray-400 font-normal ml-1">— opcional</span>
                   </label>
                   {archivoPdf ? (
                     <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -273,11 +278,23 @@ export default function PortalPage() {
                   <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleArchivoChange} />
                 </div>
 
+                {/* ── CLOUDFLARE TURNSTILE ─────────────────── */}
+                <Turnstile
+                  onToken={(token) => setTurnstileToken(token)}
+                  onExpire={() => { setTurnstileToken(''); toast.warning({ titulo: 'La verificación expiró. Complétala nuevamente.' }); }}
+                  onError={() => { setTurnstileToken(''); toast.error({ titulo: 'Error en la verificación de seguridad.' }); }}
+                />
+
                 <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-between">
-                  <Button variant="secondary" onClick={() => setPaso(1)} className="w-full sm:w-auto justify-center">
+                  <Button variant="secondary" onClick={() => { setPaso(1); setTurnstileToken(''); }}
+                    className="w-full sm:w-auto justify-center">
                     ← Atrás
                   </Button>
-                  <Button loading={loading} icon={<FileText size={14} />} onClick={handleRegistrar}
+                  <Button
+                    loading={loading}
+                    icon={<FileText size={14} />}
+                    onClick={handleRegistrar}
+                    disabled={!turnstileToken}
                     className="w-full sm:w-auto justify-center">
                     Registrar trámite
                   </Button>
@@ -285,11 +302,10 @@ export default function PortalPage() {
               </div>
             )}
 
-            {/* ── PASO 3: Pago ─────────────────────────────── */}
+            {/* ── PASO 3 ──────────────────────────────────── */}
             {paso === 3 && (
               <div className="portal-panel space-y-5">
 
-                {/* Pago con Stripe */}
                 {opcionPago === 'stripe' && (
                   <StripePago
                     codigo={codigoGenerado}
@@ -298,7 +314,6 @@ export default function PortalPage() {
                   />
                 )}
 
-                {/* Pago exitoso */}
                 {opcionPago === 'exitoso' && (
                   <div className="exito-wrap portal-panel">
                     <div className="exito-icon-circle">
@@ -320,10 +335,8 @@ export default function PortalPage() {
                   </div>
                 )}
 
-                {/* Selección de pago */}
                 {(opcionPago === 'seleccion' || opcionPago === 'comprobante') && (
                   <>
-                    {/* Confirmación */}
                     <div className="text-center space-y-1">
                       <div className="exito-icon-circle" style={{ width: 52, height: 52 }}>
                         <CheckCircle size={24} color="#16a34a" />
@@ -334,7 +347,6 @@ export default function PortalPage() {
                       <p className="text-xs text-gray-400">Guarda este código para consultar tu trámite</p>
                     </div>
 
-                    {/* Badge trámite */}
                     <div className="sel-tramite-badge">
                       <div>
                         <p className="text-xs text-gray-500">Trámite</p>
@@ -348,7 +360,6 @@ export default function PortalPage() {
                       </div>
                     </div>
 
-                    {/* Email */}
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
                       <p className="text-xs text-blue-700 font-medium">
                         Te enviamos un email con los detalles. Revisa tu correo.
@@ -357,16 +368,13 @@ export default function PortalPage() {
 
                     <p className="text-sm font-semibold text-gray-800 text-center">¿Cómo deseas realizar el pago?</p>
 
-                    {/* Opciones de pago */}
                     <div className="pago-grid">
-                      {/* Comprobante */}
                       <div className={`pago-option ${opcionPago === 'comprobante' ? 'active-comprobante' : 'comprobante'}`}>
                         <div className="pago-icon-wrap" style={{ background: '#fff7ed' }}>
                           <ImageIcon size={18} color="#ea580c" />
                         </div>
                         <p className="text-sm font-semibold text-gray-800">Adjuntar comprobante</p>
                         <p className="text-xs text-gray-500 mt-1">Yape, Plin, transferencia</p>
-
                         {opcionPago === 'comprobante' ? (
                           comprobanteSubido ? (
                             <div className="comp-subido mt-3">
@@ -391,9 +399,7 @@ export default function PortalPage() {
                                 accept="image/jpeg,image/png,image/webp,application/pdf"
                                 className="hidden" onChange={handleComprobanteChange} />
                               {comprobante && (
-                                <button
-                                  disabled={subiendoComp}
-                                  onClick={handleSubirComprobante}
+                                <button disabled={subiendoComp} onClick={handleSubirComprobante}
                                   className="w-full py-2 text-xs font-semibold text-white rounded-lg transition-opacity hover:opacity-90"
                                   style={{ background: '#ea580c' }}>
                                   {subiendoComp ? 'Enviando...' : 'Enviar comprobante'}
@@ -411,14 +417,12 @@ export default function PortalPage() {
                         )}
                       </div>
 
-                      {/* Stripe */}
                       <div className="pago-option stripe">
                         <div className="pago-icon-wrap" style={{ background: '#eff6ff' }}>
                           <CreditCard size={18} color="#2563eb" />
                         </div>
                         <p className="text-sm font-semibold text-gray-800">Pago en línea</p>
                         <p className="text-xs text-gray-500 mt-1">Tarjeta de crédito/débito</p>
-                        <p className="text-xs text-gray-400 mt-1">🔒 Stripe · SSL 256-bit</p>
                         <button onClick={() => setOpcionPago('stripe')}
                           className="mt-3 w-full py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-1.5">
                           <CreditCard size={12} />Pagar con tarjeta
@@ -426,7 +430,6 @@ export default function PortalPage() {
                       </div>
                     </div>
 
-                    {/* Presencial */}
                     <div className="pago-presencial">
                       O paga presencialmente en Caja con tu código{' '}
                       <strong className="font-mono">{codigoGenerado}</strong>
@@ -446,7 +449,6 @@ export default function PortalPage() {
                 )}
               </div>
             )}
-
           </div>
         </div>
       </div>
