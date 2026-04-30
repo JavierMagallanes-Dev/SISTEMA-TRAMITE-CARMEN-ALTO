@@ -277,24 +277,44 @@ export const subirPdfFirmado = async (
       select: { estado: true, ...selectNotificacion },
     });
 
-    if (!expediente)                               throw new AppError(404, 'Expediente no encontrado.');
-    if (expediente.estado !== 'LISTO_DESCARGA')    throw new AppError(400, 'El expediente debe estar en LISTO_DESCARGA.');
+    if (!expediente)                            throw new AppError(404, 'Expediente no encontrado.');
+    if (expediente.estado !== 'LISTO_DESCARGA') throw new AppError(400, 'El expediente debe estar en LISTO_DESCARGA.');
 
     const codigo_verificacion_firma = randomUUID();
 
     await prisma.$transaction(async (tx) => {
       await tx.expediente.update({
         where: { id },
-        data:  { estado: 'PDF_FIRMADO', url_pdf_firmado: url_pdf_firmado.trim(), codigo_verificacion_firma, fecha_firma: new Date(), firmadoPorId: usuarioId, fecha_resolucion: new Date() },
+        data:  {
+          estado: 'PDF_FIRMADO',
+          url_pdf_firmado: url_pdf_firmado.trim(),
+          codigo_verificacion_firma,
+          fecha_firma:      new Date(),
+          firmadoPorId:     usuarioId,
+          fecha_resolucion: new Date(),
+        },
       });
       await tx.movimiento.create({
-        data: { expedienteId: id, usuarioId, tipo_accion: 'SUBIDA_PDF_FIRMADO', estado_resultado: 'PDF_FIRMADO', comentario: `PDF firmado subido. Código: ${codigo_verificacion_firma}` },
+        data: {
+          expedienteId: id, usuarioId,
+          tipo_accion:      'SUBIDA_PDF_FIRMADO',
+          estado_resultado: 'PDF_FIRMADO',
+          comentario: `PDF firmado subido. Código: ${codigo_verificacion_firma}`,
+        },
       });
       await tx.expediente.update({ where: { id }, data: { estado: 'RESUELTO' } });
       await tx.movimiento.create({
-        data: { expedienteId: id, usuarioId, tipo_accion: 'SUBIDA_PDF_FIRMADO', estado_resultado: 'RESUELTO', comentario: 'Expediente resuelto. PDF disponible para el ciudadano.' },
+        data: {
+          expedienteId: id, usuarioId,
+          tipo_accion:      'SUBIDA_PDF_FIRMADO',
+          estado_resultado: 'RESUELTO',
+          comentario: 'Expediente resuelto. PDF disponible para el ciudadano.',
+        },
       });
     });
+
+    // Log antes del envío para confirmar que llega a esta línea
+    console.log('📧 Enviando email RESUELTO a:', expediente.ciudadano.email, '| codigo:', expediente.codigo);
 
     notificarCambioEstado({
       email:       expediente.ciudadano.email,
@@ -302,9 +322,14 @@ export const subirPdfFirmado = async (
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
       estado:      'RESUELTO',
-      comentario:  'Su documento oficial está listo para descarga en el portal ciudadano.',
+      comentario:  `¡Su documento oficial ha sido firmado digitalmente y está listo para descargar! Ingrese al portal con su código ${expediente.codigo} y haga clic en "Descargar resolución".`,
       area:        expediente.areaActual?.nombre,
-    }).catch((e) => console.warn('⚠️ Email RESUELTO:', e));
+      urlDescarga: url_pdf_firmado.trim(),
+    }).then(() => {
+      console.log('✅ Email RESUELTO enviado correctamente a:', expediente.ciudadano.email);
+    }).catch((e) => {
+      console.error('❌ ERROR al enviar email RESUELTO:', e?.message ?? e);
+    });
 
     res.json({ message: 'PDF firmado subido. Expediente RESUELTO.', codigo_verificacion_firma });
   } catch (err) { next(err); }

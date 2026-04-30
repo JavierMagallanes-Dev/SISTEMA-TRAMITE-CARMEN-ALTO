@@ -233,14 +233,14 @@ export const subirComprobantePago = async (
 
     // Registrar movimiento informativo
     await prisma.movimiento.create({
-      data: {
-        expedienteId:     expediente.id,
-        usuarioId:        1,
-        tipo_accion:      'REGISTRO',
-        estado_resultado: 'PENDIENTE_PAGO',
-        comentario:       'Ciudadano adjuntó comprobante de pago. En espera de verificación por cajero.',
-      },
-    });
+  data: {
+    expedienteId:     expediente.id,
+    usuarioId:        1,
+    tipo_accion:      'VERIFICACION_PAGO',
+    estado_resultado: 'PENDIENTE_PAGO',
+    comentario:       'Ciudadano adjuntó comprobante de pago. En espera de verificación por cajero.',
+  },
+});
 
     console.log(`📎 Comprobante subido para ${codigo}: ${url}`);
 

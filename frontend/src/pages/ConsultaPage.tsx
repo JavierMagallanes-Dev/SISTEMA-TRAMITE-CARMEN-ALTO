@@ -809,15 +809,17 @@ export default function ConsultaPage() {
             </div>
 
             {/* ─── Timeline ─── */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-slate-800">Historial del trámite</h3>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  {expediente.movimientos.length} movimiento(s)
-                </span>
-              </div>
-              <TimelineMovimientos movimientos={expediente.movimientos} />
-            </div>
+<div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
+  <div className="flex items-center justify-between mb-4">
+    <h3 className="text-sm font-bold text-slate-800">Historial del trámite</h3>
+    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+     {expediente.movimientos.filter((m) =>
+  !['REGISTRO','VERIFICACION_PAGO','REVISION_MDP','DERIVACION','TOMA_EXPEDIENTE','VISTO_BUENO','SUBIDA_PDF_FIRMADO','ARCHIVADO'].includes(m.tipo_accion)
+).length} movimiento(s)
+    </span>
+  </div>
+  <TimelineMovimientos movimientos={expediente.movimientos} soloPublicos={true} />
+</div>
           </div>
         )}
       </div>

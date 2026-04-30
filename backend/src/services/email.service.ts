@@ -228,8 +228,9 @@ export const notificarCambioEstado = async (params: {
   estado:      string;
   comentario:  string | null;
   area?:       string;
+  urlDescarga?: string; 
 }) => {
-  const { email, nombres, codigo, tipoTramite, estado, comentario, area } = params;
+  const { email, nombres, codigo, tipoTramite, estado, comentario, area, urlDescarga } = params;
 
   const config: Record<string, { titulo: string; mensaje: string; emoji: string; alertaTipo?: 'warning' | 'info' | 'success' | 'error' }> = {
     RECIBIDO: {
@@ -313,9 +314,12 @@ export const notificarCambioEstado = async (params: {
     ${estado === 'OBSERVADO' ? alerta('📎 Ingrese al portal de consulta y adjunte los documentos adicionales solicitados para reactivar su trámite.', 'warning') : ''}
 
     ${estado === 'RESUELTO' || estado === 'PDF_FIRMADO'
-      ? botonDescarga(`http://localhost:5173/consulta/${codigo}`)
-      : ''
-    }
+  ? `
+    ${botonDescarga(urlDescarga ?? `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/consulta/${codigo}`)}
+    ${alerta('✅ Su documento tiene firma digital válida. También puede descargarlo desde el portal ingresando su código de expediente.', 'success')}
+  `
+  : ''
+}
 
     ${divider()}
     ${boton('Ver mi trámite en el portal', `http://localhost:5173/consulta/${codigo}`)}

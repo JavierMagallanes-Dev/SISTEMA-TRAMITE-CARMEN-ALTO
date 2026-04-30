@@ -6,13 +6,11 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma }          from '../config/prisma';
 import { AppError }        from '../middlewares/error.middleware';
 import { storageService }  from '../services/storage.service';
+import { notificarCambioEstado } from '../services/email.service';
 import { v4 as uuidv4 }   from 'uuid';
 
 // ----------------------------------------------------------------
 // POST /api/documentos/subir/:expedienteId
-// Sube un documento adjunto al expediente.
-// Accesible por el ciudadano (via portal) y empleados municipales.
-// El archivo viene como multipart/form-data en el campo "archivo".
 // ----------------------------------------------------------------
 export const subirDocumento = async (
   req:  Request,
@@ -23,32 +21,26 @@ export const subirDocumento = async (
     const { expedienteId } = req.params;
     const archivo = req.file;
 
-    if (!archivo) {
+    if (!archivo)
       throw new AppError(400, 'No se recibió ningún archivo.');
-    }
 
-    if (archivo.mimetype !== 'application/pdf') {
+    if (archivo.mimetype !== 'application/pdf')
       throw new AppError(400, 'Solo se aceptan archivos PDF.');
-    }
 
-    if (archivo.size > 10 * 1024 * 1024) {
+    if (archivo.size > 10 * 1024 * 1024)
       throw new AppError(400, 'El archivo no puede superar los 10MB.');
-    }
 
-    // Verificar que el expediente existe
     const expediente = await prisma.expediente.findUnique({
       where: { id: Number(expedienteId) },
     });
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
 
-    // Subir a Supabase Storage
     const url = await storageService.subirArchivo(
       archivo.buffer,
       archivo.mimetype,
       'expedientes'
     );
 
-    // Guardar referencia en BD
     const documento = await prisma.documento.create({
       data: {
         expedienteId: Number(expedienteId),
@@ -58,10 +50,7 @@ export const subirDocumento = async (
       },
     });
 
-    res.status(201).json({
-      message:   'Documento subido correctamente.',
-      documento,
-    });
+    res.status(201).json({ message: 'Documento subido correctamente.', documento });
   } catch (err) {
     next(err);
   }
@@ -69,7 +58,6 @@ export const subirDocumento = async (
 
 // ----------------------------------------------------------------
 // GET /api/documentos/expediente/:expedienteId
-// Lista los documentos adjuntos de un expediente.
 // ----------------------------------------------------------------
 export const listarDocumentos = async (
   req:  Request,
@@ -93,7 +81,8 @@ export const listarDocumentos = async (
 // ----------------------------------------------------------------
 // POST /api/documentos/subir-firmado/:expedienteId
 // El Jefe sube el PDF ya firmado con FirmaPeru.
-// Actualiza el expediente con la URL y código de verificación.
+// Actualiza el expediente con la URL, código de verificación
+// y envía email al ciudadano avisando que puede descargar.
 // ----------------------------------------------------------------
 export const subirPdfFirmado = async (
   req:  Request,
@@ -105,16 +94,22 @@ export const subirPdfFirmado = async (
     const archivo          = req.file;
     const jefeId           = req.usuario!.id;
 
-    if (!archivo) {
+    if (!archivo)
       throw new AppError(400, 'No se recibió ningún archivo.');
-    }
 
-    if (archivo.mimetype !== 'application/pdf') {
+    if (archivo.mimetype !== 'application/pdf')
       throw new AppError(400, 'Solo se aceptan archivos PDF.');
-    }
 
+    // Cargar datos del expediente + ciudadano para el email
     const expediente = await prisma.expediente.findUnique({
       where: { id: Number(expedienteId) },
+      select: {
+        estado:      true,
+        codigo:      true,
+        ciudadano:   { select: { email: true, nombres: true } },
+        tipoTramite: { select: { nombre: true } },
+        areaActual:  { select: { nombre: true } },
+      },
     });
 
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
@@ -126,15 +121,15 @@ export const subirPdfFirmado = async (
       );
     }
 
-    // Subir PDF firmado a carpeta separada
-    const url                     = await storageService.subirArchivo(
+    // Subir PDF firmado a Supabase Storage
+    const url                      = await storageService.subirArchivo(
       archivo.buffer,
       archivo.mimetype,
       'firmados'
     );
     const codigo_verificacion_firma = uuidv4();
 
-    // Actualizar expediente en transacción
+    // Transacción: PDF_FIRMADO → RESUELTO
     await prisma.$transaction(async (tx) => {
       await tx.expediente.update({
         where: { id: Number(expedienteId) },
@@ -158,7 +153,6 @@ export const subirPdfFirmado = async (
         },
       });
 
-      // Avanzar a RESUELTO
       await tx.expediente.update({
         where: { id: Number(expedienteId) },
         data:  { estado: 'RESUELTO' },
@@ -173,6 +167,24 @@ export const subirPdfFirmado = async (
           comentario:       'Expediente resuelto. PDF firmado disponible para el ciudadano.',
         },
       });
+    });
+
+    // ── Notificar al ciudadano que su documento está listo ──
+    console.log('📧 Enviando email RESUELTO a:', expediente.ciudadano.email);
+
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email,
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'RESUELTO',
+      comentario:  '¡Su documento oficial ha sido firmado digitalmente y está listo para descargar! Ingrese al portal con su código y haga clic en "Descargar resolución".',
+      area:        expediente.areaActual?.nombre,
+      urlDescarga: url,
+    }).then(() => {
+      console.log('✅ Email RESUELTO enviado a:', expediente.ciudadano.email);
+    }).catch((e) => {
+      console.error('❌ Error al enviar email RESUELTO:', e?.message ?? e);
     });
 
     res.json({
