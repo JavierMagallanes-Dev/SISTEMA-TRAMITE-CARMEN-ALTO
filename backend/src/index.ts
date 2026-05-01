@@ -34,8 +34,21 @@ app.use('/api/stripe/webhook',
 );
 
 // ── Middlewares globales ─────────────────────────────────────────
+const allowedOrigins = [
+  env.FRONTEND_URL,
+  'https://sistema-tramite-carmen-alto.vercel.app',
+  'https://sistema-tramite-carmen-alto-5wmxocl13.vercel.app',
+  'http://localhost:5173',
+];
+
 app.use(cors({
-  origin:      env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
