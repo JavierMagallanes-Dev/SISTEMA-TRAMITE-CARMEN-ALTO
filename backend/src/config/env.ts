@@ -2,6 +2,12 @@ const requiredEnvVars = [
   'DATABASE_URL',
   'DIRECT_URL',
   'JWT_SECRET',
+  'RESEND_API_KEY',
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_KEY',
+  'STRIPE_SECRET_KEY',
+  'APIPERU_TOKEN',
+  'FRONTEND_URL',
 ] as const;
 
 for (const envVar of requiredEnvVars) {
@@ -25,10 +31,9 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? '8h',
 
   // Servicios externos (opcionales por ahora)
-  RESEND_API_KEY:      process.env.RESEND_API_KEY ?? '',
-  TWILIO_ACCOUNT_SID:  process.env.TWILIO_ACCOUNT_SID ?? '',
-  TWILIO_AUTH_TOKEN:   process.env.TWILIO_AUTH_TOKEN ?? '',
-  TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM ?? '',
+  RESEND_API_KEY:       process.env.RESEND_API_KEY!,
+  STRIPE_SECRET_KEY:    process.env.STRIPE_SECRET_KEY!,
+  TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY ?? '',
   APIPERU_TOKEN: process.env.APIPERU_TOKEN ?? '',
   // Supabase Storage
   SUPABASE_URL:      process.env.SUPABASE_URL ?? '',
