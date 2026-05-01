@@ -610,7 +610,7 @@ export default function ConsultaPage() {
               {/* ═══════ OBSERVADO ═══════ */}
               {expediente.estado === 'OBSERVADO' && (
                 <div className="p-5 sm:p-6">
-                  <div className="rounded-2xl bg-gradient-to-b from-amber-50 to-white border border-amber-200 overflow-hidden">
+                  <div className="rounded-2xl bg-linear-to-b from-amber-50 to-white border border-amber-200 overflow-hidden">
                     <div className="px-5 py-3.5 bg-amber-100/70 border-b border-amber-200 flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center shrink-0">
                         <AlertCircle size={16} />

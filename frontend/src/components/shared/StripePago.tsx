@@ -1,6 +1,5 @@
 // src/components/shared/StripePago.tsx
-// Formulario de pago con Stripe Elements — diseño institucional.
-// La lógica de backend NO fue modificada.
+// Formulario de pago con Stripe Elements — diseño institucional mejorado.
 import '../../styles/stripe.css';
 
 import { useState, useEffect } from 'react';
@@ -17,6 +16,7 @@ import {
 import {
   CreditCard, Lock, CheckCircle,
   AlertCircle, Loader, ArrowLeft, Search, FileText,
+  ShieldCheck,
 } from 'lucide-react';
 
 const VITE_API_URL           = import.meta.env.VITE_API_URL           ?? 'http://localhost:3000/api';
@@ -36,14 +36,15 @@ const STRIPE_STYLE = {
   },
 };
 
-// ── Hero compartido ──────────────────────────────────────────────
+// ── Hero ─────────────────────────────────────────────────────────
 function Hero() {
   return (
     <div className="sp-hero">
       <div className="sp-label"><span className="sp-dot" />Portal Ciudadano — Pago</div>
-      <h1 className="sp-title">Pago con tarjeta</h1>
+      <h1 className="sp-title">Pago seguro con tarjeta</h1>
       <p className="sp-sub">
-        Ingresa los datos de tu tarjeta para completar el pago de forma segura a través de Stripe.
+        Tus datos de tarjeta viajan cifrados y nunca son almacenados por la Municipalidad.
+        El pago es procesado directamente por Stripe.
       </p>
       <div className="sp-tabs">
         <div className="sp-tab done"><span className="sp-tab-num">✓</span>Seleccionar trámite</div>
@@ -72,10 +73,14 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
   const stripe   = useStripe();
   const elements = useElements();
 
-  const [procesando, setProcesando] = useState(false);
-  const [errorLocal, setErrorLocal] = useState('');
-  const [cardReady,  setCardReady]  = useState(false);
-  const [cardExpStr, setCardExpStr] = useState('MM/AA');
+  const [procesando,  setProcesando]  = useState(false);
+  const [errorLocal,  setErrorLocal]  = useState('');
+  const [cardReady,   setCardReady]   = useState(false);
+  const [expiryReady, setExpiryReady] = useState(false);
+  const [cvcReady,    setCvcReady]    = useState(false);
+  const [cardExpStr,  setCardExpStr]  = useState('MM/AA');
+
+  const todoListo = cardReady && expiryReady && cvcReady;
 
   const handlePagar = async () => {
     if (!stripe || !elements) return;
@@ -139,6 +144,8 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
         </div>
       </div>
 
+      
+
       {/* Section label */}
       <p className="sp-section-label">Datos de la tarjeta</p>
 
@@ -146,7 +153,7 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
       <div className="sp-card-types">
         {['Visa', 'Mastercard', 'Amex'].map((b) => (
           <div key={b} className="sp-card-badge">
-            <CreditCard size={14} strokeWidth={2} />
+            <CreditCard size={13} strokeWidth={2} />
             {b}
           </div>
         ))}
@@ -170,11 +177,14 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
 
         {/* Campos Stripe */}
         <div className="sp-card-fields">
+
+          {/* Número */}
           <div className="sp-field">
             <label className="sp-field-label">
               Número de tarjeta <span className="req">*</span>
+              {cardReady && <span className="sp-field-check"><CheckCircle size={13} color="#1D9E75" /></span>}
             </label>
-            <div className="sp-stripe-wrap">
+            <div className={`sp-stripe-wrap ${cardReady ? 'valid' : ''}`}>
               <div className="sp-stripe-inner">
                 <CardNumberElement
                   options={STRIPE_STYLE}
@@ -184,27 +194,42 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
             </div>
           </div>
 
+          {/* Vencimiento + CVC */}
           <div className="sp-field-row">
             <div>
-              <label className="sp-field-label">Vencimiento <span className="req">*</span></label>
-              <div className="sp-stripe-wrap">
+              <label className="sp-field-label">
+                Vencimiento <span className="req">*</span>
+                {expiryReady && <span className="sp-field-check"><CheckCircle size={13} color="#1D9E75" /></span>}
+              </label>
+              <div className={`sp-stripe-wrap ${expiryReady ? 'valid' : ''}`}>
                 <div className="sp-stripe-inner">
                   <CardExpiryElement
                     options={STRIPE_STYLE}
-                    onChange={(e) => setCardExpStr(e.complete ? '••/••' : 'MM/AA')}
+                    onChange={(e) => {
+                      setExpiryReady(e.complete && !e.error);
+                      setCardExpStr(e.complete ? '••/••' : 'MM/AA');
+                    }}
                   />
                 </div>
               </div>
             </div>
             <div>
-              <label className="sp-field-label">CVC <span className="req">*</span></label>
-              <div className="sp-stripe-wrap">
+              <label className="sp-field-label">
+                CVC <span className="req">*</span>
+                {cvcReady && <span className="sp-field-check"><CheckCircle size={13} color="#1D9E75" /></span>}
+              </label>
+              <div className={`sp-stripe-wrap ${cvcReady ? 'valid' : ''}`}>
                 <div className="sp-stripe-inner">
-                  <CardCvcElement options={STRIPE_STYLE} />
+                  <CardCvcElement
+                    options={STRIPE_STYLE}
+                    onChange={(e) => setCvcReady(e.complete && !e.error)}
+                  />
                 </div>
               </div>
+              <p className="sp-cvc-hint">3 dígitos al dorso de tu tarjeta</p>
             </div>
           </div>
+
         </div>
       </div>
 
@@ -212,7 +237,18 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
       {errorLocal && (
         <div className="sp-error">
           <AlertCircle size={16} color="#D94040" />
-          {errorLocal}
+          <div>
+            <p style={{ fontWeight: 700, marginBottom: 2 }}>No se pudo procesar el pago</p>
+            <p style={{ fontSize: 12 }}>{errorLocal}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Procesando */}
+      {procesando && (
+        <div className="sp-procesando">
+          <Loader size={16} className="animate-spin" />
+          Procesando tu pago de forma segura...
         </div>
       )}
 
@@ -222,17 +258,12 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
       <button
         className="sp-btn-pay"
         onClick={handlePagar}
-        disabled={procesando || !stripe || !cardReady}>
+        disabled={procesando || !stripe || !todoListo}>
         {procesando
-          ? <><Loader size={18} className="animate-spin" />Procesando pago...</>
-          : <><Lock size={18} />Pagar S/ {monto.toFixed(2)}</>
+          ? <><Loader size={18} className="animate-spin" />Procesando...</>
+          : <><Lock size={18} />Pagar S/ {monto.toFixed(2)} de forma segura</>
         }
       </button>
-
-      <div className="sp-security">
-        <Lock size={14} color="#9CA3B0" />
-        Pago seguro procesado por Stripe · SSL 256-bit
-      </div>
 
       <button className="sp-back" onClick={onCancel}>
         <ArrowLeft size={14} />
@@ -252,7 +283,7 @@ interface StripePagoProps {
 export default function StripePago({ codigo, onExito, onCancel }: StripePagoProps) {
   const navigate = useNavigate();
 
-  const [cargando,        setCargando]    = useState(true);
+  const [cargando,        setCargando]        = useState(true);
   const [clientSecret,    setClientSecret]    = useState('');
   const [paymentIntentId, setPaymentIntentId] = useState('');
   const [monto,           setMonto]           = useState(0);
@@ -300,9 +331,9 @@ export default function StripePago({ codigo, onExito, onCancel }: StripePagoProp
           <div className="sp-success-icon">
             <CheckCircle size={32} color="#1D9E75" strokeWidth={2.2} />
           </div>
-          <h2 className="sp-success-title">¡Pago realizado!</h2>
+          <h2 className="sp-success-title">¡Pago realizado exitosamente!</h2>
           <p className="sp-success-sub">
-            Tu pago fue procesado exitosamente.<br />
+            Tu pago fue procesado de forma segura por Stripe.<br />
             Recibirás un comprobante en tu correo electrónico.
           </p>
           <div className="sp-receipt">
@@ -329,7 +360,8 @@ export default function StripePago({ codigo, onExito, onCancel }: StripePagoProp
       <div className="sp-main">
         <div className="sp-loading">
           <Loader size={28} className="animate-spin" style={{ color: '#185FA5' }} />
-          <p>Preparando el pago seguro...</p>
+          <p>Preparando el entorno de pago seguro...</p>
+          <p style={{ fontSize: 12, color: '#9CA3B0', marginTop: 4 }}>Conectando con Stripe...</p>
         </div>
       </div>
     </div>
@@ -345,7 +377,11 @@ export default function StripePago({ codigo, onExito, onCancel }: StripePagoProp
             <AlertCircle size={18} color="#D94040" />
             <p style={{ fontSize: 14, fontWeight: 700, color: '#D94040' }}>No se pudo iniciar el pago</p>
           </div>
-          <p style={{ fontSize: 13, color: '#5C6278' }}>{errorInit}</p>
+          <p style={{ fontSize: 13, color: '#5C6278', marginBottom: 8 }}>{errorInit}</p>
+          <p style={{ fontSize: 12, color: '#9CA3B0' }}>
+            Verifica tu conexión a internet e intenta nuevamente. Si el problema persiste,
+            utiliza la opción de pago con comprobante o acércate a Caja.
+          </p>
         </div>
         <button className="sp-back" onClick={onCancel}>
           <ArrowLeft size={14} />Volver a las opciones de pago
