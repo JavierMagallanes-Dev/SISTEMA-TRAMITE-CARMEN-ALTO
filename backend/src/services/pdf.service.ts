@@ -23,11 +23,22 @@ const AZUL_CLARO      = '#e8f4fd';
 const GRIS            = '#6b7280';
 const NEGRO           = '#111827';
 
-const LOGO_PATH = path.join(__dirname, '../assets/logoCA.webp');
+const LOGO_URL = 'https://hibajtrydjemcmljpwky.supabase.co/storage/v1/object/public/documentos/assets/logoCA.png';
 
-// Convertir webp → PNG buffer para pdfkit
-const getLogoPng = (): Promise<Buffer> =>
-  sharp(LOGO_PATH).resize(60, 60, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer();
+const getLogoPng = async (): Promise<Buffer> => {
+  try {
+    const response = await fetch(LOGO_URL);
+    if (!response.ok) throw new Error('No se pudo descargar el logo');
+    const arrayBuffer = await response.arrayBuffer();
+    return await sharp(Buffer.from(arrayBuffer))
+      .resize(60, 60, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .png()
+      .toBuffer();
+  } catch {
+    // Si falla la carga del logo retorna un buffer vacío y el PDF se genera sin logo
+    return Buffer.alloc(0);
+  }
+};
 
 export const pdfService = {
   generarCargoRecepcion: async (datos: DatosCargoRecepcion): Promise<Buffer> => {
@@ -46,7 +57,9 @@ export const pdfService = {
         doc.rect(0, 90, 595, 30).fill(AZUL_OSCURO);
 
         // Logo
-        doc.image(logoPng, 50, 15, { width: 60, height: 60 });
+        if (logoPng.length > 0) {
+  doc.image(logoPng, 50, 15, { width: 60, height: 60 });
+}
 
         // Texto encabezado
         doc.fillColor('white')
