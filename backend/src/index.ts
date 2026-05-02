@@ -36,6 +36,8 @@ app.use('/api/stripe/webhook',
 // ── Middlewares globales ─────────────────────────────────────────
 const allowedOrigins = [
   env.FRONTEND_URL,
+  'https://municipalidadcarmenalto.site',
+  'https://www.municipalidadcarmenalto.site',
   'https://sistema-tramite-carmen-alto.vercel.app',
   'https://sistema-tramite-carmen-alto-5wmxocl13.vercel.app',
   'http://localhost:5173',
