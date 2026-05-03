@@ -15,24 +15,6 @@ interface TramiteInfo {
 }
 
 const TRAMITE_MAP: Record<string, TramiteInfo> = {
-  'Licencia de Funcionamiento': {
-    iconColor: 'teal',
-    reqs: [
-      'DNI o RUC del titular',
-      'Plano de distribución del local',
-      'Declaración jurada de salubridad',
-      'Recibo de pago del trámite',
-    ],
-  },
-  'Renovación de Licencia': {
-    iconColor: 'teal',
-    reqs: [
-      'DNI o RUC del titular',
-      'Licencia anterior vigente',
-      'Declaración jurada de cumplimiento',
-      'Recibo de pago del trámite',
-    ],
-  },
   'Licencia de Construcción': {
     iconColor: 'blue',
     reqs: [
@@ -56,15 +38,6 @@ const TRAMITE_MAP: Record<string, TramiteInfo> = {
     reqs: [
       'DNI del solicitante',
       'Formulario de solicitud firmado',
-      'Recibo de pago del trámite',
-    ],
-  },
-  'Autorización de Evento Público': {
-    iconColor: 'blue',
-    reqs: [
-      'DNI del organizador responsable',
-      'Plan del evento (lugar, hora, aforo estimado)',
-      'Póliza de seguro de responsabilidad civil',
       'Recibo de pago del trámite',
     ],
   },
