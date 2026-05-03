@@ -1,4 +1,7 @@
 // src/pages/MesaPartesPage.tsx
+// Mesa de Partes con:
+// - Vista previa de documentos (modal con iframe)
+// - Descarga de PDF unificado con todos los documentos
 
 import { useEffect, useState, useRef } from 'react';
 import api                       from '../services/api';
@@ -20,7 +23,7 @@ import type { Area, EstadoExpediente, Movimiento } from '../types';
 import {
   FileText, Plus, Send, RefreshCw, Search,
   Clock, Eye, Download, Upload, X,
-  CheckCircle, AlertCircle,
+  CheckCircle, AlertCircle, Package, ZoomIn,
 } from 'lucide-react';
 
 interface TipoTramite { id: number; nombre: string; costo_soles: number; plazo_dias: number; }
@@ -65,7 +68,12 @@ export default function MesaPartesPage() {
   const [modalDetalle, setModalDetalle] = useState(false);
   const [detalle,      setDetalle]      = useState<DetalleExpediente | null>(null);
   const [cargandoDet,  setCargandoDet]  = useState(false);
-  const [loadingReactivar, setLoadingReactivar] = useState(false);
+  const [loadingReactivar,  setLoadingReactivar]  = useState(false);
+  const [loadingUnificado,  setLoadingUnificado]  = useState(false);
+
+  // Vista previa de documento
+  const [modalPreview,  setModalPreview]  = useState(false);
+  const [previewDoc,    setPreviewDoc]    = useState<Documento | null>(null);
 
   const [modalObservar,   setModalObservar]   = useState(false);
   const [expObservar,     setExpObservar]     = useState<DetalleExpediente | null>(null);
@@ -103,6 +111,35 @@ export default function MesaPartesPage() {
         window.URL.revokeObjectURL(url);
       })
       .catch(() => toast.error({ titulo: 'Error al generar el cargo de recepción.' }));
+  };
+
+  // Descargar PDF unificado con todos los documentos del expediente
+  const descargarPdfUnificado = async (expedienteId: number, codigo: string) => {
+    setLoadingUnificado(true);
+    try {
+      const res = await api.get(`/mesa-partes/expediente/${expedienteId}/pdf-unificado`, {
+        responseType: 'blob',
+      });
+      const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href  = url;
+      link.setAttribute('download', `expediente-unificado-${codigo}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success({ titulo: 'PDF unificado descargado', descripcion: 'Todos los documentos están en un solo archivo.' });
+    } catch {
+      toast.error({ titulo: 'Error al generar el PDF unificado.' });
+    } finally {
+      setLoadingUnificado(false);
+    }
+  };
+
+  // Abrir vista previa de un documento
+  const abrirPreview = (doc: Documento) => {
+    setPreviewDoc(doc);
+    setModalPreview(true);
   };
 
   const cargarDatos = async () => {
@@ -150,7 +187,7 @@ export default function MesaPartesPage() {
     setLoadingObservar(true);
     try {
       await mesaPartesService.observar(expObservar.id, comentarioObs.trim());
-      toast.success({ titulo: 'Expediente observado', descripcion: `${expObservar.codigo} marcado como OBSERVADO. Ciudadano notificado.` });
+      toast.success({ titulo: 'Expediente observado', descripcion: `${expObservar.codigo} marcado como OBSERVADO.` });
       setModalObservar(false);
       setModalDetalle(false);
       setComentarioObs('');
@@ -167,7 +204,7 @@ export default function MesaPartesPage() {
     setLoadingReactivar(true);
     try {
       await mesaPartesService.reactivar(detalle.id);
-      toast.success({ titulo: 'Expediente reactivado', descripcion: `${detalle.codigo} reactivado. Ya puedes derivarlo.` });
+      toast.success({ titulo: 'Expediente reactivado', descripcion: `${detalle.codigo} reactivado.` });
       setModalDetalle(false);
       cargarDatos();
     } catch (err: any) {
@@ -183,15 +220,13 @@ export default function MesaPartesPage() {
     try {
       const res = await mesaPartesService.consultarDni(form.dni);
       const c   = res.datos || res.ciudadano;
-      if (c) {
-        setForm(prev => ({
-          ...prev,
-          nombres:      c.nombres      || '',
-          apellido_pat: c.apellido_pat || c.apellidoPat || '',
-          apellido_mat: c.apellido_mat || c.apellidoMat || '',
-          email:        c.email        || '',
-        }));
-      }
+      if (c) setForm(prev => ({
+        ...prev,
+        nombres:      c.nombres      || '',
+        apellido_pat: c.apellido_pat || c.apellidoPat || '',
+        apellido_mat: c.apellido_mat || c.apellidoMat || '',
+        email:        c.email        || '',
+      }));
     } catch { /* RENIEC no disponible */ }
     finally { setBuscandoDni(false); }
   };
@@ -268,6 +303,10 @@ export default function MesaPartesPage() {
   const setF = (field: string, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
+  // Nombre legible del documento (quitar prefijo REQ-N:)
+  const nombreDoc = (nombre: string) =>
+    nombre.startsWith('REQ-') ? nombre.replace(/^REQ-\d+:\s*/, '') : nombre;
+
   if (cargando) return <Spinner text="Cargando Mesa de Partes..." />;
 
   const puedeObservar = (estado: EstadoExpediente) =>
@@ -311,7 +350,7 @@ export default function MesaPartesPage() {
               { key: 'acciones', header: '', render: (r) => (
                 <div className="flex gap-1.5">
                   <Button size="sm" variant="ghost" icon={<Eye size={12} />} onClick={() => verDetalle(r.id)}>Ver</Button>
-                  <Button size="sm" variant="ghost" icon={<FileText size={12} />} onClick={() => descargarCargo(r.id, r.codigo)}>Cargo PDF</Button>
+                  <Button size="sm" variant="ghost" icon={<FileText size={12} />} onClick={() => descargarCargo(r.id, r.codigo)}>Cargo</Button>
                   <Button size="sm" variant="secondary" icon={<Send size={12} />} onClick={() => abrirDerivar(r)} disabled={!r.pagos || r.pagos.length === 0}>Derivar</Button>
                 </div>
               )},
@@ -387,15 +426,50 @@ export default function MesaPartesPage() {
               <div><p className="text-xs text-gray-400">Registrado</p><p>{formatFecha(detalle.fecha_registro)}</p></div>
               <div><p className="text-xs text-gray-400">Fecha límite</p><p className={colorDiasRestantes(diasRestantes(detalle.fecha_limite))}>{formatFecha(detalle.fecha_limite)}</p></div>
             </div>
+
+            {/* ── Sección documentos mejorada ── */}
             <div>
-              <CardTitle>Documentos adjuntos ({detalle.documentos?.length ?? 0})</CardTitle>
+              <div className="flex items-center justify-between mb-3">
+                <CardTitle>Documentos adjuntos ({detalle.documentos?.length ?? 0})</CardTitle>
+                {detalle.documentos && detalle.documentos.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    icon={<Package size={13} />}
+                    loading={loadingUnificado}
+                    onClick={() => descargarPdfUnificado(detalle.id, detalle.codigo)}>
+                    Descargar todo en un PDF
+                  </Button>
+                )}
+              </div>
+
               {detalle.documentos && detalle.documentos.length > 0 ? (
-                <div className="mt-2 space-y-2">
+                <div className="space-y-2">
                   {detalle.documentos.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-200 hover:bg-blue-50 transition-colors">
                       <FileText size={16} className="text-blue-500 shrink-0" />
-                      <div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-700 truncate">{doc.nombre}</p><p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p></div>
-                      <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg"><Download size={13} />Descargar</a>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p>
+                        <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Vista previa */}
+                        <button
+                          onClick={() => abrirPreview(doc)}
+                          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                          <ZoomIn size={13} />
+                          Vista previa
+                        </button>
+                        {/* Descarga individual */}
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                          <Download size={13} />
+                          Descargar
+                        </a>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -403,6 +477,7 @@ export default function MesaPartesPage() {
                 <p className="text-sm text-gray-400 mt-2 bg-gray-50 rounded-lg p-3 text-center">El ciudadano no adjuntó documentos.</p>
               )}
             </div>
+
             <div className="space-y-2">
               {puedeObservar(detalle.estado) && (
                 <div className="pt-2 border-t border-gray-100">
@@ -417,12 +492,43 @@ export default function MesaPartesPage() {
                 </div>
               )}
             </div>
+
             <div>
               <CardTitle>Historial de movimientos</CardTitle>
               <div className="mt-3"><TimelineMovimientos movimientos={detalle.movimientos} /></div>
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      {/* Modal vista previa de documento */}
+      <Modal
+        open={modalPreview}
+        onClose={() => { setModalPreview(false); setPreviewDoc(null); }}
+        title={previewDoc ? nombreDoc(previewDoc.nombre) : 'Vista previa'}
+        size="lg">
+        {previewDoc && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-400">{formatFecha(previewDoc.uploaded_at)}</p>
+              <a
+                href={previewDoc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg">
+                <Download size={14} />
+                Descargar este documento
+              </a>
+            </div>
+            <div className="w-full rounded-lg overflow-hidden border border-gray-200" style={{ height: '70vh' }}>
+              <iframe
+                src={`${previewDoc.url}#toolbar=1&navpanes=0`}
+                className="w-full h-full"
+                title={nombreDoc(previewDoc.nombre)}
+              />
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Modal observar */}

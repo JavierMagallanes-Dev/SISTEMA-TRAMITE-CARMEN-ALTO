@@ -25,6 +25,7 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
+    "pdf-lib": "^1.17.1",
     "pdfkit": "^0.18.0",
     "resend": "^6.12.2",
     "sharp": "^0.34.5",

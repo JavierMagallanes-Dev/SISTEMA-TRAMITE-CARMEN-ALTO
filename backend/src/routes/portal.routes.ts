@@ -21,6 +21,7 @@ router.get('/tipos-tramite/:id/requisitos',        listarRequisitos);
 router.get('/consultar-dni/:dni',                  consultarDniPublico);
 router.get('/consultar/:codigo',                   consultarEstado);
 router.get('/verificar/:codigo_verificacion',      verificarPdfFirmado);
+router.get('/tipos-tramite/:id/requisitos', listarRequisitos);
 
 // Registro con verificación Turnstile server-side
 router.post('/registrar',

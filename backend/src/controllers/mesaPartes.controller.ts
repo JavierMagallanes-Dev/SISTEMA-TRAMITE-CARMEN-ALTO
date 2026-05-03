@@ -1,9 +1,11 @@
 // src/controllers/mesaPartes.controller.ts
 // RF19: Notificación al registrar expediente.
 // RF20: Notificación al derivar, observar y reactivar (subsanación).
+// NUEVO: PDF unificado con todos los documentos del expediente.
 
 import { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
+import { PDFDocument } from 'pdf-lib';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middlewares/error.middleware';
 import { generarCodigoExpediente } from '../utils/codigo';
@@ -25,7 +27,9 @@ export const consultarDni = async (
     const dni = String(req.params['dni']);
     if (!dni || dni.length !== 8 || !/^\d+$/.test(dni)) throw new AppError(400, 'DNI inválido.');
 
-    const ciudadanoLocal = await prisma.ciudadano.findUnique({ where: { dni } });
+    const ciudadanoLocal = await prisma.ciudadano.findFirst({
+  where: { numero_documento: dni, tipo_documento: 'DNI' },
+});
     if (ciudadanoLocal) { res.json({ fuente: 'local', ciudadano: ciudadanoLocal }); return; }
 
     const datosReniec = await consultarReniec(dni);
@@ -70,10 +74,27 @@ export const registrarExpediente = async (
     if (!tipoTramite || !tipoTramite.activo) throw new AppError(400, 'Tipo de trámite no válido.');
 
     const ciudadano = await prisma.ciudadano.upsert({
-      where:  { dni },
-      update: { nombres: nombres.trim(), apellido_pat: apellido_pat.trim(), apellido_mat: (apellido_mat ?? '').trim(), email: email.toLowerCase().trim(), ...(telefono && { telefono: telefono.trim() }) },
-      create: { dni, nombres: nombres.trim(), apellido_pat: apellido_pat.trim(), apellido_mat: (apellido_mat ?? '').trim(), email: email.toLowerCase().trim(), telefono: telefono ? telefono.trim() : null },
-    });
+  where:  { email: email.toLowerCase().trim() },
+  update: {
+    tipo_documento:   'DNI',
+    numero_documento: dni,
+    dni,
+    nombres:      nombres.trim(),
+    apellido_pat: apellido_pat.trim(),
+    apellido_mat: (apellido_mat ?? '').trim(),
+    ...(telefono && { telefono: telefono.trim() }),
+  },
+  create: {
+    tipo_documento:   'DNI',
+    numero_documento: dni,
+    dni,
+    nombres:      nombres.trim(),
+    apellido_pat: apellido_pat.trim(),
+    apellido_mat: (apellido_mat ?? '').trim(),
+    email:        email.toLowerCase().trim(),
+    telefono:     telefono ? telefono.trim() : null,
+  },
+});
 
     const codigo       = await generarCodigoExpediente();
     const fecha_limite = new Date();
@@ -120,6 +141,96 @@ export const bandejaMDP = async (
       orderBy: { fecha_registro: 'asc' },
     });
     res.json(expedientes);
+  } catch (err) { next(err); }
+};
+
+// ── GET /api/mesa-partes/expediente/:id/pdf-unificado ────────
+// Fusiona todos los PDFs del expediente en uno solo para descarga.
+export const descargarPdfUnificado = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id = Number(req.params['id']);
+    if (!id) throw new AppError(400, 'ID de expediente inválido.');
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: {
+        codigo:      true,
+        ciudadano:   { select: { nombres: true, apellido_pat: true } },
+        tipoTramite: { select: { nombre: true } },
+        documentos:  { select: { id: true, nombre: true, url: true, tipo_mime: true }, orderBy: { uploaded_at: 'asc' } },
+      },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+
+    const docsPdf = expediente.documentos.filter(d => d.tipo_mime === 'application/pdf');
+
+    if (docsPdf.length === 0) throw new AppError(404, 'El expediente no tiene documentos PDF adjuntos.');
+
+    // Crear PDF unificado
+    const pdfFinal = await PDFDocument.create();
+
+    // Agregar portada de índice
+    const portada = pdfFinal.addPage([595, 842]); // A4
+    const { width, height } = portada.getSize();
+
+    portada.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+    portada.drawText('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', { x: 40, y: height - 30, size: 13, color: { red: 1, green: 1, blue: 1, type: 'RGB' as any } });
+    portada.drawText('Sistema de Trámite Documentario', { x: 40, y: height - 50, size: 10, color: { red: 0.75, green: 0.85, blue: 0.95, type: 'RGB' as any } });
+
+    portada.drawText('EXPEDIENTE UNIFICADO', { x: 40, y: height - 120, size: 16, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+    portada.drawText(`Código: ${expediente.codigo}`, { x: 40, y: height - 150, size: 12, color: { red: 0.1, green: 0.37, blue: 0.65, type: 'RGB' as any } });
+    portada.drawText(`Ciudadano: ${expediente.ciudadano.nombres} ${expediente.ciudadano.apellido_pat}`, { x: 40, y: height - 175, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
+    portada.drawText(`Trámite: ${expediente.tipoTramite.nombre}`, { x: 40, y: height - 195, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
+    portada.drawText(`Generado: ${new Date().toLocaleString('es-PE')}`, { x: 40, y: height - 215, size: 10, color: { red: 0.5, green: 0.5, blue: 0.5, type: 'RGB' as any } });
+
+    // Índice de documentos
+    portada.drawText('DOCUMENTOS INCLUIDOS:', { x: 40, y: height - 260, size: 11, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+    portada.drawRectangle({ x: 40, y: height - 268, width: width - 80, height: 1, color: { red: 0.85, green: 0.85, blue: 0.85, type: 'RGB' as any } });
+
+    docsPdf.forEach((doc, i) => {
+      const nombre = doc.nombre.startsWith('REQ-') ? doc.nombre.replace(/^REQ-\d+:\s*/, '') : doc.nombre;
+      portada.drawText(`${i + 1}. ${nombre}`, { x: 40, y: height - 290 - (i * 22), size: 10, color: { red: 0.2, green: 0.2, blue: 0.2, type: 'RGB' as any } });
+    });
+
+    // Fusionar cada PDF
+    let errores = 0;
+    for (const doc of docsPdf) {
+      try {
+        const response = await fetch(doc.url);
+        if (!response.ok) { errores++; continue; }
+        const arrayBuffer = await response.arrayBuffer();
+        const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+        const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
+
+        // Página separadora con nombre del documento
+        const separador = pdfFinal.addPage([595, 842]);
+        separador.drawRectangle({ x: 0, y: 380, width: 595, height: 82, color: { red: 0.93, green: 0.95, blue: 0.98, type: 'RGB' as any } });
+        const nombre = doc.nombre.startsWith('REQ-') ? doc.nombre.replace(/^REQ-\d+:\s*/, '') : doc.nombre;
+        separador.drawText(nombre, { x: 40, y: 430, size: 14, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+        separador.drawText(`Documento ${docsPdf.indexOf(doc) + 1} de ${docsPdf.length}`, { x: 40, y: 408, size: 10, color: { red: 0.5, green: 0.5, blue: 0.5, type: 'RGB' as any } });
+
+        paginas.forEach(p => pdfFinal.addPage(p));
+      } catch {
+        errores++;
+      }
+    }
+
+    if (pdfFinal.getPageCount() <= 1 && errores === docsPdf.length) {
+      throw new AppError(500, 'No se pudieron descargar los documentos para unificar.');
+    }
+
+    const pdfBytes = await pdfFinal.save();
+
+    res.writeHead(200, {
+      'Content-Type':        'application/pdf',
+      'Content-Disposition': `attachment; filename="expediente-unificado-${expediente.codigo}.pdf"`,
+      'Content-Length':      pdfBytes.length,
+      'Cache-Control':       'no-cache',
+    });
+    res.end(Buffer.from(pdfBytes));
   } catch (err) { next(err); }
 };
 
@@ -196,7 +307,6 @@ export const reactivarExpediente = async (
       });
     });
 
-    // Notificación usando el nuevo estado 'SUBSANADO'
     notificarCambioEstado({
       email:       expediente.ciudadano.email,
       nombres:     expediente.ciudadano.nombres,
@@ -276,7 +386,7 @@ export const confirmarDerivacion = async (
       where: { id: derivacion.expedienteId },
       select: selectNotificacion,
     });
-    
+
     if (datos) {
       notificarCambioEstado({
         email:       datos.ciudadano.email,

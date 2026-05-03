@@ -12,6 +12,7 @@ import { consultarReniec }         from '../utils/reniec';
 import { notificarRegistro }       from '../services/email.service';
 import { storageService }          from '../services/storage.service';
 
+
 // ── GET /api/portal/tipos-tramite ────────────────────────────
 export const listarTiposTramitePublico = async (
   _req: Request, res: Response, next: NextFunction
