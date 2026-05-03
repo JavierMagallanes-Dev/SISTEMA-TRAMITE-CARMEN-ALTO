@@ -1,9 +1,11 @@
 // src/components/shared/Paso2Datos.tsx
-// Paso 2 — selector de tipo de documento: DNI, Carnet de Extranjería, Pasaporte.
+// Paso 2 — selector de tipo de documento con campos específicos por tipo.
+// DNI: autocompletado RENIEC | Carnet: + fecha nacimiento | Pasaporte: + país + fecha vencimiento
+// Los documentos se adjuntan en el paso siguiente (Paso2Requisitos).
 import '../../styles/paso2.css';
 
-import { useRef, useState } from 'react';
-import { ArrowLeft, FileText, Search, Upload, X, ChevronDown } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, FileText, Search, ChevronDown } from 'lucide-react';
 import Turnstile from './Turnstile';
 
 interface TipoTramite {
@@ -12,9 +14,16 @@ interface TipoTramite {
 }
 
 interface Form {
-  tipoDocumento: string;
-  dni: string; nombres: string; apellido_pat: string;
-  apellido_mat: string; email: string; telefono: string;
+  tipoDocumento:     string;
+  dni:               string;
+  nombres:           string;
+  apellido_pat:      string;
+  apellido_mat:      string;
+  email:             string;
+  telefono:          string;
+  pais_emision:      string;
+  fecha_vencimiento: string;
+  fecha_nacimiento:  string;
 }
 
 interface Props {
@@ -23,19 +32,25 @@ interface Props {
   setF:              (field: string, value: string) => void;
   buscandoDni:       boolean;
   buscarDni:         () => void;
-  archivoPdf:        File | null;
-  setArchivoPdf:     (f: File | null) => void;
   turnstileToken:    string;
   setTurnstileToken: (t: string) => void;
   loading:           boolean;
   onAtras:           () => void;
   onRegistrar:       () => void;
-  onArchivoChange:   (e: React.ChangeEvent<HTMLInputElement>) => void;
   onTurnstileExpire: () => void;
   onTurnstileError:  () => void;
 }
 
-type HelpKey = 'documento' | 'nombres' | 'apellidos' | 'telefono' | 'email' | 'pdf' | 'turnstile' | null;
+type HelpKey = 'documento' | 'nombres' | 'apellidos' | 'telefono' | 'email' | 'turnstile' | 'pais' | 'fecha' | null;
+
+const PAISES = [
+  'Perú', 'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Colombia', 'Ecuador',
+  'Paraguay', 'Uruguay', 'Venezuela', 'México', 'Estados Unidos', 'España',
+  'Alemania', 'Francia', 'Italia', 'Reino Unido', 'China', 'Japón', 'Corea del Sur',
+  'Canadá', 'Australia', 'Nueva Zelanda', 'Cuba', 'Haití', 'Guatemala', 'Honduras',
+  'El Salvador', 'Nicaragua', 'Costa Rica', 'Panamá', 'República Dominicana',
+  'Puerto Rico', 'Otro',
+];
 
 const DOC_CONFIG: Record<string, {
   label: string; placeholder: string; maxLength: number;
@@ -45,17 +60,17 @@ const DOC_CONFIG: Record<string, {
   DNI: {
     label: 'Número de DNI', placeholder: '12345678', maxLength: 8,
     validator: v => /^\d{8}$/.test(v),
-    hint: 'Ingresa tus 8 dígitos y haz clic en Autocompletar para llenar tus datos.',
+    hint: 'Ingresa tus 8 dígitos y haz clic en Autocompletar.',
     puedeAutocompletar: true,
   },
   CARNET: {
-    label: 'Número de Carnet de Extranjería', placeholder: 'Ej: 000123456', maxLength: 12,
+    label: 'Número de Carnet de Extranjería', placeholder: '000123456', maxLength: 12,
     validator: v => /^\d{6,12}$/.test(v),
     hint: 'Ingresa el número que aparece en tu Carnet de Extranjería.',
     puedeAutocompletar: false,
   },
   PASAPORTE: {
-    label: 'Número de Pasaporte', placeholder: 'Ej: AB123456', maxLength: 20,
+    label: 'Número de Pasaporte', placeholder: 'AB123456', maxLength: 20,
     validator: v => v.trim().length >= 6,
     hint: 'Ingresa el número alfanumérico de tu pasaporte.',
     puedeAutocompletar: false,
@@ -64,19 +79,21 @@ const DOC_CONFIG: Record<string, {
 
 const HELP_CONTENT: Record<NonNullable<HelpKey>, { title: string; text: string; tipo: 'info' | 'warning' | 'success' }> = {
   documento: { title: 'Documento de identidad', tipo: 'info',
-    text: 'Selecciona el tipo de documento que tienes. Con DNI peruano puedes usar el autocompletado para llenar tus datos automáticamente.' },
+    text: 'Selecciona el tipo de documento que tienes. Con DNI peruano puedes autocompletar tus datos desde RENIEC.' },
   nombres: { title: 'Nombres completos', tipo: 'info',
-    text: 'Si usaste el autocompletado con DNI, este campo ya está lleno. Si no, escribe tus nombres tal como aparecen en tu documento.' },
+    text: 'Escribe tus nombres tal como aparecen en tu documento de identidad.' },
   apellidos: { title: 'Apellidos', tipo: 'info',
-    text: 'Escribe tus apellidos tal como aparecen en tu documento de identidad. Ambos apellidos son obligatorios.' },
+    text: 'Escribe tus apellidos tal como aparecen en tu documento. Ambos son obligatorios.' },
   telefono: { title: 'Teléfono de contacto', tipo: 'warning',
-    text: 'Ingresa un número de celular de 9 dígitos. Te contactaremos si surge alguna consulta sobre tu trámite.' },
+    text: 'Ingresa un número de celular de 9 dígitos para que podamos contactarte.' },
   email: { title: 'Correo electrónico', tipo: 'info',
-    text: 'Recibirás notificaciones automáticas en este correo. Asegúrate de escribirlo correctamente y revisa tu carpeta de spam.' },
-  pdf: { title: 'Documento adjunto — obligatorio', tipo: 'warning',
-    text: 'Adjunta el documento de solicitud en formato PDF. Es parte de tu expediente oficial. Máximo 10MB.' },
+    text: 'Recibirás notificaciones automáticas en este correo. Revisa también tu carpeta de spam.' },
   turnstile: { title: 'Verificación de seguridad', tipo: 'success',
-    text: 'Esta verificación confirma que eres una persona real. Solo haz clic en la casilla — es rápido y no requiere resolver ningún acertijo.' },
+    text: 'Confirma que eres una persona real. Solo haz clic en la casilla.' },
+  pais: { title: 'País de emisión del pasaporte', tipo: 'info',
+    text: 'Selecciona el país que emitió tu pasaporte. Es obligatorio porque el número de pasaporte no es único a nivel mundial.' },
+  fecha: { title: 'Fecha del documento', tipo: 'warning',
+    text: 'Para el Carnet se requiere fecha de nacimiento. Para el Pasaporte se requiere fecha de vencimiento para verificar vigencia.' },
 };
 
 const CheckIcon = () => (
@@ -87,11 +104,9 @@ const CheckIcon = () => (
 
 export default function Paso2Datos({
   tipoSeleccionado, form, setF, buscandoDni, buscarDni,
-  archivoPdf, setArchivoPdf, turnstileToken, setTurnstileToken,
-  loading, onAtras, onRegistrar, onArchivoChange,
-  onTurnstileExpire, onTurnstileError,
+  turnstileToken, setTurnstileToken, loading,
+  onAtras, onRegistrar, onTurnstileExpire, onTurnstileError,
 }: Props) {
-  const fileInputRef              = useRef<HTMLInputElement>(null);
   const [activeHelp, setActiveHelp] = useState<HelpKey>('documento');
   const [touched, setTouched]       = useState<Record<string, boolean>>({});
 
@@ -105,6 +120,13 @@ export default function Paso2Datos({
     apellido_mat: v => v.trim().length >= 2,
     telefono:     v => /^\d{9}$/.test(v),
     email:        v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+    ...(tipoDoc === 'CARNET' && {
+      fecha_nacimiento: v => /^\d{4}-\d{2}-\d{2}$/.test(v),
+    }),
+    ...(tipoDoc === 'PASAPORTE' && {
+      pais_emision:      v => v.trim().length > 0,
+      fecha_vencimiento: v => /^\d{4}-\d{2}-\d{2}$/.test(v),
+    }),
   };
 
   const isValid    = (f: string) => { const fn = validators[f]; return fn ? fn(form[f as keyof Form] ?? '') : false; };
@@ -112,19 +134,22 @@ export default function Paso2Datos({
   const showError  = (f: string) => touched[f] && !isValid(f);
   const handleBlur = (f: string) => setTouched(prev => ({ ...prev, [f]: true }));
 
-  const totalOk = Object.keys(validators).every(f => isValid(f)) && !!archivoPdf && !!turnstileToken;
-
   const completados = [
     ...Object.keys(validators).filter(f => isValid(f)),
-    archivoPdf ? 'pdf' : null, turnstileToken ? 'turnstile' : null,
+    turnstileToken ? 'turnstile' : null,
   ].filter(Boolean).length;
-  const progreso = Math.round((completados / (Object.keys(validators).length + 2)) * 100);
+  const progreso = Math.round((completados / (Object.keys(validators).length + 1)) * 100);
+  const totalOk  = Object.keys(validators).every(f => isValid(f)) && !!turnstileToken;
+
   const helpData = activeHelp ? HELP_CONTENT[activeHelp] : null;
 
   const handleTipoDocChange = (tipo: string) => {
     setF('tipoDocumento', tipo);
     setF('dni', '');
-    setTouched(prev => ({ ...prev, dni: false }));
+    setF('pais_emision', '');
+    setF('fecha_vencimiento', '');
+    setF('fecha_nacimiento', '');
+    setTouched({});
   };
 
   return (
@@ -158,10 +183,10 @@ export default function Paso2Datos({
 
           <p className="p2-section-label">Datos del solicitante</p>
 
-          {/* ── Selector tipo de documento ── */}
+          {/* Selector tipo de documento */}
           <div className="p2-field" style={{ marginBottom: 20 }}>
             <label className="p2-label-field">Tipo de documento <span className="p2-label-req">*</span></label>
-            <div className="p2-select-wrap" onFocus={() => setActiveHelp('documento')}>
+            <div className="p2-select-wrap">
               <select
                 className="p2-select"
                 value={tipoDoc}
@@ -174,8 +199,8 @@ export default function Paso2Datos({
             </div>
           </div>
 
-          {/* ── Número de documento ── */}
-          <div className="p2-field" style={{ marginBottom: 20 }}>
+          {/* Número de documento */}
+          <div className="p2-field" style={{ marginBottom: tipoDoc !== 'DNI' ? 16 : 20 }}>
             <label className="p2-label-field">
               {docConfig.label} <span className="p2-label-req">*</span>
               {showCheck('dni') && <span className="p2-label-check"><CheckIcon /></span>}
@@ -212,7 +237,7 @@ export default function Paso2Datos({
                   maxLength={docConfig.maxLength}
                   value={form.dni}
                   onFocus={() => setActiveHelp('documento')}
-                  onChange={(e) => setF('dni', e.target.value.toUpperCase())}
+                  onChange={(e) => setF('dni', tipoDoc === 'CARNET' ? e.target.value.replace(/\D/g, '') : e.target.value.toUpperCase())}
                   onBlur={() => handleBlur('dni')}
                 />
                 {showCheck('dni') && <span className="p2-check-icon"><CheckIcon /></span>}
@@ -223,12 +248,81 @@ export default function Paso2Datos({
               <span className="p2-field-error">
                 {tipoDoc === 'DNI' ? 'El DNI debe tener exactamente 8 dígitos'
                   : tipoDoc === 'CARNET' ? 'El carnet debe tener entre 6 y 12 dígitos'
-                  : 'Ingresa un número de pasaporte válido'}
+                  : 'Ingresa un número de pasaporte válido (mínimo 6 caracteres)'}
               </span>
             )}
           </div>
 
-          {/* Aviso para documentos sin autocompletado */}
+          {/* Campos extra CARNET */}
+          {tipoDoc === 'CARNET' && (
+            <div className="p2-field" style={{ marginBottom: 20 }}>
+              <label className="p2-label-field">
+                Fecha de nacimiento <span className="p2-label-req">*</span>
+                {showCheck('fecha_nacimiento') && <span className="p2-label-check"><CheckIcon /></span>}
+              </label>
+              <div className="p2-input-wrap">
+                <input
+                  type="date"
+                  className={`p2-input ${showCheck('fecha_nacimiento') ? 'valid' : ''} ${showError('fecha_nacimiento') ? 'error' : ''}`}
+                  value={form.fecha_nacimiento}
+                  onFocus={() => setActiveHelp('fecha')}
+                  onChange={(e) => setF('fecha_nacimiento', e.target.value)}
+                  onBlur={() => handleBlur('fecha_nacimiento')}
+                  max={new Date().toISOString().split('T')[0]}
+                />
+                {showCheck('fecha_nacimiento') && <span className="p2-check-icon"><CheckIcon /></span>}
+              </div>
+              <span className="p2-field-hint">Requerida para validar la vigencia de tu Carnet de Extranjería</span>
+              {showError('fecha_nacimiento') && <span className="p2-field-error">Selecciona tu fecha de nacimiento</span>}
+            </div>
+          )}
+
+          {/* Campos extra PASAPORTE */}
+          {tipoDoc === 'PASAPORTE' && (
+            <div className="p2-form-grid" style={{ marginBottom: 20 }}>
+              <div className="p2-field p2-full">
+                <label className="p2-label-field">
+                  País de emisión <span className="p2-label-req">*</span>
+                  {showCheck('pais_emision') && <span className="p2-label-check"><CheckIcon /></span>}
+                </label>
+                <div className="p2-select-wrap">
+                  <select
+                    className={`p2-select ${showCheck('pais_emision') ? 'valid' : ''} ${showError('pais_emision') ? 'error' : ''}`}
+                    value={form.pais_emision}
+                    onFocus={() => setActiveHelp('pais')}
+                    onChange={(e) => setF('pais_emision', e.target.value)}
+                    onBlur={() => handleBlur('pais_emision')}>
+                    <option value="">Selecciona el país de emisión</option>
+                    {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <ChevronDown size={16} color="#5F6478" className="p2-select-icon" />
+                </div>
+                {showError('pais_emision') && <span className="p2-field-error">Selecciona el país de emisión</span>}
+              </div>
+              <div className="p2-field p2-full">
+                <label className="p2-label-field">
+                  Fecha de vencimiento <span className="p2-label-req">*</span>
+                  {showCheck('fecha_vencimiento') && <span className="p2-label-check"><CheckIcon /></span>}
+                </label>
+                <div className="p2-input-wrap">
+                  <input
+                    type="date"
+                    className={`p2-input ${showCheck('fecha_vencimiento') ? 'valid' : ''} ${showError('fecha_vencimiento') ? 'error' : ''}`}
+                    value={form.fecha_vencimiento}
+                    onFocus={() => setActiveHelp('fecha')}
+                    onChange={(e) => setF('fecha_vencimiento', e.target.value)}
+                    onBlur={() => handleBlur('fecha_vencimiento')}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                  {showCheck('fecha_vencimiento') && <span className="p2-check-icon"><CheckIcon /></span>}
+                </div>
+                <span className="p2-field-hint">El pasaporte debe estar vigente para realizar el trámite</span>
+                {showError('fecha_vencimiento') && <span className="p2-field-error">Selecciona la fecha de vencimiento</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Aviso sin autocompletado */}
           {tipoDoc !== 'DNI' && (
             <div className="p2-doc-notice">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0C447C" strokeWidth="2">
@@ -237,18 +331,18 @@ export default function Paso2Datos({
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
               {tipoDoc === 'CARNET'
-                ? 'Con Carnet de Extranjería debes completar tus datos manualmente.'
-                : 'Con Pasaporte debes completar tus datos manualmente.'}
+                ? 'Con Carnet de Extranjería debes completar tus datos personales manualmente.'
+                : 'Con Pasaporte debes completar tus datos personales manualmente.'}
             </div>
           )}
 
           {/* Grid campos personales */}
           <div className="p2-form-grid">
             {[
-              { key: 'nombres', label: 'Nombres', placeholder: 'Tus nombres', help: 'nombres' as HelpKey },
+              { key: 'nombres',      label: 'Nombres',          placeholder: 'Tus nombres',     help: 'nombres'   as HelpKey },
               { key: 'apellido_pat', label: 'Apellido paterno', placeholder: 'Apellido paterno', help: 'apellidos' as HelpKey },
               { key: 'apellido_mat', label: 'Apellido materno', placeholder: 'Apellido materno', help: 'apellidos' as HelpKey },
-              { key: 'telefono', label: 'Teléfono', placeholder: '987654321', help: 'telefono' as HelpKey },
+              { key: 'telefono',     label: 'Teléfono',         placeholder: '987654321',        help: 'telefono'  as HelpKey },
             ].map(({ key, label, placeholder, help }) => (
               <div className="p2-field" key={key}>
                 <label className="p2-label-field">
@@ -294,39 +388,8 @@ export default function Paso2Datos({
               </div>
               {showError('email')
                 ? <span className="p2-field-error">Ingresa un correo válido</span>
-                : <span className="p2-field-hint">Recibirás notificaciones sobre tu trámite en este correo</span>
-              }
+                : <span className="p2-field-hint">Recibirás notificaciones sobre tu trámite en este correo</span>}
             </div>
-          </div>
-
-          <div className="p2-divider" />
-
-          {/* PDF */}
-          <p className="p2-section-label">Documento adjunto</p>
-          <div className="p2-field">
-            {archivoPdf ? (
-              <div className="p2-file-attached">
-                <FileText size={18} color="#1D9E75" strokeWidth={1.8} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: '#1D9E75', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {archivoPdf.name}
-                  </p>
-                  <p style={{ fontSize: 12, color: '#5F6478' }}>{(archivoPdf.size / 1024).toFixed(1)} KB</p>
-                </div>
-                <button
-                  onClick={() => { setArchivoPdf(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3B0', display: 'flex', alignItems: 'center' }}>
-                  <X size={16} />
-                </button>
-              </div>
-            ) : (
-              <div className="p2-upload-zone" onClick={() => { setActiveHelp('pdf'); fileInputRef.current?.click(); }}>
-                <div className="p2-upload-icon"><Upload size={20} color="#185FA5" strokeWidth={1.8} /></div>
-                <p className="p2-upload-title">Haz clic para seleccionar un PDF</p>
-                <p className="p2-upload-sub">Máximo 10MB · Obligatorio para registrar tu trámite</p>
-              </div>
-            )}
-            <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={onArchivoChange} />
           </div>
 
           <div className="p2-divider" />
@@ -351,7 +414,7 @@ export default function Paso2Datos({
           </div>
         </div>
 
-        {/* ── Panel ayuda ── */}
+        {/* Panel ayuda */}
         <div className="p2-help-col">
           <div className="p2-progress">
             <div className="p2-progress-header">
@@ -377,9 +440,9 @@ export default function Paso2Datos({
           <div className="p2-help-reqs">
             <p className="p2-help-reqs-title">Documentos aceptados</p>
             <ul className="p2-req-list">
-              <li><span className={`p2-req-dot${tipoDoc === 'DNI' ? ' active' : ''}`} /><span><strong>DNI</strong> — autocompletado</span></li>
-              <li><span className={`p2-req-dot${tipoDoc === 'CARNET' ? ' active' : ''}`} /><span><strong>Carnet de Extranjería</strong></span></li>
-              <li><span className={`p2-req-dot${tipoDoc === 'PASAPORTE' ? ' active' : ''}`} /><span><strong>Pasaporte</strong></span></li>
+              <li><span className={`p2-req-dot${tipoDoc === 'DNI' ? ' active' : ''}`} /><span><strong>DNI</strong> — autocompletado RENIEC</span></li>
+              <li><span className={`p2-req-dot${tipoDoc === 'CARNET' ? ' active' : ''}`} /><span><strong>Carnet de Extranjería</strong> — con fecha de nacimiento</span></li>
+              <li><span className={`p2-req-dot${tipoDoc === 'PASAPORTE' ? ' active' : ''}`} /><span><strong>Pasaporte</strong> — con país y fecha de vencimiento</span></li>
             </ul>
           </div>
 

@@ -149,6 +149,7 @@ model TipoTramite {
     activo      Boolean @default(true)
 
     expedientes Expediente[]
+    requisitos  Requisito[]
 
     @@index([activo])
     @@map("tipos_tramite")
@@ -310,4 +311,19 @@ model Auditoria {
     @@index([registro_id])
     @@index([usuario_app_id])
     @@map("auditoria")
+}
+
+model Requisito {
+    id              Int      @id @default(autoincrement())
+    tipo_tramite_id Int
+    nombre          String   @db.VarChar(200)
+    descripcion     String?  @db.VarChar(400)
+    obligatorio     Boolean  @default(true)
+    orden           Int      @default(0)
+    created_at      DateTime @default(now())
+
+    tipoTramite TipoTramite @relation(fields: [tipo_tramite_id], references: [id], onDelete: Cascade)
+
+    @@index([tipo_tramite_id])
+    @@map("requisitos")
 }

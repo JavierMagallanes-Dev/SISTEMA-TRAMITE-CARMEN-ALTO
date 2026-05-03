@@ -2,6 +2,7 @@
 // Portal público para el ciudadano — sin autenticación.
 // RF19: Notificación al registrar trámite desde el portal.
 // Soporta: DNI, Carnet de Extranjería, Pasaporte.
+// Punto 3: Adjuntar documentos uno por uno según requisitos.
 
 import { Request, Response, NextFunction } from 'express';
 import { prisma }   from '../config/prisma';
@@ -25,8 +26,25 @@ export const listarTiposTramitePublico = async (
   } catch (err) { next(err); }
 };
 
+// ── GET /api/portal/tipos-tramite/:id/requisitos ─────────────
+export const listarRequisitos = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const tipoTramiteId = Number(req.params['id']);
+    if (!tipoTramiteId) throw new AppError(400, 'ID de tipo de trámite inválido.');
+
+    const requisitos = await prisma.requisito.findMany({
+      where:   { tipo_tramite_id: tipoTramiteId },
+      select:  { id: true, nombre: true, descripcion: true, obligatorio: true, orden: true },
+      orderBy: { orden: 'asc' },
+    });
+
+    res.json(requisitos);
+  } catch (err) { next(err); }
+};
+
 // ── GET /api/portal/consultar-dni/:dni ───────────────────────
-// Solo aplica para DNI — Carnet y Pasaporte se llenan manualmente.
 export const consultarDniPublico = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -34,14 +52,12 @@ export const consultarDniPublico = async (
     const dni = String(req.params['dni']);
     if (!dni || dni.length !== 8 || !/^\d+$/.test(dni)) throw new AppError(400, 'DNI inválido.');
 
-    // Buscar primero en BD local por numero_documento
     const ciudadanoLocal = await prisma.ciudadano.findFirst({
       where:  { numero_documento: dni, tipo_documento: 'DNI' },
       select: { nombres: true, apellido_pat: true, apellido_mat: true, email: true, telefono: true },
     });
     if (ciudadanoLocal) { res.json({ fuente: 'local', datos: ciudadanoLocal }); return; }
 
-    // Consultar RENIEC via ApiPeru
     const datosReniec = await consultarReniec(dni);
     if (datosReniec) { res.json({ fuente: 'reniec', datos: datosReniec }); return; }
 
@@ -55,27 +71,18 @@ export const registrarTramitePublico = async (
 ): Promise<void> => {
   try {
     const {
-      tipoDocumento,
-      dni,
+      tipoDocumento, dni,
       nombres, apellido_pat, apellido_mat,
-      email, telefono,
-      tipoTramiteId,
-      pais_emision,
-      fecha_vencimiento,
-      fecha_nacimiento,
+      email, telefono, tipoTramiteId,
+      pais_emision, fecha_vencimiento, fecha_nacimiento,
     } = req.body as Record<string, string>;
 
-    // El campo dni del body puede venir como 'dni' (legacy) o ya como parte del nuevo flujo
-    // numero_documento es el campo unificado
-    const numeroDoc    = dni || req.body.numero_documento;
-    const tipoDoc      = tipoDocumento || 'DNI';
+    const numeroDoc = dni || req.body.numero_documento;
+    const tipoDoc   = tipoDocumento || 'DNI';
 
-    // Validaciones básicas
-    if (!numeroDoc || !nombres || !apellido_pat || !email || !tipoTramiteId) {
-      throw new AppError(400, 'Faltan campos requeridos: número de documento, nombres, apellido_pat, email, tipoTramiteId.');
-    }
+    if (!numeroDoc || !nombres || !apellido_pat || !email || !tipoTramiteId)
+      throw new AppError(400, 'Faltan campos requeridos.');
 
-    // Validar formato según tipo de documento
     if (tipoDoc === 'DNI') {
       if (numeroDoc.length !== 8 || !/^\d+$/.test(numeroDoc))
         throw new AppError(400, 'El DNI debe tener exactamente 8 dígitos numéricos.');
@@ -92,44 +99,41 @@ export const registrarTramitePublico = async (
     const tipoTramite = await prisma.tipoTramite.findUnique({ where: { id: Number(tipoTramiteId) } });
     if (!tipoTramite || !tipoTramite.activo) throw new AppError(400, 'Tipo de trámite no válido o inactivo.');
 
-    // Buscar ciudadano existente por email (identificador universal)
     const ciudadanoExistente = await prisma.ciudadano.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
 
     let ciudadano;
     if (ciudadanoExistente) {
-      // Actualizar datos del ciudadano existente
       ciudadano = await prisma.ciudadano.update({
         where: { id: ciudadanoExistente.id },
         data: {
-          tipo_documento:    tipoDoc,
-          numero_documento:  numeroDoc.trim().toUpperCase(),
-          dni:               tipoDoc === 'DNI' ? numeroDoc.trim() : ciudadanoExistente.dni,
-          nombres:           nombres.trim(),
-          apellido_pat:      apellido_pat.trim(),
-          apellido_mat:      (apellido_mat ?? '').trim(),
-          telefono:          telefono ? telefono.trim() : null,
-          ...(pais_emision     && { pais_emision:     pais_emision.trim() }),
+          tipo_documento:   tipoDoc,
+          numero_documento: numeroDoc.trim().toUpperCase(),
+          dni:              tipoDoc === 'DNI' ? numeroDoc.trim() : ciudadanoExistente.dni,
+          nombres:          nombres.trim(),
+          apellido_pat:     apellido_pat.trim(),
+          apellido_mat:     (apellido_mat ?? '').trim(),
+          telefono:         telefono ? telefono.trim() : null,
+          ...(pais_emision      && { pais_emision:      pais_emision.trim() }),
           ...(fecha_vencimiento && { fecha_vencimiento: fecha_vencimiento.trim() }),
           ...(fecha_nacimiento  && { fecha_nacimiento:  fecha_nacimiento.trim() }),
         },
       });
     } else {
-      // Crear nuevo ciudadano
       ciudadano = await prisma.ciudadano.create({
         data: {
-          tipo_documento:    tipoDoc,
-          numero_documento:  numeroDoc.trim().toUpperCase(),
-          dni:               tipoDoc === 'DNI' ? numeroDoc.trim() : null,
-          nombres:           nombres.trim(),
-          apellido_pat:      apellido_pat.trim(),
-          apellido_mat:      (apellido_mat ?? '').trim(),
-          email:             email.toLowerCase().trim(),
-          telefono:          telefono ? telefono.trim() : null,
-          pais_emision:      pais_emision     ? pais_emision.trim()     : null,
-          fecha_vencimiento: fecha_vencimiento ? fecha_vencimiento.trim() : null,
-          fecha_nacimiento:  fecha_nacimiento  ? fecha_nacimiento.trim()  : null,
+          tipo_documento:   tipoDoc,
+          numero_documento: numeroDoc.trim().toUpperCase(),
+          dni:              tipoDoc === 'DNI' ? numeroDoc.trim() : null,
+          nombres:          nombres.trim(),
+          apellido_pat:     apellido_pat.trim(),
+          apellido_mat:     (apellido_mat ?? '').trim(),
+          email:            email.toLowerCase().trim(),
+          telefono:         telefono ? telefono.trim() : null,
+          pais_emision:     pais_emision      ? pais_emision.trim()      : null,
+          fecha_vencimiento:fecha_vencimiento ? fecha_vencimiento.trim() : null,
+          fecha_nacimiento: fecha_nacimiento  ? fecha_nacimiento.trim()  : null,
         },
       });
     }
@@ -160,14 +164,13 @@ export const registrarTramitePublico = async (
           usuarioId:        1,
           tipo_accion:      'REGISTRO',
           estado_resultado: 'PENDIENTE_PAGO',
-          comentario:       `Trámite registrado por el ciudadano desde el portal público. Tipo: ${tipoTramite.nombre}. Documento: ${tipoDoc} ${numeroDoc}`,
+          comentario:       `Trámite registrado desde el portal. Tipo: ${tipoTramite.nombre}. Documento: ${tipoDoc} ${numeroDoc}`,
         },
       });
 
       return exp;
     });
 
-    // Enviar email de confirmación RF19
     try {
       await notificarRegistro({
         email:          ciudadano.email,
@@ -188,6 +191,75 @@ export const registrarTramitePublico = async (
         ...expediente,
         instrucciones: `Presenta el código ${expediente.codigo} en ventanilla para pagar S/ ${tipoTramite.costo_soles}`,
       },
+    });
+  } catch (err) { next(err); }
+};
+
+// ── POST /api/portal/documento/:expedienteId/:requisitoId ────
+// Ciudadano sube un documento por requisito específico.
+export const subirDocumentoPorRequisito = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const expedienteId = Number(req.params['expedienteId']);
+    const requisitoId  = Number(req.params['requisitoId']);
+    const file         = req.file;
+
+    if (!file)         throw new AppError(400, 'No se recibió ningún archivo.');
+    if (!expedienteId) throw new AppError(400, 'ID de expediente inválido.');
+    if (!requisitoId)  throw new AppError(400, 'ID de requisito inválido.');
+
+    if (!file.mimetype.startsWith('application/pdf'))
+      throw new AppError(400, 'Solo se aceptan archivos PDF.');
+
+    if (file.size > 10 * 1024 * 1024)
+      throw new AppError(400, 'El archivo no puede superar los 10MB.');
+
+    // Verificar que el expediente existe y está en estado correcto
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id: expedienteId },
+      select: { id: true, estado: true, tipoTramiteId: true },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+
+    // Verificar que el requisito pertenece al tipo de trámite del expediente
+    const requisito = await prisma.requisito.findFirst({
+      where: { id: requisitoId, tipo_tramite_id: expediente.tipoTramiteId },
+    });
+
+    if (!requisito) throw new AppError(404, 'Requisito no válido para este trámite.');
+
+    // Verificar si ya existe un documento para este requisito en este expediente
+    const docExistente = await prisma.documento.findFirst({
+      where: { expedienteId, nombre: `REQ-${requisitoId}: ${requisito.nombre}` },
+    });
+
+    // Subir archivo a Supabase Storage
+    const url = await storageService.subirArchivo(file.buffer, file.mimetype, 'expedientes');
+
+    if (docExistente) {
+      // Actualizar documento existente
+      await prisma.documento.update({
+        where: { id: docExistente.id },
+        data:  { url, tipo_mime: file.mimetype },
+      });
+    } else {
+      // Crear nuevo documento vinculado al requisito
+      await prisma.documento.create({
+        data: {
+          expedienteId,
+          nombre:    `REQ-${requisitoId}: ${requisito.nombre}`,
+          url,
+          tipo_mime: file.mimetype,
+        },
+      });
+    }
+
+    res.json({
+      message:      `Documento "${requisito.nombre}" subido correctamente.`,
+      requisitoId,
+      url,
     });
   } catch (err) { next(err); }
 };
