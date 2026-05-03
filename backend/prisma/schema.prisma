@@ -113,8 +113,18 @@ model Usuario {
 }
 
 model Ciudadano {
-    id           Int      @id @default(autoincrement())
-    dni          String   @unique @db.VarChar(8)
+    id Int @id @default(autoincrement())
+
+    // Documento de identidad
+    tipo_documento    String  @default("DNI") @db.VarChar(10)
+    numero_documento  String  @db.VarChar(20)
+    pais_emision      String? @db.VarChar(60) // Solo PASAPORTE
+    fecha_vencimiento String? @db.VarChar(10) // Solo PASAPORTE (YYYY-MM-DD)
+    fecha_nacimiento  String? @db.VarChar(10) // Solo CARNET   (YYYY-MM-DD)
+
+    // Mantener dni para compatibilidad con registros existentes
+    dni String? @db.VarChar(20)
+
     nombres      String   @db.VarChar(100)
     apellido_pat String   @db.VarChar(80)
     apellido_mat String   @default("") @db.VarChar(80)
@@ -125,7 +135,7 @@ model Ciudadano {
 
     expedientes Expediente[]
 
-    @@index([dni])
+    @@index([numero_documento])
     @@index([email])
     @@map("ciudadanos")
 }

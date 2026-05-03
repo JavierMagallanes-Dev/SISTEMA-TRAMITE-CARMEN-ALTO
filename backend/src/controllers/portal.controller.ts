@@ -1,6 +1,7 @@
 // src/controllers/portal.controller.ts
 // Portal público para el ciudadano — sin autenticación.
 // RF19: Notificación al registrar trámite desde el portal.
+// Soporta: DNI, Carnet de Extranjería, Pasaporte.
 
 import { Request, Response, NextFunction } from 'express';
 import { prisma }   from '../config/prisma';
@@ -25,6 +26,7 @@ export const listarTiposTramitePublico = async (
 };
 
 // ── GET /api/portal/consultar-dni/:dni ───────────────────────
+// Solo aplica para DNI — Carnet y Pasaporte se llenan manualmente.
 export const consultarDniPublico = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -32,12 +34,14 @@ export const consultarDniPublico = async (
     const dni = String(req.params['dni']);
     if (!dni || dni.length !== 8 || !/^\d+$/.test(dni)) throw new AppError(400, 'DNI inválido.');
 
-    const ciudadanoLocal = await prisma.ciudadano.findUnique({
-      where:  { dni },
+    // Buscar primero en BD local por numero_documento
+    const ciudadanoLocal = await prisma.ciudadano.findFirst({
+      where:  { numero_documento: dni, tipo_documento: 'DNI' },
       select: { nombres: true, apellido_pat: true, apellido_mat: true, email: true, telefono: true },
     });
     if (ciudadanoLocal) { res.json({ fuente: 'local', datos: ciudadanoLocal }); return; }
 
+    // Consultar RENIEC via ApiPeru
     const datosReniec = await consultarReniec(dni);
     if (datosReniec) { res.json({ fuente: 'reniec', datos: datosReniec }); return; }
 
@@ -50,21 +54,85 @@ export const registrarTramitePublico = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
   try {
-    const { dni, nombres, apellido_pat, apellido_mat, email, telefono, tipoTramiteId } = req.body as Record<string, string>;
+    const {
+      tipoDocumento,
+      dni,
+      nombres, apellido_pat, apellido_mat,
+      email, telefono,
+      tipoTramiteId,
+      pais_emision,
+      fecha_vencimiento,
+      fecha_nacimiento,
+    } = req.body as Record<string, string>;
 
-    if (!dni || !nombres || !apellido_pat || !email || !tipoTramiteId) {
-      throw new AppError(400, 'Faltan campos requeridos: dni, nombres, apellido_pat, email, tipoTramiteId.');
+    // El campo dni del body puede venir como 'dni' (legacy) o ya como parte del nuevo flujo
+    // numero_documento es el campo unificado
+    const numeroDoc    = dni || req.body.numero_documento;
+    const tipoDoc      = tipoDocumento || 'DNI';
+
+    // Validaciones básicas
+    if (!numeroDoc || !nombres || !apellido_pat || !email || !tipoTramiteId) {
+      throw new AppError(400, 'Faltan campos requeridos: número de documento, nombres, apellido_pat, email, tipoTramiteId.');
     }
-    if (dni.length !== 8 || !/^\d+$/.test(dni)) throw new AppError(400, 'DNI inválido.');
+
+    // Validar formato según tipo de documento
+    if (tipoDoc === 'DNI') {
+      if (numeroDoc.length !== 8 || !/^\d+$/.test(numeroDoc))
+        throw new AppError(400, 'El DNI debe tener exactamente 8 dígitos numéricos.');
+    } else if (tipoDoc === 'CARNET') {
+      if (!/^\d{6,12}$/.test(numeroDoc))
+        throw new AppError(400, 'El Carnet de Extranjería debe tener entre 6 y 12 dígitos.');
+    } else if (tipoDoc === 'PASAPORTE') {
+      if (numeroDoc.trim().length < 6)
+        throw new AppError(400, 'El número de pasaporte debe tener al menos 6 caracteres.');
+      if (!pais_emision)
+        throw new AppError(400, 'Debes indicar el país de emisión del pasaporte.');
+    }
 
     const tipoTramite = await prisma.tipoTramite.findUnique({ where: { id: Number(tipoTramiteId) } });
     if (!tipoTramite || !tipoTramite.activo) throw new AppError(400, 'Tipo de trámite no válido o inactivo.');
 
-    const ciudadano = await prisma.ciudadano.upsert({
-      where:  { dni },
-      update: { nombres: nombres.trim(), apellido_pat: apellido_pat.trim(), apellido_mat: (apellido_mat ?? '').trim(), email: email.toLowerCase().trim(), ...(telefono && { telefono: telefono.trim() }) },
-      create: { dni, nombres: nombres.trim(), apellido_pat: apellido_pat.trim(), apellido_mat: (apellido_mat ?? '').trim(), email: email.toLowerCase().trim(), telefono: telefono ? telefono.trim() : null },
+    // Buscar ciudadano existente por email (identificador universal)
+    const ciudadanoExistente = await prisma.ciudadano.findUnique({
+      where: { email: email.toLowerCase().trim() },
     });
+
+    let ciudadano;
+    if (ciudadanoExistente) {
+      // Actualizar datos del ciudadano existente
+      ciudadano = await prisma.ciudadano.update({
+        where: { id: ciudadanoExistente.id },
+        data: {
+          tipo_documento:    tipoDoc,
+          numero_documento:  numeroDoc.trim().toUpperCase(),
+          dni:               tipoDoc === 'DNI' ? numeroDoc.trim() : ciudadanoExistente.dni,
+          nombres:           nombres.trim(),
+          apellido_pat:      apellido_pat.trim(),
+          apellido_mat:      (apellido_mat ?? '').trim(),
+          telefono:          telefono ? telefono.trim() : null,
+          ...(pais_emision     && { pais_emision:     pais_emision.trim() }),
+          ...(fecha_vencimiento && { fecha_vencimiento: fecha_vencimiento.trim() }),
+          ...(fecha_nacimiento  && { fecha_nacimiento:  fecha_nacimiento.trim() }),
+        },
+      });
+    } else {
+      // Crear nuevo ciudadano
+      ciudadano = await prisma.ciudadano.create({
+        data: {
+          tipo_documento:    tipoDoc,
+          numero_documento:  numeroDoc.trim().toUpperCase(),
+          dni:               tipoDoc === 'DNI' ? numeroDoc.trim() : null,
+          nombres:           nombres.trim(),
+          apellido_pat:      apellido_pat.trim(),
+          apellido_mat:      (apellido_mat ?? '').trim(),
+          email:             email.toLowerCase().trim(),
+          telefono:          telefono ? telefono.trim() : null,
+          pais_emision:      pais_emision     ? pais_emision.trim()     : null,
+          fecha_vencimiento: fecha_vencimiento ? fecha_vencimiento.trim() : null,
+          fecha_nacimiento:  fecha_nacimiento  ? fecha_nacimiento.trim()  : null,
+        },
+      });
+    }
 
     const codigo       = await generarCodigoExpediente();
     const fecha_limite = new Date();
@@ -92,14 +160,14 @@ export const registrarTramitePublico = async (
           usuarioId:        1,
           tipo_accion:      'REGISTRO',
           estado_resultado: 'PENDIENTE_PAGO',
-          comentario:       `Trámite registrado por el ciudadano desde el portal público. Tipo: ${tipoTramite.nombre}`,
+          comentario:       `Trámite registrado por el ciudadano desde el portal público. Tipo: ${tipoTramite.nombre}. Documento: ${tipoDoc} ${numeroDoc}`,
         },
       });
 
       return exp;
     });
 
-    console.log('📧 Enviando email de registro al ciudadano:', ciudadano.email);
+    // Enviar email de confirmación RF19
     try {
       await notificarRegistro({
         email:          ciudadano.email,
@@ -110,13 +178,12 @@ export const registrarTramitePublico = async (
         fecha_limite:   expediente.fecha_limite,
         costo_soles:    Number(tipoTramite.costo_soles),
       });
-      console.log('✅ Email RF19 enviado correctamente a:', ciudadano.email);
     } catch (e) {
       console.error('❌ Error RF19 al enviar email:', e);
     }
 
     res.status(201).json({
-      message: 'Trámite registrado exitosamente. Acércate a la municipalidad para realizar el pago.',
+      message: 'Trámite registrado exitosamente.',
       expediente: {
         ...expediente,
         instrucciones: `Presenta el código ${expediente.codigo} en ventanilla para pagar S/ ${tipoTramite.costo_soles}`,
@@ -139,15 +206,13 @@ export const consultarEstado = async (
         fecha_registro: true, fecha_limite: true,
         fecha_resolucion: true, url_pdf_firmado: true,
         codigo_verificacion_firma: true,
-        ciudadano:   { select: { nombres: true, apellido_pat: true } },
+        ciudadano:   { select: { nombres: true, apellido_pat: true, tipo_documento: true, numero_documento: true } },
         tipoTramite: { select: { nombre: true, plazo_dias: true, costo_soles: true } },
         areaActual:  { select: { nombre: true, sigla: true } },
-        // Incluir pagos para saber si ya subió comprobante
         pagos: {
           select: {
             id: true, boleta: true, monto_cobrado: true,
-            estado: true, fecha_pago: true,
-            url_comprobante: true,
+            estado: true, fecha_pago: true, url_comprobante: true,
           },
           orderBy: { fecha_pago: 'desc' },
           take: 1,
@@ -177,8 +242,6 @@ export const consultarEstado = async (
 };
 
 // ── POST /api/portal/comprobante/:codigo ─────────────────────
-// Ciudadano sube comprobante de pago desde el portal de consulta.
-// El pago queda en estado PENDIENTE hasta que el cajero lo verifique.
 export const subirComprobantePago = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -189,13 +252,11 @@ export const subirComprobantePago = async (
     if (!file) throw new AppError(400, 'No se recibió ningún archivo.');
 
     const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!tiposPermitidos.includes(file.mimetype)) {
+    if (!tiposPermitidos.includes(file.mimetype))
       throw new AppError(400, 'Solo se aceptan imágenes (JPG, PNG, WebP) o PDF.');
-    }
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > 10 * 1024 * 1024)
       throw new AppError(400, 'El archivo no puede superar los 10MB.');
-    }
 
     const expediente = await prisma.expediente.findUnique({
       where:  { codigo },
@@ -203,26 +264,21 @@ export const subirComprobantePago = async (
     });
 
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
-    if (expediente.estado !== 'PENDIENTE_PAGO') {
+    if (expediente.estado !== 'PENDIENTE_PAGO')
       throw new AppError(400, 'Solo se puede subir comprobante cuando el trámite está en estado PENDIENTE DE PAGO.');
-    }
 
-    // Verificar que no haya ya un comprobante pendiente
     const comprobanteExistente = await prisma.pago.findFirst({
       where: { expedienteId: expediente.id, estado: 'PENDIENTE' },
     });
-    if (comprobanteExistente) {
+    if (comprobanteExistente)
       throw new AppError(400, 'Ya enviaste un comprobante. Espera a que el cajero lo revise.');
-    }
 
-    // Subir archivo a Supabase Storage en carpeta comprobantes/
     const url = await storageService.subirArchivo(file.buffer, file.mimetype, 'comprobantes');
 
-    // Crear pago en estado PENDIENTE — el cajero lo verificará
     const pago = await prisma.pago.create({
       data: {
         expedienteId:    expediente.id,
-        cajeroId:        1, // sistema — el cajero real lo tomará al verificar
+        cajeroId:        1,
         boleta:          `COMP-${codigo}-${Date.now()}`,
         monto_cobrado:   expediente.tipoTramite.costo_soles,
         estado:          'PENDIENTE',
@@ -231,18 +287,15 @@ export const subirComprobantePago = async (
       },
     });
 
-    // Registrar movimiento informativo
     await prisma.movimiento.create({
-  data: {
-    expedienteId:     expediente.id,
-    usuarioId:        1,
-    tipo_accion:      'VERIFICACION_PAGO',
-    estado_resultado: 'PENDIENTE_PAGO',
-    comentario:       'Ciudadano adjuntó comprobante de pago. En espera de verificación por cajero.',
-  },
-});
-
-    console.log(`📎 Comprobante subido para ${codigo}: ${url}`);
+      data: {
+        expedienteId:     expediente.id,
+        usuarioId:        1,
+        tipo_accion:      'VERIFICACION_PAGO',
+        estado_resultado: 'PENDIENTE_PAGO',
+        comentario:       'Ciudadano adjuntó comprobante de pago. En espera de verificación por cajero.',
+      },
+    });
 
     res.json({
       message:         'Comprobante enviado exitosamente. El cajero revisará y verificará tu pago pronto.',
@@ -272,7 +325,7 @@ export const verificarPdfFirmado = async (
 
     res.json({
       valido:          true,
-      mensaje:         'Documento auténtico — firmado digitalmente con FirmaPeru.',
+      mensaje:         'Documento auténtico — firmado digitalmente.',
       codigo:          expediente.codigo,
       tramite:         expediente.tipoTramite.nombre,
       firmado_por:     expediente.firmadoPor?.nombre_completo ?? 'No disponible',
