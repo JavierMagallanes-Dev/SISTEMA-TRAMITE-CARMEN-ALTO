@@ -30,7 +30,7 @@ interface EstadoReq {
 }
 
 export default function Paso2Requisitos({
-  requisitos, expedienteId, codigoExp, onSubirDoc, onContinuar,
+  requisitos, codigoExp, onSubirDoc, onContinuar,
 }: Props) {
   const [estados, setEstados] = useState<Record<number, EstadoReq>>(() =>
     Object.fromEntries(requisitos.map(r => [r.id, { archivo: null, subiendo: false, subido: false, error: '' }]))

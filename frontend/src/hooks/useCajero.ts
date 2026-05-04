@@ -3,7 +3,6 @@
 
 import { useEffect, useState } from 'react';
 import { cajeroService } from '../services/cajero.service';
-import { toast }         from '../utils/toast';
 
 // ── Tipos ────────────────────────────────────────────────────
 export interface PagoComprobante {

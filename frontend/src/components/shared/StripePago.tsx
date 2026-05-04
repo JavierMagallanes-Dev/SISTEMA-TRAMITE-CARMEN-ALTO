@@ -16,7 +16,6 @@ import {
 import {
   CreditCard, Lock, CheckCircle,
   AlertCircle, Loader, ArrowLeft, Search, FileText,
-  ShieldCheck,
 } from 'lucide-react';
 
 const VITE_API_URL           = import.meta.env.VITE_API_URL           ?? 'http://localhost:3000/api';

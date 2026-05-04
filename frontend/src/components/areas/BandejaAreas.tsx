@@ -7,8 +7,6 @@ import EstadoBadge  from '../shared/EstadoBadge';
 import { FileText, Clock, Eye, Play, CheckCircle, AlertCircle, XCircle, Paperclip, Archive, PenLine } from 'lucide-react';
 import { formatFecha, diasRestantes, colorDiasRestantes } from '../../utils/formato';
 import type { ExpedienteBandeja } from '../../hooks/useAreas';
-import type { EstadoExpediente }  from '../../types';
-
 interface Props {
   bandeja:          ExpedienteBandeja[];
   esJefe:           boolean;

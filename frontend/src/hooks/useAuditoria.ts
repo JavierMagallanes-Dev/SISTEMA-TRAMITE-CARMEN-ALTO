@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import api                from '../services/api';
 import { auditoriaService } from '../services/auditoria.service';
 import { toast }          from '../utils/toast';
-import type { EstadoExpediente, Movimiento } from '../types';
 
 // ── Tipos ────────────────────────────────────────────────────
 export interface RegistroAuditoria {

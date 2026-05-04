@@ -1,16 +1,6 @@
 // src/utils/toast.ts
 // Helper tipado para disparar notificaciones Sonner desde cualquier lugar
 // del Sistema de Trámite Documentario · Carmen Alto.
-//
-// Uso:
-//   import { toast } from '../utils/toast';
-//   toast.success({ titulo: 'Expediente registrado', descripcion: 'EXP-2025-001234 fue creado.' });
-//   toast.error({ titulo: 'No se pudo guardar el pago' });
-//   toast.info({
-//     titulo: 'Hay 3 nuevos expedientes en tu bandeja',
-//     action: { label: 'Ver bandeja', onClick: () => navigate('/areas') },
-//   });
-
 import { toast as sonner } from 'sonner';
 import { CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react';
 import { createElement, type ReactElement } from 'react';

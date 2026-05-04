@@ -1,10 +1,5 @@
 // src/layouts/MainLayout.tsx
 // Layout principal del Sistema de Trámite Documentario · Carmen Alto
-// - Sidebar fijo en desktop (≥ lg)
-// - Drawer lateral con overlay en móvil/tablet (< lg)
-// - Botón "Cerrar sesión" SIEMPRE visible al fondo (sticky bottom) en AMBOS modos
-// - Modal de confirmación antes de cerrar sesión
-
 import { useEffect, useState, useMemo } from 'react';
 import type { ReactNode, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';

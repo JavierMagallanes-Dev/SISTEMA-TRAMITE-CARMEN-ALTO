@@ -1,213 +1,97 @@
-/* Estilos para HomePage — animaciones, cards, efectos visuales */
+/* Estilos Mejorados — Carmen Alto Portal */
 
-
-
-/* ── Reveal on scroll ───────────────────────────────────────── */
-
+/* ── Animaciones de Entrada ─────────────────────────────────── */
 .reveal {
-
   opacity: 0;
-
-  transform: translateY(24px);
-
-  transition: opacity .7s cubic-bezier(.22,.61,.36,1), transform .7s cubic-bezier(.22,.61,.36,1);
-
+  transform: translateY(30px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
+.reveal.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-d1 { transition-delay: 0.1s; }
+.reveal-d2 { transition-delay: 0.2s; }
+.reveal-d3 { transition-delay: 0.3s; }
 
-.reveal.show { opacity: 1; transform: translateY(0); }
-
-.reveal-d1 { transition-delay: .08s; }
-
-.reveal-d2 { transition-delay: .16s; }
-
-.reveal-d3 { transition-delay: .24s; }
-
-.reveal-d4 { transition-delay: .32s; }
-
-
-
-/* ── Card hover ─────────────────────────────────────────────── */
-
+/* ── Efectos de Tarjetas ────────────────────────────────────── */
 .card-fancy {
-
-  transition: transform .3s cubic-bezier(.22,.61,.36,1), box-shadow .3s, border-color .3s;
-
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
 .card-fancy:hover {
-
-  transform: translateY(-4px);
-
-  box-shadow: 0 18px 40px -20px rgba(33,110,206,.35);
-
+  transform: translateY(-8px);
+  border-color: rgba(33, 110, 206, 0.3);
 }
 
-
-
-/* ── Category chip ──────────────────────────────────────────── */
-
-.cat-chip {
-
-  width: 44px; height: 44px; border-radius: 12px;
-
-  display: flex; align-items: center; justify-content: center;
-
-  background: linear-gradient(135deg, #eaf2fb, white);
-
-  border: 1px solid #c7d8f0; color: #216ece;
-
-  transition: transform .35s cubic-bezier(.22,.61,.36,1), background .3s;
-
+/* ── Hero Overlay ───────────────────────────────────────────── */
+.hero-overlay {
+  background: linear-gradient(
+    to right,
+    rgba(20, 63, 122, 0.95) 0%,
+    rgba(20, 63, 122, 0.7) 50%,
+    rgba(20, 63, 122, 0.3) 100%
+  );
 }
 
-.card-fancy:hover .cat-chip {
-
-  transform: rotate(-6deg) scale(1.05);
-
-  background: linear-gradient(135deg, #216ece, #4abdef);
-
-  color: white;
-
-}
-
-
-
-/* ── Dotted horizontal connector ────────────────────────────── */
-
-.dotted-h {
-
-  background-image: radial-gradient(circle, #216ece 1.5px, transparent 1.5px);
-
-  background-size: 12px 4px;
-
-  background-repeat: repeat-x;
-
-  background-position: center;
-
-}
-
-
-
-/* ── Background grid ────────────────────────────────────────── */
-
-.bg-grid {
-
-  background-image:
-
-    linear-gradient(rgba(33,110,206,.06) 1px, transparent 1px),
-
-    linear-gradient(90deg, rgba(33,110,206,.06) 1px, transparent 1px);
-
-  background-size: 28px 28px;
-
-}
-
-
-
-/* ── Float animation ────────────────────────────────────────── */
-
-@keyframes floatY {
-
-  0%, 100% { transform: translateY(0); }
-
-  50%       { transform: translateY(-10px); }
-
-}
-
-.float-y { animation: floatY 6s ease-in-out infinite; }
-
-
-
-/* ── Pill scroll row ────────────────────────────────────────── */
-
-.pill-row {
-
-  scroll-snap-type: x mandatory;
-
-  -ms-overflow-style: none;
-
-  scrollbar-width: none;
-
-}
-
-.pill-row::-webkit-scrollbar { display: none; }
-
-.pill-row > * { scroll-snap-align: start; }
-
-
-
-/* ── Shimmer tag ────────────────────────────────────────────── */
-
-@keyframes shimmer {
-
-  0%   { background-position: -200% 0; }
-
-  100% { background-position:  200% 0; }
-
-}
-
-.tag-pop {
-
-  background: linear-gradient(90deg, #fef3c7, #fde68a, #fef3c7);
-
-  background-size: 200% 100%;
-
-  animation: shimmer 3.5s linear infinite;
-
-  color: #92400e;
-
-}
-
-
-
-/* ── FAQ accordion ──────────────────────────────────────────── */
-
-.faq-body {
-
-  max-height: 0;
-
-  overflow: hidden;
-
-  transition: max-height .35s cubic-bezier(.22,.61,.36,1);
-
-}
-
-.faq-body.open { max-height: 200px; }
-
-
-
-/* ── Hero gradient text ─────────────────────────────────────── */
-
+/* ── Texto con Degradado ────────────────────────────────────── */
 .grad-text-hero {
-
-  background: linear-gradient(135deg, #ffffff 0%, #4abdef 100%);
-
+  background: linear-gradient(135deg, #fff 0%, #4abdef 100%);
   -webkit-background-clip: text;
-
-  background-clip: text;
-
   -webkit-text-fill-color: transparent;
-
-  color: transparent;
-
 }
 
-
-
-/* ── Ribbon badge ───────────────────────────────────────────── */
-
+/* ── Ribbon Badge ───────────────────────────────────────────── */
 .ribbon {
+  position: absolute;
+  top: 12px;
+  right: -35px;
+  transform: rotate(45deg);
+  background: #f59e0b; /* Ambar para destacar sin ser agresivo */
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  padding: 5px 40px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  z-index: 10;
+}
 
-  position: absolute; top: 14px; right: -30px;
+/* ── Conector de Pasos ──────────────────────────────────────── */
+.dotted-h {
+  background-image: radial-gradient(circle, #cbd5e1 1.5px, transparent 1.5px);
+  background-size: 16px 16px;
+  background-repeat: repeat-x;
+  background-position: center;
+}
 
-  transform: rotate(35deg);
+/* ── Acordeón FAQ ───────────────────────────────────────────── */
+.faq-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+}
+.faq-body.open {
+  max-height: 500px;
+  opacity: 1;
+}
 
-  background: #dc2626; color: white;
+/* ── Fondo de Cuadrícula ─────────────────────────────────────── */
+.bg-grid {
+  background-image: 
+    linear-gradient(rgba(33, 110, 206, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(33, 110, 206, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
 
-  font-size: 10px; font-weight: 700;
-
-  text-transform: uppercase; letter-spacing: .1em;
-
-  padding: 3px 32px;
-
-} 
+/* ── Mejoras en el Scroll ────────────────────────────────────── */
+@media (max-width: 640px) {
+  .hero-overlay {
+    background: linear-gradient(
+      to bottom,
+      rgba(20, 63, 122, 0.9) 0%,
+      rgba(20, 63, 122, 0.95) 100%
+    );
+  }
+}

@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react';
 import api                from '../services/api';
 import { usuariosService }from '../services/usuarios.service';
-import { toast }          from '../utils/toast';
 import { ROL_LABEL }      from '../utils/constants';
 import type { Area }      from '../types';
 

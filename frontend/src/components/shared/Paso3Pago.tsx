@@ -8,7 +8,7 @@ import { useNavigate }      from 'react-router-dom';
 import {
   CheckCircle, Copy, Mail, Home,
   Upload, X, CreditCard, ImageIcon, Search,
-  Clock, AlertTriangle, Building2,
+  Clock, Building2,
 } from 'lucide-react';
 import StripePago from './StripePago';
 

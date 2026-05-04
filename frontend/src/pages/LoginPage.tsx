@@ -10,7 +10,7 @@ import Input            from '../components/ui/Input';
 import Button           from '../components/ui/Button';
 import Alert            from '../components/ui/Alert';
 import {
-  LogIn, Mail, Lock, Eye, EyeOff, Shield,
+  LogIn, Mail, Lock, Eye, EyeOff,
 } from 'lucide-react';
 import logoCA   from '../assets/logoCA.webp';
 import headerCA from '../assets/headerCA.webp';

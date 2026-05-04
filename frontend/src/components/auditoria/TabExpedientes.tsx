@@ -6,7 +6,7 @@ import Input       from '../ui/Input';
 import Spinner     from '../ui/Spinner';
 import EstadoBadge from '../shared/EstadoBadge';
 import { formatFecha, formatFechaHora } from '../../utils/formato';
-import { Search, FileText, User, Clock, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
+import { Search, FileText, User, Clock, ChevronDown, ChevronUp} from 'lucide-react';
 import type { ExpedienteAuditoria, ACCION_LABEL as AcLabel } from '../../hooks/useAuditoria';
 import type { EstadoExpediente } from '../../types';
 
