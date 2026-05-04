@@ -1,7 +1,5 @@
 // src/pages/MesaPartesPage.tsx
-// Mesa de Partes con:
-// - Vista previa de documentos (modal con iframe)
-// - Descarga de PDF unificado con todos los documentos
+// Mesa de Partes con código de aprobación por email para derivación.
 
 import { useEffect, useState, useRef } from 'react';
 import api                       from '../services/api';
@@ -19,11 +17,13 @@ import EstadoBadge               from '../components/shared/EstadoBadge';
 import TimelineMovimientos       from '../components/shared/TimelineMovimientos';
 import { toast }                 from '../utils/toast';
 import { diasRestantes, colorDiasRestantes, formatFecha } from '../utils/formato';
+import { useAuth }               from '../context/AuthContext';
 import type { Area, EstadoExpediente, Movimiento } from '../types';
 import {
   FileText, Plus, Send, RefreshCw, Search,
   Clock, Eye, Download, Upload, X,
   CheckCircle, AlertCircle, Package, ZoomIn,
+  ShieldCheck, Mail,
 } from 'lucide-react';
 
 interface TipoTramite { id: number; nombre: string; costo_soles: number; plazo_dias: number; }
@@ -56,6 +56,7 @@ interface DetalleExpediente {
 }
 
 export default function MesaPartesPage() {
+  const { usuario } = useAuth();
   const [tab,      setTab]      = useState<'bandeja' | 'registrar'>('bandeja');
   const [bandeja,  setBandeja]  = useState<ExpedienteBandeja[]>([]);
   const [tipos,    setTipos]    = useState<TipoTramite[]>([]);
@@ -65,15 +66,14 @@ export default function MesaPartesPage() {
   const [archivoPdf,  setArchivoPdf]  = useState<File | null>(null);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
 
-  const [modalDetalle, setModalDetalle] = useState(false);
-  const [detalle,      setDetalle]      = useState<DetalleExpediente | null>(null);
-  const [cargandoDet,  setCargandoDet]  = useState(false);
-  const [loadingReactivar,  setLoadingReactivar]  = useState(false);
-  const [loadingUnificado,  setLoadingUnificado]  = useState(false);
+  const [modalDetalle,    setModalDetalle]    = useState(false);
+  const [detalle,         setDetalle]         = useState<DetalleExpediente | null>(null);
+  const [cargandoDet,     setCargandoDet]     = useState(false);
+  const [loadingReactivar,setLoadingReactivar]= useState(false);
+  const [loadingUnificado,setLoadingUnificado]= useState(false);
 
-  // Vista previa de documento
-  const [modalPreview,  setModalPreview]  = useState(false);
-  const [previewDoc,    setPreviewDoc]    = useState<Documento | null>(null);
+  const [modalPreview, setModalPreview] = useState(false);
+  const [previewDoc,   setPreviewDoc]   = useState<Documento | null>(null);
 
   const [modalObservar,   setModalObservar]   = useState(false);
   const [expObservar,     setExpObservar]     = useState<DetalleExpediente | null>(null);
@@ -87,16 +87,16 @@ export default function MesaPartesPage() {
   const [buscandoDni, setBuscandoDni] = useState(false);
   const [loadingReg,  setLoadingReg]  = useState(false);
 
-  const [modalDerivar,   setModalDerivar]   = useState(false);
-  const [expDerivar,     setExpDerivar]     = useState<ExpedienteBandeja | null>(null);
-  const [areaDestino,    setAreaDestino]    = useState('');
-  const [instrucciones,  setInstrucciones]  = useState('');
-  const [loadingDerivar, setLoadingDerivar] = useState(false);
-
-  const [modalToken,    setModalToken]    = useState(false);
-  const [tokenInput,    setTokenInput]    = useState('');
-  const [loadingToken,  setLoadingToken]  = useState(false);
-  const [tokenGenerado, setTokenGenerado] = useState('');
+  // Modal derivar con código
+  const [modalDerivar,      setModalDerivar]      = useState(false);
+  const [expDerivar,        setExpDerivar]        = useState<ExpedienteBandeja | null>(null);
+  const [areaDestino,       setAreaDestino]       = useState('');
+  const [instrucciones,     setInstrucciones]     = useState('');
+  const [loadingCodigo,     setLoadingCodigo]     = useState(false);
+  const [codigoEnviado,     setCodigoEnviado]     = useState(false);
+  const [codigoDerivar,     setCodigoDerivar]     = useState('');
+  const [emailMDP,          setEmailMDP]          = useState('');
+  const [loadingDerivar,    setLoadingDerivar]    = useState(false);
 
   const descargarCargo = (expedienteId: number, codigo: string) => {
     api.get(`/recepcion/cargo/${expedienteId}`, { responseType: 'blob' })
@@ -106,40 +106,26 @@ export default function MesaPartesPage() {
         link.href  = url;
         link.setAttribute('download', `cargo-${codigo}.pdf`);
         document.body.appendChild(link);
-        link.click();
-        link.remove();
+        link.click(); link.remove();
         window.URL.revokeObjectURL(url);
       })
-      .catch(() => toast.error({ titulo: 'Error al generar el cargo de recepción.' }));
+      .catch(() => toast.error({ titulo: 'Error al generar el cargo.' }));
   };
 
-  // Descargar PDF unificado con todos los documentos del expediente
   const descargarPdfUnificado = async (expedienteId: number, codigo: string) => {
     setLoadingUnificado(true);
     try {
-      const res = await api.get(`/mesa-partes/expediente/${expedienteId}/pdf-unificado`, {
-        responseType: 'blob',
-      });
+      const res  = await api.get(`/mesa-partes/expediente/${expedienteId}/pdf-unificado`, { responseType: 'blob' });
       const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href  = url;
       link.setAttribute('download', `expediente-unificado-${codigo}.pdf`);
       document.body.appendChild(link);
-      link.click();
-      link.remove();
+      link.click(); link.remove();
       window.URL.revokeObjectURL(url);
-      toast.success({ titulo: 'PDF unificado descargado', descripcion: 'Todos los documentos están en un solo archivo.' });
-    } catch {
-      toast.error({ titulo: 'Error al generar el PDF unificado.' });
-    } finally {
-      setLoadingUnificado(false);
-    }
-  };
-
-  // Abrir vista previa de un documento
-  const abrirPreview = (doc: Documento) => {
-    setPreviewDoc(doc);
-    setModalPreview(true);
+      toast.success({ titulo: 'PDF unificado descargado' });
+    } catch { toast.error({ titulo: 'Error al generar el PDF unificado.' }); }
+    finally { setLoadingUnificado(false); }
   };
 
   const cargarDatos = async () => {
@@ -150,36 +136,33 @@ export default function MesaPartesPage() {
         mesaPartesService.tiposTramite(),
         mesaPartesService.areas(),
       ]);
-      setBandeja(band);
-      setTipos(tip);
-      setAreas(ar);
-    } catch {
-      toast.error({ titulo: 'Error al cargar los datos.' });
-    } finally {
-      setCargando(false);
-    }
+      setBandeja(band); setTipos(tip); setAreas(ar);
+    } catch { toast.error({ titulo: 'Error al cargar los datos.' }); }
+    finally { setCargando(false); }
   };
 
-  useEffect(() => { cargarDatos(); }, []);
+  // Cargar email del usuario actual
+  const cargarPerfil = async () => {
+    try {
+      const res = await api.get('/usuarios/mi-perfil');
+      setEmailMDP(res.data.email ?? '');
+    } catch { /* silencioso */ }
+  };
+
+  useEffect(() => { cargarDatos(); cargarPerfil(); }, []);
 
   const verDetalle = async (id: number) => {
-    setModalDetalle(true);
-    setCargandoDet(true);
+    setModalDetalle(true); setCargandoDet(true);
     try {
       const det = await areasService.detalle(id);
       setDetalle({ ...det, documentos: det.documentos ?? [] });
-    } catch {
-      toast.error({ titulo: 'Error al cargar el detalle.' });
-    } finally {
-      setCargandoDet(false);
-    }
+    } catch { toast.error({ titulo: 'Error al cargar el detalle.' }); }
+    finally { setCargandoDet(false); }
   };
 
   const abrirObservar = () => {
     if (!detalle) return;
-    setExpObservar(detalle);
-    setComentarioObs('');
-    setModalObservar(true);
+    setExpObservar(detalle); setComentarioObs(''); setModalObservar(true);
   };
 
   const handleObservar = async () => {
@@ -187,16 +170,10 @@ export default function MesaPartesPage() {
     setLoadingObservar(true);
     try {
       await mesaPartesService.observar(expObservar.id, comentarioObs.trim());
-      toast.success({ titulo: 'Expediente observado', descripcion: `${expObservar.codigo} marcado como OBSERVADO.` });
-      setModalObservar(false);
-      setModalDetalle(false);
-      setComentarioObs('');
-      cargarDatos();
-    } catch (err: any) {
-      toast.error({ titulo: err?.response?.data?.error ?? 'Error al observar.' });
-    } finally {
-      setLoadingObservar(false);
-    }
+      toast.success({ titulo: 'Expediente observado' });
+      setModalObservar(false); setModalDetalle(false); setComentarioObs(''); cargarDatos();
+    } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error.' }); }
+    finally { setLoadingObservar(false); }
   };
 
   const handleReactivar = async () => {
@@ -204,14 +181,10 @@ export default function MesaPartesPage() {
     setLoadingReactivar(true);
     try {
       await mesaPartesService.reactivar(detalle.id);
-      toast.success({ titulo: 'Expediente reactivado', descripcion: `${detalle.codigo} reactivado.` });
-      setModalDetalle(false);
-      cargarDatos();
-    } catch (err: any) {
-      toast.error({ titulo: err?.response?.data?.error ?? 'Error al reactivar.' });
-    } finally {
-      setLoadingReactivar(false);
-    }
+      toast.success({ titulo: 'Expediente reactivado' });
+      setModalDetalle(false); cargarDatos();
+    } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error.' }); }
+    finally { setLoadingReactivar(false); }
   };
 
   const buscarDni = async () => {
@@ -225,7 +198,7 @@ export default function MesaPartesPage() {
         nombres:      c.nombres      || '',
         apellido_pat: c.apellido_pat || c.apellidoPat || '',
         apellido_mat: c.apellido_mat || c.apellidoMat || '',
-        email:        c.email        || '',
+        email:         c.email        || '',
       }));
     } catch { /* RENIEC no disponible */ }
     finally { setBuscandoDni(false); }
@@ -233,8 +206,7 @@ export default function MesaPartesPage() {
 
   const handleRegistrar = async () => {
     if (!form.dni || !form.nombres || !form.apellido_pat || !form.email || !form.tipoTramiteId) {
-      toast.warning({ titulo: 'Completa todos los campos obligatorios.' });
-      return;
+      toast.warning({ titulo: 'Completa todos los campos obligatorios.' }); return;
     }
     setLoadingReg(true);
     try {
@@ -243,59 +215,54 @@ export default function MesaPartesPage() {
         try { await documentosService.subirDocumento(res.expediente.id, archivoPdf); }
         catch { console.warn('No se pudo subir el PDF.'); }
       }
-      toast.success({ titulo: 'Expediente registrado', descripcion: `${res.expediente.codigo} creado correctamente.` });
+      toast.success({ titulo: 'Expediente registrado', descripcion: `${res.expediente.codigo} creado.` });
       setForm({ dni: '', nombres: '', apellido_pat: '', apellido_mat: '', email: '', telefono: '', tipoTramiteId: '' });
-      setArchivoPdf(null);
-      setTab('bandeja');
-      cargarDatos();
-    } catch (err: any) {
-      toast.error({ titulo: err?.response?.data?.error ?? 'Error al registrar.' });
-    } finally {
-      setLoadingReg(false);
-    }
+      setArchivoPdf(null); setTab('bandeja'); cargarDatos();
+    } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error.' }); }
+    finally { setLoadingReg(false); }
   };
 
+  // Abrir modal derivar — resetear estado
   const abrirDerivar = (exp: ExpedienteBandeja) => {
-    setExpDerivar(exp); setAreaDestino(''); setInstrucciones(''); setModalDerivar(true);
+    setExpDerivar(exp); setAreaDestino(''); setInstrucciones('');
+    setCodigoEnviado(false); setCodigoDerivar('');
+    setModalDerivar(true);
   };
 
-  const handleDerivar = async () => {
+  // PASO 1: Solicitar código por email
+  const solicitarCodigoDerivar = async () => {
     if (!expDerivar || !areaDestino) return;
+    setLoadingCodigo(true);
+    try {
+      const res = await api.post('/mesa-partes/solicitar-codigo-derivacion', {
+        expedienteId:  expDerivar.id,
+        areaDestinoId: areaDestino,
+        instrucciones,
+      });
+      setCodigoEnviado(true);
+      toast.success({ titulo: 'Código enviado', descripcion: res.data.message });
+    } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error al enviar el código.' }); }
+    finally { setLoadingCodigo(false); }
+  };
+
+  // PASO 2: Confirmar derivación con código
+  const handleDerivar = async () => {
+    if (!codigoDerivar.trim()) return;
     setLoadingDerivar(true);
     try {
-      const res = await mesaPartesService.derivar(expDerivar.id, Number(areaDestino), instrucciones);
-      setTokenGenerado(res.token);
-      setModalDerivar(false);
-      setModalToken(true);
-    } catch (err: any) {
-      toast.error({ titulo: err?.response?.data?.error ?? 'Error al derivar.' });
-    } finally {
-      setLoadingDerivar(false);
-    }
+      await api.post('/mesa-partes/derivar', { codigo: codigoDerivar.trim() });
+toast.success({ titulo: 'Expediente derivado correctamente', descripcion: 'El expediente fue enviado al área técnica.' });
+setModalDerivar(false);
+cargarDatos();
+    } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error al derivar.' }); }
+    finally { setLoadingDerivar(false); }
   };
 
-  const handleConfirmarToken = async () => {
-    const token = tokenInput.trim() || tokenGenerado;
-    if (!token) return;
-    setLoadingToken(true);
-    try {
-      await mesaPartesService.confirmarDerivacion(token);
-      toast.success({ titulo: 'Derivación confirmada', descripcion: 'El expediente avanzó a DERIVADO.' });
-      setModalToken(false);
-      setTokenInput('');
-      setTokenGenerado('');
-      cargarDatos();
-    } catch (err: any) {
-      toast.error({ titulo: err?.response?.data?.error ?? 'Error al confirmar.' });
-    } finally {
-      setLoadingToken(false);
-    }
-  };
 
   const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') { toast.warning({ titulo: 'Solo se aceptan PDFs.' }); return; }
+    if (file.type !== 'application/pdf') { toast.warning({ titulo: 'Solo PDFs.' }); return; }
     if (file.size > 10 * 1024 * 1024)   { toast.warning({ titulo: 'Máximo 10MB.' }); return; }
     setArchivoPdf(file);
   };
@@ -303,14 +270,13 @@ export default function MesaPartesPage() {
   const setF = (field: string, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
-  // Nombre legible del documento (quitar prefijo REQ-N:)
   const nombreDoc = (nombre: string) =>
     nombre.startsWith('REQ-') ? nombre.replace(/^REQ-\d+:\s*/, '') : nombre;
 
-  if (cargando) return <Spinner text="Cargando Mesa de Partes..." />;
-
   const puedeObservar = (estado: EstadoExpediente) =>
     ['RECIBIDO', 'EN_REVISION_MDP'].includes(estado);
+
+  if (cargando) return <Spinner text="Cargando Mesa de Partes..." />;
 
   return (
     <div className="p-6 space-y-6">
@@ -342,9 +308,9 @@ export default function MesaPartesPage() {
         <Card padding={false}>
           <Table keyField="id" data={bandeja} emptyText="No hay expedientes en bandeja."
             columns={[
-              { key: 'codigo', header: 'Código', render: (r) => <span className="font-mono text-xs text-blue-600 font-semibold">{r.codigo}</span> },
+              { key: 'codigo',    header: 'Código',    render: (r) => <span className="font-mono text-xs text-blue-600 font-semibold">{r.codigo}</span> },
               { key: 'ciudadano', header: 'Ciudadano', render: (r) => <div><p className="text-sm font-medium text-gray-800">{r.ciudadano.nombres} {r.ciudadano.apellido_pat}</p><p className="text-xs text-gray-400">{r.ciudadano.dni}</p></div> },
-              { key: 'estado', header: 'Estado', render: (r) => <EstadoBadge estado={r.estado} size="sm" /> },
+              { key: 'estado',    header: 'Estado',    render: (r) => <EstadoBadge estado={r.estado} size="sm" /> },
               { key: 'fecha_limite', header: 'Plazo', render: (r) => { const dias = diasRestantes(r.fecha_limite); return <span className={`text-xs font-medium ${colorDiasRestantes(dias)}`}>{dias < 0 ? `Vencido ${Math.abs(dias)}d` : `${dias}d restantes`}</span>; } },
               { key: 'pago', header: 'Pago', render: (r) => r.pagos?.length > 0 ? <span className="text-xs text-green-600 font-medium flex items-center gap-1"><CheckCircle size={12} />Verificado</span> : <span className="text-xs text-yellow-600">Pendiente</span> },
               { key: 'acciones', header: '', render: (r) => (
@@ -365,12 +331,8 @@ export default function MesaPartesPage() {
           <CardTitle>Registrar nuevo expediente</CardTitle>
           <div className="mt-4 space-y-4">
             <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <Input label="DNI del ciudadano" placeholder="12345678" value={form.dni}
-                  onChange={(e) => setF('dni', e.target.value)} maxLength={8} required />
-              </div>
-              <Button variant="secondary" icon={<Search size={14} />} loading={buscandoDni}
-                onClick={buscarDni} disabled={form.dni.length !== 8}>Buscar DNI</Button>
+              <div className="flex-1"><Input label="DNI del ciudadano" placeholder="12345678" value={form.dni} onChange={(e) => setF('dni', e.target.value)} maxLength={8} required /></div>
+              <Button variant="secondary" icon={<Search size={14} />} loading={buscandoDni} onClick={buscarDni} disabled={form.dni.length !== 8}>Buscar DNI</Button>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Input label="Nombres"          value={form.nombres}      onChange={(e) => setF('nombres', e.target.value)}      required />
@@ -382,24 +344,21 @@ export default function MesaPartesPage() {
             <div>
               <label className="text-sm font-medium text-gray-700 block mb-1">Tipo de trámite <span className="text-red-500">*</span></label>
               <select value={form.tipoTramiteId} onChange={(e) => setF('tipoTramiteId', e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
                 <option value="">Seleccionar trámite...</option>
                 {tipos.map((t) => <option key={t.id} value={t.id}>{t.nombre} — S/ {Number(t.costo_soles).toFixed(2)} ({t.plazo_dias} días)</option>)}
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">Documento adjunto (PDF) <span className="text-gray-400 font-normal">— opcional</span></label>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Documento adjunto <span className="text-gray-400 font-normal">— opcional</span></label>
               {archivoPdf ? (
                 <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <FileText size={16} className="text-green-600 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-green-700 truncate">{archivoPdf.name}</p>
-                    <p className="text-xs text-green-500">{(archivoPdf.size / 1024).toFixed(1)} KB</p>
-                  </div>
+                  <p className="text-sm font-medium text-green-700 flex-1 truncate">{archivoPdf.name}</p>
                   <button onClick={() => { setArchivoPdf(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
                 </div>
               ) : (
-                <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50">
                   <Upload size={20} className="mx-auto text-gray-400 mb-1" />
                   <p className="text-sm text-gray-500">Haz clic para seleccionar un PDF (Máx 10MB)</p>
                 </div>
@@ -416,116 +375,68 @@ export default function MesaPartesPage() {
 
       {/* Modal detalle */}
       <Modal open={modalDetalle} onClose={() => setModalDetalle(false)} title="Detalle del expediente" size="lg">
-        {cargandoDet ? <Spinner text="Cargando detalle..." /> : detalle ? (
+        {cargandoDet ? <Spinner text="Cargando..." /> : detalle ? (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><p className="text-xs text-gray-400">Código</p><p className="font-mono font-bold text-blue-600">{detalle.codigo}</p></div>
               <div><p className="text-xs text-gray-400">Estado</p><EstadoBadge estado={detalle.estado} /></div>
               <div><p className="text-xs text-gray-400">Ciudadano</p><p className="font-medium">{detalle.ciudadano.nombres} {detalle.ciudadano.apellido_pat}</p><p className="text-xs text-gray-500">DNI: {detalle.ciudadano.dni} · {detalle.ciudadano.email}</p></div>
-              <div><p className="text-xs text-gray-400">Trámite</p><p className="font-medium">{detalle.tipoTramite.nombre}</p><p className="text-xs text-gray-500">{detalle.tipoTramite.plazo_dias} días · S/ {Number(detalle.tipoTramite.costo_soles).toFixed(2)}</p></div>
+              <div><p className="text-xs text-gray-400">Trámite</p><p className="font-medium">{detalle.tipoTramite.nombre}</p></div>
               <div><p className="text-xs text-gray-400">Registrado</p><p>{formatFecha(detalle.fecha_registro)}</p></div>
               <div><p className="text-xs text-gray-400">Fecha límite</p><p className={colorDiasRestantes(diasRestantes(detalle.fecha_limite))}>{formatFecha(detalle.fecha_limite)}</p></div>
             </div>
-
-            {/* ── Sección documentos mejorada ── */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <CardTitle>Documentos adjuntos ({detalle.documentos?.length ?? 0})</CardTitle>
+                <CardTitle>Documentos ({detalle.documentos?.length ?? 0})</CardTitle>
                 {detalle.documentos && detalle.documentos.length > 0 && (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    icon={<Package size={13} />}
-                    loading={loadingUnificado}
-                    onClick={() => descargarPdfUnificado(detalle.id, detalle.codigo)}>
-                    Descargar todo en un PDF
-                  </Button>
+                  <Button size="sm" variant="primary" icon={<Package size={13} />} loading={loadingUnificado} onClick={() => descargarPdfUnificado(detalle.id, detalle.codigo)}>Descargar todo en PDF</Button>
                 )}
               </div>
-
               {detalle.documentos && detalle.documentos.length > 0 ? (
                 <div className="space-y-2">
                   {detalle.documentos.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-200 hover:bg-blue-50 transition-colors">
+                    <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-200 transition-colors">
                       <FileText size={16} className="text-blue-500 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p>
-                        <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
-                      </div>
+                      <div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p><p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p></div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {/* Vista previa */}
-                        <button
-                          onClick={() => abrirPreview(doc)}
-                          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-                          <ZoomIn size={13} />
-                          Vista previa
+                        <button onClick={() => { setPreviewDoc(doc); setModalPreview(true); }} className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100">
+                          <ZoomIn size={13} />Vista previa
                         </button>
-                        {/* Descarga individual */}
-                        <a
-                          href={doc.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                          <Download size={13} />
-                          Descargar
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100">
+                          <Download size={13} />Descargar
                         </a>
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <p className="text-sm text-gray-400 mt-2 bg-gray-50 rounded-lg p-3 text-center">El ciudadano no adjuntó documentos.</p>
-              )}
+              ) : <p className="text-sm text-gray-400 mt-2 bg-gray-50 rounded-lg p-3 text-center">El ciudadano no adjuntó documentos.</p>}
             </div>
-
             <div className="space-y-2">
               {puedeObservar(detalle.estado) && (
                 <div className="pt-2 border-t border-gray-100">
-                  <Button variant="secondary" icon={<AlertCircle size={14} />} onClick={abrirObservar} className="w-full justify-center">Observar expediente — Faltan documentos</Button>
-                  <p className="text-xs text-gray-400 text-center mt-1">Marca el expediente como observado y notifica al ciudadano</p>
+                  <Button variant="secondary" icon={<AlertCircle size={14} />} onClick={abrirObservar} className="w-full justify-center">Observar expediente</Button>
                 </div>
               )}
               {detalle.estado === 'OBSERVADO' && (
                 <div className="pt-2 border-t border-gray-100">
-                  <Button variant="primary" icon={<CheckCircle size={14} />} onClick={handleReactivar} loading={loadingReactivar} className="w-full justify-center">Reactivar expediente — Documentos subsanados</Button>
-                  <p className="text-xs text-gray-400 text-center mt-1">El expediente volverá a RECIBIDO y podrás derivarlo</p>
+                  <Button variant="primary" icon={<CheckCircle size={14} />} onClick={handleReactivar} loading={loadingReactivar} className="w-full justify-center">Reactivar expediente</Button>
                 </div>
               )}
             </div>
-
-            <div>
-              <CardTitle>Historial de movimientos</CardTitle>
-              <div className="mt-3"><TimelineMovimientos movimientos={detalle.movimientos} /></div>
-            </div>
+            <div><CardTitle>Historial</CardTitle><div className="mt-3"><TimelineMovimientos movimientos={detalle.movimientos} /></div></div>
           </div>
         ) : null}
       </Modal>
 
-      {/* Modal vista previa de documento */}
-      <Modal
-        open={modalPreview}
-        onClose={() => { setModalPreview(false); setPreviewDoc(null); }}
-        title={previewDoc ? nombreDoc(previewDoc.nombre) : 'Vista previa'}
-        size="lg">
+      {/* Modal vista previa */}
+      <Modal open={modalPreview} onClose={() => { setModalPreview(false); setPreviewDoc(null); }} title={previewDoc ? nombreDoc(previewDoc.nombre) : 'Vista previa'} size="lg">
         {previewDoc && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-400">{formatFecha(previewDoc.uploaded_at)}</p>
-              <a
-                href={previewDoc.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 bg-blue-50 rounded-lg">
-                <Download size={14} />
-                Descargar este documento
-              </a>
+            <div className="flex justify-end">
+              <a href={previewDoc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg"><Download size={14} />Descargar</a>
             </div>
             <div className="w-full rounded-lg overflow-hidden border border-gray-200" style={{ height: '70vh' }}>
-              <iframe
-                src={`${previewDoc.url}#toolbar=1&navpanes=0`}
-                className="w-full h-full"
-                title={nombreDoc(previewDoc.nombre)}
-              />
+              <iframe src={`${previewDoc.url}#toolbar=1&navpanes=0`} className="w-full h-full" title={nombreDoc(previewDoc.nombre)} />
             </div>
           </div>
         )}
@@ -535,48 +446,91 @@ export default function MesaPartesPage() {
       <Modal open={modalObservar} onClose={() => setModalObservar(false)} title="Observar expediente" size="sm"
         footer={<><Button variant="secondary" onClick={() => setModalObservar(false)}>Cancelar</Button><Button variant="secondary" icon={<AlertCircle size={14} />} loading={loadingObservar} onClick={handleObservar} disabled={!comentarioObs.trim()} className="border-orange-300 text-orange-600 hover:bg-orange-50">Marcar como Observado</Button></>}>
         <div className="space-y-4">
-          <Alert type="warning" message="El ciudadano recibirá un email con el detalle de la observación y podrá adjuntar los documentos faltantes desde el portal." />
-          <Input label="Detalle de la observación" placeholder="Ej: Falta fotocopia del DNI, plano de ubicación..." value={comentarioObs} onChange={(e) => setComentarioObs(e.target.value)} required autoFocus />
+          <Alert type="warning" message="El ciudadano recibirá un email con la observación." />
+          <Input label="Detalle de la observación" placeholder="Ej: Falta fotocopia del DNI..." value={comentarioObs} onChange={(e) => setComentarioObs(e.target.value)} required autoFocus />
         </div>
       </Modal>
 
-      {/* Modal derivar */}
-      <Modal open={modalDerivar} onClose={() => setModalDerivar(false)} title="Derivar expediente al área técnica" size="sm"
-        footer={<><Button variant="secondary" onClick={() => setModalDerivar(false)}>Cancelar</Button><Button variant="primary" loading={loadingDerivar} icon={<Send size={14} />} onClick={handleDerivar} disabled={!areaDestino}>Derivar</Button></>}>
+      {/* ── Modal derivar con código por email ── */}
+      <Modal open={modalDerivar} onClose={() => setModalDerivar(false)} title="Derivar expediente al área técnica" size="sm">
         {expDerivar && (
           <div className="space-y-4">
-            <div className="bg-blue-50 rounded-lg p-3 space-y-0.5">
+            <div className="bg-blue-50 rounded-lg p-3">
               <p className="text-xs text-gray-500">Expediente a derivar</p>
               <p className="font-mono text-sm font-semibold text-blue-600">{expDerivar.codigo}</p>
               <p className="text-sm text-gray-700">{expDerivar.ciudadano.nombres} {expDerivar.ciudadano.apellido_pat}</p>
               <p className="text-sm text-gray-500">{expDerivar.tipoTramite.nombre}</p>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">Área destino <span className="text-red-500">*</span></label>
-              <select value={areaDestino} onChange={(e) => setAreaDestino(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                <option value="">Seleccionar área...</option>
-                {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre} ({a.sigla})</option>)}
-              </select>
+
+            {/* Email actualizable */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500 flex items-center gap-1">
+                <Mail size={12} className="text-blue-500" />
+                Email donde recibirás el código
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500"
+                  value={emailMDP}
+                  onChange={(e) => setEmailMDP(e.target.value)}
+                  placeholder="tu@correo.com"
+                />
+                <button
+                  onClick={async () => {
+                    if (!emailMDP.trim() || !usuario) return;
+                    try {
+                      await api.patch(`/usuarios/${usuario?.id}/email`, { email: emailMDP.trim() });
+                      toast.success({ titulo: 'Email actualizado correctamente.' });
+                    } catch (err: any) {
+                      toast.error({ titulo: err?.response?.data?.error ?? 'Error al actualizar.' });
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+                  Guardar
+                </button>
+              </div>
             </div>
-            <Input label="Instrucciones (opcional)" placeholder="Instrucciones para el área técnica..." value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} />
+
+            {!codigoEnviado ? (
+              // Paso 1: Seleccionar área y solicitar código
+              <>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Área destino <span className="text-red-500">*</span></label>
+                  <select value={areaDestino} onChange={(e) => setAreaDestino(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
+                    <option value="">Seleccionar área...</option>
+                    {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre} ({a.sigla})</option>)}
+                  </select>
+                </div>
+                <Input label="Instrucciones (opcional)" placeholder="Instrucciones para el área técnica..." value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} />
+                <Alert type="info" message="Se enviará un código de 6 dígitos a tu correo para confirmar la derivación." />
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={() => setModalDerivar(false)} className="flex-1 justify-center">Cancelar</Button>
+                  <Button variant="primary" icon={<ShieldCheck size={14} />} loading={loadingCodigo}
+                    disabled={!areaDestino} onClick={solicitarCodigoDerivar} className="flex-1 justify-center">
+                    Enviar código
+                  </Button>
+                </div>
+              </>
+            ) : (
+              // Paso 2: Ingresar código
+              <>
+                <Alert type="info" message={`Código enviado a ${emailMDP}. Ingrésalo para confirmar.`} />
+                <Input label="Código de aprobación (6 dígitos)" placeholder="000000" value={codigoDerivar}
+                  onChange={(e) => setCodigoDerivar(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength={6} autoFocus />
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={() => setCodigoEnviado(false)} className="flex-1 justify-center">Cambiar área</Button>
+                  <Button variant="primary" icon={<Send size={14} />} loading={loadingDerivar}
+                    disabled={codigoDerivar.length !== 6} onClick={handleDerivar} className="flex-1 justify-center">
+                    Confirmar derivación
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
-      </Modal>
-
-      {/* Modal token */}
-      <Modal open={modalToken} onClose={() => setModalToken(false)} title="Confirmar derivación" size="sm"
-        footer={<><Button variant="secondary" onClick={() => setModalToken(false)}>Cancelar</Button><Button variant="primary" loading={loadingToken} icon={<CheckCircle size={14} />} onClick={handleConfirmarToken}>Confirmar derivación</Button></>}>
-        <div className="space-y-4">
-          <Alert type="info" message="Token generado. En producción se envía por email. Para la demo confirma directamente." />
-          {tokenGenerado && (
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-500 mb-1">Token generado:</p>
-              <p className="font-mono text-xs text-gray-700 break-all">{tokenGenerado}</p>
-            </div>
-          )}
-          <Input label="Token (opcional)" placeholder="O confirma directamente con el botón" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} helper="Puedes confirmar sin pegar el token si ya aparece arriba." />
-        </div>
       </Modal>
     </div>
   );

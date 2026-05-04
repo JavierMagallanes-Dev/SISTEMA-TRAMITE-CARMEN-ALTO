@@ -29,14 +29,12 @@ export const errorHandler = (
     return;
   }
 
-  // Error de Prisma: registro duplicado (unique constraint)
-  if (err.message.includes('Unique constraint')) {
+ if (err.message?.includes('Unique constraint')) {
     res.status(409).json({ error: 'Ya existe un registro con esos datos.' });
     return;
   }
 
-  // Error de Prisma: registro no encontrado
-  if (err.message.includes('Record to update not found')) {
+  if (err.message?.includes('Record to update not found')) {
     res.status(404).json({ error: 'Registro no encontrado.' });
     return;
   }

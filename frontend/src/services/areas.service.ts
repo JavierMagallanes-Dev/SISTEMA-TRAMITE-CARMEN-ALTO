@@ -20,11 +20,18 @@ export const areasService = {
   vistoBueno: (id: number) =>
     api.patch(`/areas/visto-bueno/${id}`).then(r => r.data),
 
-  subirPdfFirmado: (id: number, url_pdf_firmado: string) =>
-    api.post(`/areas/subir-pdf-firmado/${id}`, { url_pdf_firmado }).then(r => r.data),
-
   archivar: (id: number) =>
     api.patch(`/areas/archivar/${id}`).then(r => r.data),
+
   reactivar: (id: number) =>
-  api.patch(`/areas/reactivar/${id}`).then(r => r.data),
+    api.patch(`/areas/reactivar/${id}`).then(r => r.data),
+
+  solicitarCodigoFirma: (expedienteId: number) =>
+    api.post(`/areas/solicitar-codigo-firma/${expedienteId}`).then(r => r.data),
+
+  firmar: (expedienteId: number, datos: {
+    codigo: string; pagina: number;
+    posicion_x: number; posicion_y: number;
+    ancho: number; alto: number;
+  }) => api.post(`/areas/firmar/${expedienteId}`, datos).then(r => r.data),
 };

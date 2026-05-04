@@ -1,7 +1,6 @@
 // src/routes/usuarios.routes.ts
-// Todas las rutas requieren: autenticado + rol ADMIN
-
 import { Router } from 'express';
+import multer      from 'multer';
 import {
   listarUsuarios,
   obtenerUsuario,
@@ -12,28 +11,42 @@ import {
   resetPassword,
   listarAreas,
   listarRoles,
+  subirFirmaPng,
+  miPerfil,
+  actualizarEmail,
 } from '../controllers/usuarios.controller';
 import { autenticar }  from '../middlewares/auth.middleware';
 import { autorizar }   from '../middlewares/roles.middleware';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
-// Aplicar autenticación y rol ADMIN a todas las rutas
+// Perfil propio — cualquier usuario autenticado
+router.get('/mi-perfil', autenticar, miPerfil);
+
+// Subir firma PNG — el propio usuario o Admin
+router.post(
+  '/:id/firma',
+  autenticar,
+  upload.single('firma'),
+  subirFirmaPng,
+);
+
+// Actualizar email propio — cualquier usuario autenticado
+router.patch('/:id/email', autenticar, actualizarEmail);
+
+// Rutas de Admin
 router.use(autenticar, autorizar('ADMIN'));
 
-// Catálogos
 router.get('/areas', listarAreas);
 router.get('/roles', listarRoles);
+router.get('/',      listarUsuarios);
+router.get('/:id',   obtenerUsuario);
+router.post('/',     crearUsuario);
+router.put('/:id',   editarUsuario);
 
-// CRUD usuarios
-router.get('/',    listarUsuarios);
-router.get('/:id', obtenerUsuario);
-router.post('/',   crearUsuario);
-router.put('/:id', editarUsuario);
-
-// Acciones sobre el estado del usuario
-router.patch('/:id/desactivar',    desactivarUsuario);
-router.patch('/:id/activar',       activarUsuario);
+router.patch('/:id/desactivar',     desactivarUsuario);
+router.patch('/:id/activar',        activarUsuario);
 router.patch('/:id/reset-password', resetPassword);
 
 export default router;

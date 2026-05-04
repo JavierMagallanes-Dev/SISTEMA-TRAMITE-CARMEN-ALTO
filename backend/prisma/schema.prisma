@@ -94,6 +94,7 @@ model Usuario {
     activo          Boolean  @default(true)
     created_at      DateTime @default(now())
     updated_at      DateTime @updatedAt
+    url_firma_png   String?  @db.VarChar(500)
 
     rolId  Int
     areaId Int?

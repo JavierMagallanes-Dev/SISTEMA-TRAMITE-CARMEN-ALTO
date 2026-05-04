@@ -1,40 +1,40 @@
 // src/routes/areas.routes.ts
-
 import { Router } from 'express';
 import {
   bandejaPorArea,
   detalleExpediente,
+  descargarPdfUnificadoArea,
   tomarExpediente,
   observarExpediente,
   rechazarExpediente,
   darVistoBueno,
-  subirPdfFirmado,
   archivarExpediente,
-  reactivarExpediente,
   historialExpedientes,
+  reactivarExpediente,
+  solicitarCodigoFirma,
+  firmarExpediente,
 } from '../controllers/areas.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { autorizar }  from '../middlewares/roles.middleware';
 
 const router = Router();
 
-// Autenticación requerida para todas las rutas
-router.use(autenticar);
+router.use(autenticar, autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_DE_PARTES'));
 
-// Bandeja y detalle — Técnico, Jefe y Admin
-router.get('/bandeja', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_DE_PARTES'), bandejaPorArea);
-router.get('/expediente/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN', 'MESA_DE_PARTES'), detalleExpediente);
-router.get('/historial', autorizar('JEFE_AREA', 'ADMIN'), historialExpedientes);
+router.get('/bandeja',                        bandejaPorArea);
+router.get('/historial',                      historialExpedientes);
+router.get('/expediente/:id',                 detalleExpediente);
+router.get('/expediente/:id/pdf-unificado',   descargarPdfUnificadoArea);
 
+router.patch('/tomar/:id',                    tomarExpediente);
+router.patch('/observar/:id',                 observarExpediente);
+router.patch('/rechazar/:id',                 rechazarExpediente);
+router.patch('/visto-bueno/:id',              darVistoBueno);
+router.patch('/archivar/:id',                 archivarExpediente);
+router.patch('/reactivar/:id',                reactivarExpediente);
 
-// Acciones del Técnico
-router.patch('/tomar/:id',    autorizar('TECNICO', 'ADMIN'),              tomarExpediente);
-router.patch('/observar/:id', autorizar('TECNICO', 'ADMIN'),              observarExpediente);
-router.patch('/rechazar/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN'), rechazarExpediente);
-router.patch('/reactivar/:id', autorizar('TECNICO', 'JEFE_AREA', 'ADMIN'), reactivarExpediente);
-// Acciones del Jefe de Área
-router.patch('/visto-bueno/:id', autorizar('JEFE_AREA', 'TECNICO', 'ADMIN'), darVistoBueno);
-router.post('/subir-pdf-firmado/:id', autorizar('JEFE_AREA', 'ADMIN'), subirPdfFirmado);
-router.patch('/archivar/:id',         autorizar('JEFE_AREA', 'ADMIN'), archivarExpediente);
+// Firma digital con imagen PNG + código por email
+router.post('/solicitar-codigo-firma/:id',    solicitarCodigoFirma);
+router.post('/firmar/:id',                    firmarExpediente);
 
 export default router;

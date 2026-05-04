@@ -1,7 +1,7 @@
 // src/controllers/mesaPartes.controller.ts
 // RF19: Notificación al registrar expediente.
-// RF20: Notificación al derivar, observar y reactivar (subsanación).
-// NUEVO: PDF unificado con todos los documentos del expediente.
+// RF20: Notificación al derivar, observar y reactivar.
+// NUEVO: Código de aprobación por email para confirmar derivación.
 
 import { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
@@ -11,6 +11,16 @@ import { AppError } from '../middlewares/error.middleware';
 import { generarCodigoExpediente } from '../utils/codigo';
 import { consultarReniec } from '../utils/reniec';
 import { notificarRegistro, notificarCambioEstado } from '../services/email.service';
+import { Resend } from 'resend';
+import { env } from '../config/env';
+
+const resend = new Resend(env.RESEND_API_KEY);
+
+// Códigos de derivación temporales: { usuarioId: { codigo, expira, expedienteId, areaDestinoId } }
+const codigosDerivacion = new Map<number, {
+  codigo: string; expira: Date;
+  expedienteId: number; areaDestinoId: number; instrucciones?: string;
+}>();
 
 const selectNotificacion = {
   codigo:      true,
@@ -28,8 +38,8 @@ export const consultarDni = async (
     if (!dni || dni.length !== 8 || !/^\d+$/.test(dni)) throw new AppError(400, 'DNI inválido.');
 
     const ciudadanoLocal = await prisma.ciudadano.findFirst({
-  where: { numero_documento: dni, tipo_documento: 'DNI' },
-});
+      where: { numero_documento: dni, tipo_documento: 'DNI' },
+    });
     if (ciudadanoLocal) { res.json({ fuente: 'local', ciudadano: ciudadanoLocal }); return; }
 
     const datosReniec = await consultarReniec(dni);
@@ -73,28 +83,38 @@ export const registrarExpediente = async (
     const tipoTramite = await prisma.tipoTramite.findUnique({ where: { id: Number(tipoTramiteId) } });
     if (!tipoTramite || !tipoTramite.activo) throw new AppError(400, 'Tipo de trámite no válido.');
 
-    const ciudadano = await prisma.ciudadano.upsert({
-  where:  { email: email.toLowerCase().trim() },
-  update: {
-    tipo_documento:   'DNI',
-    numero_documento: dni,
-    dni,
-    nombres:      nombres.trim(),
-    apellido_pat: apellido_pat.trim(),
-    apellido_mat: (apellido_mat ?? '').trim(),
-    ...(telefono && { telefono: telefono.trim() }),
-  },
-  create: {
-    tipo_documento:   'DNI',
-    numero_documento: dni,
-    dni,
-    nombres:      nombres.trim(),
-    apellido_pat: apellido_pat.trim(),
-    apellido_mat: (apellido_mat ?? '').trim(),
-    email:        email.toLowerCase().trim(),
-    telefono:     telefono ? telefono.trim() : null,
-  },
-});
+    const ciudadanoExistente = await prisma.ciudadano.findUnique({
+      where: { email: email.toLowerCase().trim() },
+    });
+
+    let ciudadano;
+    if (ciudadanoExistente) {
+      ciudadano = await prisma.ciudadano.update({
+        where: { id: ciudadanoExistente.id },
+        data: {
+          tipo_documento:   'DNI',
+          numero_documento: dni,
+          dni,
+          nombres:      nombres.trim(),
+          apellido_pat: apellido_pat.trim(),
+          apellido_mat: (apellido_mat ?? '').trim(),
+          ...(telefono && { telefono: telefono.trim() }),
+        },
+      });
+    } else {
+      ciudadano = await prisma.ciudadano.create({
+        data: {
+          tipo_documento:   'DNI',
+          numero_documento: dni,
+          dni,
+          nombres:      nombres.trim(),
+          apellido_pat: apellido_pat.trim(),
+          apellido_mat: (apellido_mat ?? '').trim(),
+          email:        email.toLowerCase().trim(),
+          telefono:     telefono ? telefono.trim() : null,
+        },
+      });
+    }
 
     const codigo       = await generarCodigoExpediente();
     const fecha_limite = new Date();
@@ -145,7 +165,6 @@ export const bandejaMDP = async (
 };
 
 // ── GET /api/mesa-partes/expediente/:id/pdf-unificado ────────
-// Fusiona todos los PDFs del expediente en uno solo para descarga.
 export const descargarPdfUnificado = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -166,64 +185,43 @@ export const descargarPdfUnificado = async (
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
 
     const docsPdf = expediente.documentos.filter(d => d.tipo_mime === 'application/pdf');
-
     if (docsPdf.length === 0) throw new AppError(404, 'El expediente no tiene documentos PDF adjuntos.');
 
-    // Crear PDF unificado
     const pdfFinal = await PDFDocument.create();
-
-    // Agregar portada de índice
-    const portada = pdfFinal.addPage([595, 842]); // A4
+    const portada  = pdfFinal.addPage([595, 842]);
     const { width, height } = portada.getSize();
 
     portada.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
     portada.drawText('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', { x: 40, y: height - 30, size: 13, color: { red: 1, green: 1, blue: 1, type: 'RGB' as any } });
-    portada.drawText('Sistema de Trámite Documentario', { x: 40, y: height - 50, size: 10, color: { red: 0.75, green: 0.85, blue: 0.95, type: 'RGB' as any } });
-
+    portada.drawText('Sistema de Tramite Documentario', { x: 40, y: height - 50, size: 10, color: { red: 0.75, green: 0.85, blue: 0.95, type: 'RGB' as any } });
     portada.drawText('EXPEDIENTE UNIFICADO', { x: 40, y: height - 120, size: 16, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
-    portada.drawText(`Código: ${expediente.codigo}`, { x: 40, y: height - 150, size: 12, color: { red: 0.1, green: 0.37, blue: 0.65, type: 'RGB' as any } });
+    portada.drawText(`Codigo: ${expediente.codigo}`, { x: 40, y: height - 150, size: 12, color: { red: 0.1, green: 0.37, blue: 0.65, type: 'RGB' as any } });
     portada.drawText(`Ciudadano: ${expediente.ciudadano.nombres} ${expediente.ciudadano.apellido_pat}`, { x: 40, y: height - 175, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
-    portada.drawText(`Trámite: ${expediente.tipoTramite.nombre}`, { x: 40, y: height - 195, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
+    portada.drawText(`Tramite: ${expediente.tipoTramite.nombre}`, { x: 40, y: height - 195, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
     portada.drawText(`Generado: ${new Date().toLocaleString('es-PE')}`, { x: 40, y: height - 215, size: 10, color: { red: 0.5, green: 0.5, blue: 0.5, type: 'RGB' as any } });
-
-    // Índice de documentos
     portada.drawText('DOCUMENTOS INCLUIDOS:', { x: 40, y: height - 260, size: 11, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
-    portada.drawRectangle({ x: 40, y: height - 268, width: width - 80, height: 1, color: { red: 0.85, green: 0.85, blue: 0.85, type: 'RGB' as any } });
 
     docsPdf.forEach((doc, i) => {
       const nombre = doc.nombre.startsWith('REQ-') ? doc.nombre.replace(/^REQ-\d+:\s*/, '') : doc.nombre;
       portada.drawText(`${i + 1}. ${nombre}`, { x: 40, y: height - 290 - (i * 22), size: 10, color: { red: 0.2, green: 0.2, blue: 0.2, type: 'RGB' as any } });
     });
 
-    // Fusionar cada PDF
-    let errores = 0;
     for (const doc of docsPdf) {
       try {
-        const response = await fetch(doc.url);
-        if (!response.ok) { errores++; continue; }
+        const response    = await fetch(doc.url);
+        if (!response.ok) continue;
         const arrayBuffer = await response.arrayBuffer();
         const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
         const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
-
-        // Página separadora con nombre del documento
-        const separador = pdfFinal.addPage([595, 842]);
+        const separador   = pdfFinal.addPage([595, 842]);
+        const nombre      = doc.nombre.startsWith('REQ-') ? doc.nombre.replace(/^REQ-\d+:\s*/, '') : doc.nombre;
         separador.drawRectangle({ x: 0, y: 380, width: 595, height: 82, color: { red: 0.93, green: 0.95, blue: 0.98, type: 'RGB' as any } });
-        const nombre = doc.nombre.startsWith('REQ-') ? doc.nombre.replace(/^REQ-\d+:\s*/, '') : doc.nombre;
         separador.drawText(nombre, { x: 40, y: 430, size: 14, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
-        separador.drawText(`Documento ${docsPdf.indexOf(doc) + 1} de ${docsPdf.length}`, { x: 40, y: 408, size: 10, color: { red: 0.5, green: 0.5, blue: 0.5, type: 'RGB' as any } });
-
         paginas.forEach(p => pdfFinal.addPage(p));
-      } catch {
-        errores++;
-      }
-    }
-
-    if (pdfFinal.getPageCount() <= 1 && errores === docsPdf.length) {
-      throw new AppError(500, 'No se pudieron descargar los documentos para unificar.');
+      } catch { continue; }
     }
 
     const pdfBytes = await pdfFinal.save();
-
     res.writeHead(200, {
       'Content-Type':        'application/pdf',
       'Content-Disposition': `attachment; filename="expediente-unificado-${expediente.codigo}.pdf"`,
@@ -234,113 +232,107 @@ export const descargarPdfUnificado = async (
   } catch (err) { next(err); }
 };
 
-// ── PATCH /api/mesa-partes/observar/:id ──────────────────────
-export const observarExpedienteMDP = async (
+// ── POST /api/mesa-partes/solicitar-codigo-derivacion ────────
+// Genera código de 6 dígitos y lo envía al email del funcionario.
+export const solicitarCodigoDerivacion = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
   try {
-    const id             = Number(req.params['id']);
-    const usuarioId      = req.usuario!.id;
-    const { comentario } = req.body as { comentario: string };
-
-    if (!comentario?.trim()) throw new AppError(400, 'El comentario de observación es obligatorio.');
-
-    const expediente = await prisma.expediente.findUnique({
-      where:  { id },
-      select: { estado: true, ...selectNotificacion },
-    });
-
-    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
-    if (!['RECIBIDO', 'EN_REVISION_MDP', 'EN_PROCESO'].includes(expediente.estado)) {
-      throw new AppError(400, `No se puede observar un expediente en estado ${expediente.estado}.`);
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.expediente.update({ where: { id }, data: { estado: 'OBSERVADO' } });
-      await tx.movimiento.create({
-        data: { expedienteId: id, usuarioId, tipo_accion: 'OBSERVACION', estado_resultado: 'OBSERVADO', comentario: comentario.trim() },
-      });
-    });
-
-    notificarCambioEstado({
-      email:       expediente.ciudadano.email,
-      nombres:     expediente.ciudadano.nombres,
-      codigo:      expediente.codigo,
-      tipoTramite: expediente.tipoTramite.nombre,
-      estado:      'OBSERVADO',
-      comentario:  comentario.trim(),
-      area:        expediente.areaActual?.nombre,
-    }).catch((e) => console.warn('⚠️ Email OBSERVADO MDP:', e));
-
-    res.json({ message: 'Expediente marcado como OBSERVADO. Ciudadano notificado.' });
-  } catch (err) { next(err); }
-};
-
-// ── PATCH /api/mesa-partes/reactivar/:id ─────────────────────
-export const reactivarExpediente = async (
-  req: Request, res: Response, next: NextFunction
-): Promise<void> => {
-  try {
-    const id        = Number(req.params['id']);
     const usuarioId = req.usuario!.id;
-
-    const expediente = await prisma.expediente.findUnique({
-      where:  { id },
-      select: { estado: true, ...selectNotificacion },
-    });
-
-    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
-    if (expediente.estado !== 'OBSERVADO') {
-      throw new AppError(400, `Solo se pueden reactivar expedientes en OBSERVADO. Estado: ${expediente.estado}`);
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.expediente.update({ where: { id }, data: { estado: 'RECIBIDO' } });
-      await tx.movimiento.create({
-        data: {
-          expedienteId:     id,
-          usuarioId,
-          tipo_accion:      'SUBSANACION',
-          estado_resultado: 'RECIBIDO',
-          comentario:       'Expediente reactivado por Mesa de Partes. Documentos subsanados por el ciudadano.',
-        },
-      });
-    });
-
-    notificarCambioEstado({
-      email:       expediente.ciudadano.email,
-      nombres:     expediente.ciudadano.nombres,
-      codigo:      expediente.codigo,
-      tipoTramite: expediente.tipoTramite.nombre,
-      estado:      'SUBSANADO',
-      comentario:  'Tus documentos han sido revisados y subsanados correctamente. Tu trámite está en espera de derivación al área técnica.',
-      area:        expediente.areaActual?.nombre,
-    }).catch((e) => console.warn('⚠️ Email SUBSANACION:', e));
-
-    res.json({ message: 'Expediente reactivado. Estado: RECIBIDO.' });
-  } catch (err) { next(err); }
-};
-
-// ── POST /api/mesa-partes/derivar ────────────────────────────
-export const derivarExpediente = async (
-  req: Request, res: Response, next: NextFunction
-): Promise<void> => {
-  try {
     const { expedienteId, areaDestinoId, instrucciones } = req.body as Record<string, string>;
-    const usuarioId = req.usuario!.id;
 
     if (!expedienteId || !areaDestinoId) throw new AppError(400, 'Faltan campos: expedienteId, areaDestinoId.');
 
     const expediente = await prisma.expediente.findUnique({
-      where:   { id: Number(expedienteId) },
+      where:  { id: Number(expedienteId) },
+      select: { estado: true, codigo: true, tipoTramite: { select: { nombre: true } } },
+    });
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+    if (!['EN_REVISION_MDP', 'RECIBIDO'].includes(expediente.estado))
+      throw new AppError(400, `No se puede derivar en estado ${expediente.estado}.`);
+
+    const area = await prisma.area.findUnique({ where: { id: Number(areaDestinoId) } });
+    if (!area) throw new AppError(400, 'Área destino no encontrada.');
+
+    const usuario = await prisma.usuario.findUnique({
+      where:  { id: usuarioId },
+      select: { email: true, nombre_completo: true },
+    });
+    if (!usuario) throw new AppError(404, 'Usuario no encontrado.');
+
+    // Generar código de 6 dígitos
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const expira = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+
+    codigosDerivacion.set(usuarioId, {
+      codigo, expira,
+      expedienteId:  Number(expedienteId),
+      areaDestinoId: Number(areaDestinoId),
+      instrucciones: instrucciones?.trim(),
+    });
+
+    // Enviar por email
+    await resend.emails.send({
+      from:    'Municipalidad Carmen Alto <noreply@municipalidadcarmenalto.site>',
+      to:      usuario.email,
+      subject: `Código de aprobación para derivar — ${expediente.codigo}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px;">
+          <div style="background: #042C53; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;">
+            <h2 style="color: white; margin: 0; font-size: 18px;">Municipalidad Distrital de Carmen Alto</h2>
+            <p style="color: rgba(255,255,255,0.7); margin: 6px 0 0; font-size: 13px;">Mesa de Partes — Sistema de Trámite Documentario</p>
+          </div>
+          <div style="background: #f8f9fb; padding: 28px; border-radius: 0 0 10px 10px; border: 1px solid #e2e8f0; border-top: none;">
+            <p style="color: #1e293b; font-size: 15px;">Hola, <strong>${usuario.nombre_completo}</strong></p>
+            <p style="color: #64748b; font-size: 14px;">Ingresa el siguiente código para confirmar la derivación del expediente <strong>${expediente.codigo}</strong> al área <strong>${area.nombre}</strong>:</p>
+            <div style="background: #042C53; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
+              <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px;">Código de aprobación</p>
+              <p style="color: white; font-size: 36px; font-weight: 800; letter-spacing: 8px; margin: 0; font-family: monospace;">${codigo}</p>
+            </div>
+            <p style="color: #dc2626; font-size: 13px; text-align: center;">⚠ Este código expira en 10 minutos.</p>
+            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">Si no solicitaste este código, ignora este mensaje.</p>
+          </div>
+        </div>
+      `,
+    });
+
+    res.json({
+      message: `Código enviado a ${usuario.email}. Expira en 10 minutos.`,
+      email:   usuario.email,
+    });
+  } catch (err) { next(err); }
+};
+
+// ── POST /api/mesa-partes/derivar ────────────────────────────
+// Ahora valida el código de aprobación antes de derivar.
+export const derivarExpediente = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const usuarioId = req.usuario!.id;
+    const { codigo } = req.body as { codigo: string };
+
+    if (!codigo?.trim()) throw new AppError(400, 'El código de aprobación es obligatorio.');
+
+    // Validar código
+    const entry = codigosDerivacion.get(usuarioId);
+    if (!entry)                         throw new AppError(400, 'No hay un código activo. Solicita uno nuevo.');
+    if (new Date() > entry.expira)      { codigosDerivacion.delete(usuarioId); throw new AppError(400, 'El código ha expirado. Solicita uno nuevo.'); }
+    if (entry.codigo !== codigo.trim()) throw new AppError(400, 'Código incorrecto.');
+
+    codigosDerivacion.delete(usuarioId);
+
+    const { expedienteId, areaDestinoId, instrucciones } = entry;
+
+    const expediente = await prisma.expediente.findUnique({
+      where:   { id: expedienteId },
       include: { ciudadano: true, tipoTramite: true },
     });
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
-    if (!['EN_REVISION_MDP', 'RECIBIDO'].includes(expediente.estado)) {
+    if (!['EN_REVISION_MDP', 'RECIBIDO'].includes(expediente.estado))
       throw new AppError(400, `No se puede derivar en estado ${expediente.estado}.`);
-    }
 
-    const area = await prisma.area.findUnique({ where: { id: Number(areaDestinoId) } });
+    const area = await prisma.area.findUnique({ where: { id: areaDestinoId } });
     if (!area) throw new AppError(400, 'Área destino no encontrada.');
 
     const token      = randomBytes(32).toString('hex');
@@ -349,11 +341,11 @@ export const derivarExpediente = async (
 
     await prisma.$transaction(async (tx) => {
       await tx.derivacionPendiente.create({
-        data: { expedienteId: Number(expedienteId), areaDestinoId: Number(areaDestinoId), token, instrucciones: instrucciones?.trim() ?? null, estado: 'PENDIENTE', expires_at },
+        data: { expedienteId, areaDestinoId, token, instrucciones: instrucciones ?? null, estado: 'PENDIENTE', expires_at },
       });
-      await tx.expediente.update({ where: { id: Number(expedienteId) }, data: { estado: 'EN_REVISION_MDP', areaActualId: Number(areaDestinoId) } });
+      await tx.expediente.update({ where: { id: expedienteId }, data: { estado: 'EN_REVISION_MDP', areaActualId: areaDestinoId } });
       await tx.movimiento.create({
-        data: { expedienteId: Number(expedienteId), usuarioId, tipo_accion: 'DERIVACION', estado_resultado: 'EN_REVISION_MDP', areaDestinoId: Number(areaDestinoId), comentario: instrucciones ? `Derivado a ${area.nombre}. Instrucciones: ${instrucciones.trim()}` : `Derivado a ${area.nombre}.` },
+        data: { expedienteId, usuarioId, tipo_accion: 'DERIVACION', estado_resultado: 'EN_REVISION_MDP', areaDestinoId, comentario: instrucciones ? `Derivado a ${area.nombre}. Instrucciones: ${instrucciones}` : `Derivado a ${area.nombre}.` },
       });
     });
 
@@ -378,7 +370,7 @@ export const confirmarDerivacion = async (
       await tx.derivacionPendiente.update({ where: { token }, data: { estado: 'CONFIRMADO' } });
       await tx.expediente.update({ where: { id: derivacion.expedienteId }, data: { estado: 'DERIVADO' } });
       await tx.movimiento.create({
-        data: { expedienteId: derivacion.expedienteId, usuarioId: req.usuario!.id, tipo_accion: 'DERIVACION', estado_resultado: 'DERIVADO', areaDestinoId: derivacion.areaDestinoId, comentario: 'Derivación confirmada por token.' },
+        data: { expedienteId: derivacion.expedienteId, usuarioId: req.usuario!.id, tipo_accion: 'DERIVACION', estado_resultado: 'DERIVADO', areaDestinoId: derivacion.areaDestinoId, comentario: 'Derivación confirmada.' },
       });
     });
 
@@ -400,5 +392,84 @@ export const confirmarDerivacion = async (
     }
 
     res.json({ message: 'Derivación confirmada. El expediente avanzó a DERIVADO.' });
+  } catch (err) { next(err); }
+};
+
+// ── PATCH /api/mesa-partes/observar/:id ──────────────────────
+export const observarExpedienteMDP = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id             = Number(req.params['id']);
+    const usuarioId      = req.usuario!.id;
+    const { comentario } = req.body as { comentario: string };
+
+    if (!comentario?.trim()) throw new AppError(400, 'El comentario de observación es obligatorio.');
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: { estado: true, ...selectNotificacion },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+    if (!['RECIBIDO', 'EN_REVISION_MDP', 'EN_PROCESO'].includes(expediente.estado))
+      throw new AppError(400, `No se puede observar en estado ${expediente.estado}.`);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.expediente.update({ where: { id }, data: { estado: 'OBSERVADO' } });
+      await tx.movimiento.create({
+        data: { expedienteId: id, usuarioId, tipo_accion: 'OBSERVACION', estado_resultado: 'OBSERVADO', comentario: comentario.trim() },
+      });
+    });
+
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email,
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'OBSERVADO',
+      comentario:  comentario.trim(),
+      area:        expediente.areaActual?.nombre,
+    }).catch((e) => console.warn('⚠️ Email OBSERVADO MDP:', e));
+
+    res.json({ message: 'Expediente marcado como OBSERVADO.' });
+  } catch (err) { next(err); }
+};
+
+// ── PATCH /api/mesa-partes/reactivar/:id ─────────────────────
+export const reactivarExpediente = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id        = Number(req.params['id']);
+    const usuarioId = req.usuario!.id;
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: { estado: true, ...selectNotificacion },
+    });
+
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+    if (expediente.estado !== 'OBSERVADO')
+      throw new AppError(400, `Solo se pueden reactivar expedientes en OBSERVADO.`);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.expediente.update({ where: { id }, data: { estado: 'RECIBIDO' } });
+      await tx.movimiento.create({
+        data: { expedienteId: id, usuarioId, tipo_accion: 'SUBSANACION', estado_resultado: 'RECIBIDO', comentario: 'Expediente reactivado. Documentos subsanados.' },
+      });
+    });
+
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email,
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'SUBSANADO',
+      comentario:  'Tus documentos han sido revisados y aceptados. Tu trámite continúa.',
+      area:        expediente.areaActual?.nombre,
+    }).catch((e) => console.warn('⚠️ Email SUBSANACION MDP:', e));
+
+    res.json({ message: 'Expediente reactivado. Estado: RECIBIDO.' });
   } catch (err) { next(err); }
 };
