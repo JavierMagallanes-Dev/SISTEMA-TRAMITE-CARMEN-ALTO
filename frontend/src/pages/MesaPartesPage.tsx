@@ -1,5 +1,5 @@
 // src/pages/MesaPartesPage.tsx
-// Mesa de Partes con código de aprobación por email para derivación.
+// Mesa de Partes — derivación con PIN de seguridad.
 
 import { useEffect, useState, useRef } from 'react';
 import api                       from '../services/api';
@@ -17,13 +17,11 @@ import EstadoBadge               from '../components/shared/EstadoBadge';
 import TimelineMovimientos       from '../components/shared/TimelineMovimientos';
 import { toast }                 from '../utils/toast';
 import { diasRestantes, colorDiasRestantes, formatFecha } from '../utils/formato';
-import { useAuth }               from '../context/AuthContext';
 import type { Area, EstadoExpediente, Movimiento } from '../types';
 import {
   FileText, Plus, Send, RefreshCw, Search,
   Clock, Eye, Download, Upload, X,
-  CheckCircle, AlertCircle, Package, ZoomIn,
-  ShieldCheck, Mail,
+  CheckCircle, AlertCircle, Package, ZoomIn, ShieldCheck,
 } from 'lucide-react';
 
 interface TipoTramite { id: number; nombre: string; costo_soles: number; plazo_dias: number; }
@@ -41,12 +39,8 @@ interface ExpedienteBandeja {
 }
 
 interface DetalleExpediente {
-  id:               number;
-  codigo:           string;
-  estado:           EstadoExpediente;
-  fecha_registro:   string;
-  fecha_limite:     string;
-  fecha_resolucion: string | null;
+  id: number; codigo: string; estado: EstadoExpediente;
+  fecha_registro: string; fecha_limite: string; fecha_resolucion: string | null;
   ciudadano:   { dni: string; nombres: string; apellido_pat: string; apellido_mat: string; email: string; telefono: string | null };
   tipoTramite: { nombre: string; plazo_dias: number; costo_soles: number };
   areaActual:  { nombre: string; sigla: string } | null;
@@ -56,7 +50,6 @@ interface DetalleExpediente {
 }
 
 export default function MesaPartesPage() {
-  const { usuario } = useAuth();
   const [tab,      setTab]      = useState<'bandeja' | 'registrar'>('bandeja');
   const [bandeja,  setBandeja]  = useState<ExpedienteBandeja[]>([]);
   const [tipos,    setTipos]    = useState<TipoTramite[]>([]);
@@ -87,29 +80,23 @@ export default function MesaPartesPage() {
   const [buscandoDni, setBuscandoDni] = useState(false);
   const [loadingReg,  setLoadingReg]  = useState(false);
 
-  // Modal derivar con código
-  const [modalDerivar,      setModalDerivar]      = useState(false);
-  const [expDerivar,        setExpDerivar]        = useState<ExpedienteBandeja | null>(null);
-  const [areaDestino,       setAreaDestino]       = useState('');
-  const [instrucciones,     setInstrucciones]     = useState('');
-  const [loadingCodigo,     setLoadingCodigo]     = useState(false);
-  const [codigoEnviado,     setCodigoEnviado]     = useState(false);
-  const [codigoDerivar,     setCodigoDerivar]     = useState('');
-  const [emailMDP,          setEmailMDP]          = useState('');
-  const [loadingDerivar,    setLoadingDerivar]    = useState(false);
+  // Modal derivar con PIN
+  const [modalDerivar,  setModalDerivar]  = useState(false);
+  const [expDerivar,    setExpDerivar]    = useState<ExpedienteBandeja | null>(null);
+  const [areaDestino,   setAreaDestino]   = useState('');
+  const [instrucciones, setInstrucciones] = useState('');
+  const [pinInput,      setPinInput]      = useState('');
+  const [loadingDerivar,setLoadingDerivar]= useState(false);
 
   const descargarCargo = (expedienteId: number, codigo: string) => {
     api.get(`/recepcion/cargo/${expedienteId}`, { responseType: 'blob' })
       .then((res) => {
         const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
         const link = document.createElement('a');
-        link.href  = url;
-        link.setAttribute('download', `cargo-${codigo}.pdf`);
-        document.body.appendChild(link);
-        link.click(); link.remove();
+        link.href  = url; link.setAttribute('download', `cargo-${codigo}.pdf`);
+        document.body.appendChild(link); link.click(); link.remove();
         window.URL.revokeObjectURL(url);
-      })
-      .catch(() => toast.error({ titulo: 'Error al generar el cargo.' }));
+      }).catch(() => toast.error({ titulo: 'Error al generar el cargo.' }));
   };
 
   const descargarPdfUnificado = async (expedienteId: number, codigo: string) => {
@@ -118,10 +105,8 @@ export default function MesaPartesPage() {
       const res  = await api.get(`/mesa-partes/expediente/${expedienteId}/pdf-unificado`, { responseType: 'blob' });
       const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
-      link.href  = url;
-      link.setAttribute('download', `expediente-unificado-${codigo}.pdf`);
-      document.body.appendChild(link);
-      link.click(); link.remove();
+      link.href  = url; link.setAttribute('download', `expediente-unificado-${codigo}.pdf`);
+      document.body.appendChild(link); link.click(); link.remove();
       window.URL.revokeObjectURL(url);
       toast.success({ titulo: 'PDF unificado descargado' });
     } catch { toast.error({ titulo: 'Error al generar el PDF unificado.' }); }
@@ -141,15 +126,7 @@ export default function MesaPartesPage() {
     finally { setCargando(false); }
   };
 
-  // Cargar email del usuario actual
-  const cargarPerfil = async () => {
-    try {
-      const res = await api.get('/usuarios/mi-perfil');
-      setEmailMDP(res.data.email ?? '');
-    } catch { /* silencioso */ }
-  };
-
-  useEffect(() => { cargarDatos(); cargarPerfil(); }, []);
+  useEffect(() => { cargarDatos(); }, []);
 
   const verDetalle = async (id: number) => {
     setModalDetalle(true); setCargandoDet(true);
@@ -198,7 +175,7 @@ export default function MesaPartesPage() {
         nombres:      c.nombres      || '',
         apellido_pat: c.apellido_pat || c.apellidoPat || '',
         apellido_mat: c.apellido_mat || c.apellidoMat || '',
-        email:         c.email        || '',
+        email:        c.email        || '',
       }));
     } catch { /* RENIEC no disponible */ }
     finally { setBuscandoDni(false); }
@@ -222,42 +199,26 @@ export default function MesaPartesPage() {
     finally { setLoadingReg(false); }
   };
 
-  // Abrir modal derivar — resetear estado
   const abrirDerivar = (exp: ExpedienteBandeja) => {
-    setExpDerivar(exp); setAreaDestino(''); setInstrucciones('');
-    setCodigoEnviado(false); setCodigoDerivar('');
+    setExpDerivar(exp); setAreaDestino(''); setInstrucciones(''); setPinInput('');
     setModalDerivar(true);
   };
 
-  // PASO 1: Solicitar código por email
-  const solicitarCodigoDerivar = async () => {
-    if (!expDerivar || !areaDestino) return;
-    setLoadingCodigo(true);
+  const handleDerivar = async () => {
+    if (!expDerivar || !areaDestino || !pinInput.trim()) return;
+    setLoadingDerivar(true);
     try {
-      const res = await api.post('/mesa-partes/solicitar-codigo-derivacion', {
+      await api.post('/mesa-partes/derivar', {
         expedienteId:  expDerivar.id,
         areaDestinoId: areaDestino,
         instrucciones,
+        pin:           pinInput.trim(),
       });
-      setCodigoEnviado(true);
-      toast.success({ titulo: 'Código enviado', descripcion: res.data.message });
-    } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error al enviar el código.' }); }
-    finally { setLoadingCodigo(false); }
-  };
-
-  // PASO 2: Confirmar derivación con código
-  const handleDerivar = async () => {
-    if (!codigoDerivar.trim()) return;
-    setLoadingDerivar(true);
-    try {
-      await api.post('/mesa-partes/derivar', { codigo: codigoDerivar.trim() });
-toast.success({ titulo: 'Expediente derivado correctamente', descripcion: 'El expediente fue enviado al área técnica.' });
-setModalDerivar(false);
-cargarDatos();
+      toast.success({ titulo: 'Expediente derivado', descripcion: `${expDerivar.codigo} enviado al área técnica.` });
+      setModalDerivar(false); cargarDatos();
     } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error al derivar.' }); }
     finally { setLoadingDerivar(false); }
   };
-
 
   const handleArchivoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -267,14 +228,9 @@ cargarDatos();
     setArchivoPdf(file);
   };
 
-  const setF = (field: string, value: string) =>
-    setForm(prev => ({ ...prev, [field]: value }));
-
-  const nombreDoc = (nombre: string) =>
-    nombre.startsWith('REQ-') ? nombre.replace(/^REQ-\d+:\s*/, '') : nombre;
-
-  const puedeObservar = (estado: EstadoExpediente) =>
-    ['RECIBIDO', 'EN_REVISION_MDP'].includes(estado);
+  const setF = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
+  const nombreDoc = (n: string) => n.startsWith('REQ-') ? n.replace(/^REQ-\d+:\s*/, '') : n;
+  const puedeObservar = (estado: EstadoExpediente) => ['RECIBIDO', 'EN_REVISION_MDP'].includes(estado);
 
   if (cargando) return <Spinner text="Cargando Mesa de Partes..." />;
 
@@ -315,7 +271,7 @@ cargarDatos();
               { key: 'pago', header: 'Pago', render: (r) => r.pagos?.length > 0 ? <span className="text-xs text-green-600 font-medium flex items-center gap-1"><CheckCircle size={12} />Verificado</span> : <span className="text-xs text-yellow-600">Pendiente</span> },
               { key: 'acciones', header: '', render: (r) => (
                 <div className="flex gap-1.5">
-                  <Button size="sm" variant="ghost" icon={<Eye size={12} />} onClick={() => verDetalle(r.id)}>Ver</Button>
+                  <Button size="sm" variant="ghost" icon={<Eye size={12} />}      onClick={() => verDetalle(r.id)}>Ver</Button>
                   <Button size="sm" variant="ghost" icon={<FileText size={12} />} onClick={() => descargarCargo(r.id, r.codigo)}>Cargo</Button>
                   <Button size="sm" variant="secondary" icon={<Send size={12} />} onClick={() => abrirDerivar(r)} disabled={!r.pagos || r.pagos.length === 0}>Derivar</Button>
                 </div>
@@ -399,12 +355,8 @@ cargarDatos();
                       <FileText size={16} className="text-blue-500 shrink-0" />
                       <div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p><p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p></div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={() => { setPreviewDoc(doc); setModalPreview(true); }} className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100">
-                          <ZoomIn size={13} />Vista previa
-                        </button>
-                        <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100">
-                          <Download size={13} />Descargar
-                        </a>
+                        <button onClick={() => { setPreviewDoc(doc); setModalPreview(true); }} className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100"><ZoomIn size={13} />Vista previa</button>
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100"><Download size={13} />Descargar</a>
                       </div>
                     </div>
                   ))}
@@ -451,8 +403,9 @@ cargarDatos();
         </div>
       </Modal>
 
-      {/* ── Modal derivar con código por email ── */}
-      <Modal open={modalDerivar} onClose={() => setModalDerivar(false)} title="Derivar expediente al área técnica" size="sm">
+      {/* ── Modal derivar con PIN ── */}
+      <Modal open={modalDerivar} onClose={() => setModalDerivar(false)} title="Derivar expediente al área técnica" size="sm"
+        footer={<><Button variant="secondary" onClick={() => setModalDerivar(false)}>Cancelar</Button><Button variant="primary" loading={loadingDerivar} icon={<Send size={14} />} onClick={handleDerivar} disabled={!areaDestino || pinInput.length < 4}>Confirmar derivación</Button></>}>
         {expDerivar && (
           <div className="space-y-4">
             <div className="bg-blue-50 rounded-lg p-3">
@@ -461,74 +414,30 @@ cargarDatos();
               <p className="text-sm text-gray-700">{expDerivar.ciudadano.nombres} {expDerivar.ciudadano.apellido_pat}</p>
               <p className="text-sm text-gray-500">{expDerivar.tipoTramite.nombre}</p>
             </div>
-
-            {/* Email actualizable */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-500 flex items-center gap-1">
-                <Mail size={12} className="text-blue-500" />
-                Email donde recibirás el código
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500"
-                  value={emailMDP}
-                  onChange={(e) => setEmailMDP(e.target.value)}
-                  placeholder="tu@correo.com"
-                />
-                <button
-                  onClick={async () => {
-                    if (!emailMDP.trim() || !usuario) return;
-                    try {
-                      await api.patch(`/usuarios/${usuario?.id}/email`, { email: emailMDP.trim() });
-                      toast.success({ titulo: 'Email actualizado correctamente.' });
-                    } catch (err: any) {
-                      toast.error({ titulo: err?.response?.data?.error ?? 'Error al actualizar.' });
-                    }
-                  }}
-                  className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
-                  Guardar
-                </button>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Área destino <span className="text-red-500">*</span></label>
+              <select value={areaDestino} onChange={(e) => setAreaDestino(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
+                <option value="">Seleccionar área...</option>
+                {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre} ({a.sigla})</option>)}
+              </select>
+            </div>
+            <Input label="Instrucciones (opcional)" placeholder="Instrucciones para el área técnica..." value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} />
+            <div>
+              <Input
+                label="PIN de seguridad"
+                type="password"
+                placeholder="Ingresa tu PIN"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                helper="PIN asignado por el Administrador del sistema."
+              />
+              <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                <ShieldCheck size={13} className="text-blue-500" />
+                <span>El PIN confirma tu identidad para derivar el expediente.</span>
               </div>
             </div>
-
-            {!codigoEnviado ? (
-              // Paso 1: Seleccionar área y solicitar código
-              <>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Área destino <span className="text-red-500">*</span></label>
-                  <select value={areaDestino} onChange={(e) => setAreaDestino(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-blue-500">
-                    <option value="">Seleccionar área...</option>
-                    {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre} ({a.sigla})</option>)}
-                  </select>
-                </div>
-                <Input label="Instrucciones (opcional)" placeholder="Instrucciones para el área técnica..." value={instrucciones} onChange={(e) => setInstrucciones(e.target.value)} />
-                <Alert type="info" message="Se enviará un código de 6 dígitos a tu correo para confirmar la derivación." />
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setModalDerivar(false)} className="flex-1 justify-center">Cancelar</Button>
-                  <Button variant="primary" icon={<ShieldCheck size={14} />} loading={loadingCodigo}
-                    disabled={!areaDestino} onClick={solicitarCodigoDerivar} className="flex-1 justify-center">
-                    Enviar código
-                  </Button>
-                </div>
-              </>
-            ) : (
-              // Paso 2: Ingresar código
-              <>
-                <Alert type="info" message={`Código enviado a ${emailMDP}. Ingrésalo para confirmar.`} />
-                <Input label="Código de aprobación (6 dígitos)" placeholder="000000" value={codigoDerivar}
-                  onChange={(e) => setCodigoDerivar(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  maxLength={6} autoFocus />
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setCodigoEnviado(false)} className="flex-1 justify-center">Cambiar área</Button>
-                  <Button variant="primary" icon={<Send size={14} />} loading={loadingDerivar}
-                    disabled={codigoDerivar.length !== 6} onClick={handleDerivar} className="flex-1 justify-center">
-                    Confirmar derivación
-                  </Button>
-                </div>
-              </>
-            )}
           </div>
         )}
       </Modal>

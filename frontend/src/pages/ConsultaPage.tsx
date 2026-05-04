@@ -14,12 +14,12 @@ import { toast }                       from '../utils/toast';
 import { formatFecha, formatFechaHora, colorDiasRestantes } from '../utils/formato';
 import type { EstadoExpediente, Movimiento } from '../types';
 import {
-  Search, Download, ArrowLeft,
+  Search, Download,
   User, FileText, Printer,
   AlertCircle, Upload, X, CheckCircle,
   CreditCard, ImageIcon, ShieldCheck, Phone, Clock,
 } from 'lucide-react';
-import logoCA from '../assets/logoCA.webp';
+
 
 const VITE_API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 
@@ -108,21 +108,17 @@ const Stepper = ({ currentStep }: { currentStep: number }) => {
 export default function ConsultaPage() {
   const { codigo: codigoParam } = useParams<{ codigo: string }>();
   const navigate                = useNavigate();
-
   const [codigo,     setCodigo]     = useState(codigoParam?.toUpperCase() ?? '');
   const [expediente, setExpediente] = useState<ExpedientePublico | null>(null);
   const [cargando,   setCargando]   = useState(false);
-
   const [archivos,     setArchivos]     = useState<File[]>([]);
   const [subiendoDocs, setSubiendoDocs] = useState(false);
   const fileInputRef                    = useRef<HTMLInputElement>(null);
-
   const [opcionPago,        setOpcionPago]        = useState<OpcionPago>('seleccion');
   const [comprobante,       setComprobante]        = useState<File | null>(null);
   const [subiendoComp,      setSubiendoComp]       = useState(false);
   const [comprobanteSubido, setComprobanteSubido]  = useState(false);
   const comprobanteInputRef                         = useRef<HTMLInputElement>(null);
-
   const consultar = async (cod: string) => {
     if (!cod.trim()) return;
     setCargando(true);

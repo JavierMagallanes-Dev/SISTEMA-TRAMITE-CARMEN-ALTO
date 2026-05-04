@@ -1,13 +1,14 @@
 // src/pages/PortalPage.tsx
-// Portal de Trámites — 4 pasos internos: Selección → Datos → Requisitos → Pago.
+// Portal de Trámites — 3 pasos: Selección → Datos+Requisitos → Pago.
+
 import { useEffect, useState } from 'react';
-import { portalService }        from '../services/portal.service';
-import Spinner                  from '../components/ui/Spinner';
-import SeleccionTramite         from '../components/shared/SeleccionTramite';
-import Paso2Datos               from '../components/shared/Paso2Datos';
-import Paso2Requisitos          from '../components/shared/Paso2Requisitos';
-import Paso3Pago                from '../components/shared/Paso3Pago';
-import { toast }                from '../utils/toast';
+import { portalService }  from '../services/portal.service';
+import Spinner            from '../components/ui/Spinner';
+import SeleccionTramite   from '../components/shared/SeleccionTramite';
+import Paso2Datos         from '../components/shared/Paso2Datos';
+import type { EstadoReq } from '../components/shared/Paso2Datos';
+import Paso3Pago          from '../components/shared/Paso3Pago';
+import { toast }          from '../utils/toast';
 
 interface TipoTramite {
   id: number; nombre: string; descripcion: string | null;
@@ -20,24 +21,18 @@ interface Requisito {
 }
 
 const FORM_INICIAL = {
-  tipoDocumento:     'DNI',
-  dni:               '',
-  nombres:           '',
-  apellido_pat:      '',
-  apellido_mat:      '',
-  email:             '',
-  telefono:          '',
-  pais_emision:      '',
-  fecha_vencimiento: '',
-  fecha_nacimiento:  '',
+  tipoDocumento: 'DNI', dni: '', nombres: '',
+  apellido_pat: '', apellido_mat: '', email: '',
+  telefono: '', pais_emision: '', fecha_vencimiento: '', fecha_nacimiento: '',
 };
 
-type PasoInterno = 1 | 2 | 3 | 4;
+type PasoInterno = 1 | 2 | 3;
 
 export default function PortalPage() {
   const [paso,             setPaso]             = useState<PasoInterno>(1);
   const [tipos,            setTipos]            = useState<TipoTramite[]>([]);
   const [requisitos,       setRequisitos]       = useState<Requisito[]>([]);
+  const [estadosReq,       setEstadosReq]       = useState<Record<number, EstadoReq>>({});
   const [loading,          setLoading]          = useState(false);
   const [codigoGenerado,   setCodigoGenerado]   = useState('');
   const [expedienteId,     setExpedienteId]     = useState<number>(0);
@@ -50,6 +45,25 @@ export default function PortalPage() {
   useEffect(() => {
     portalService.tiposTramite().then(setTipos).catch(() => {});
   }, []);
+
+  // Cargar requisitos cuando se selecciona un trámite
+  const handleSeleccionarTramite = async (tipo: TipoTramite) => {
+    setTipoSeleccionado(tipo);
+    // Precargar requisitos en paralelo
+    try {
+      const reqs = await portalService.requisitos(tipo.id);
+      setRequisitos(reqs);
+      // Inicializar estados vacíos
+      const estados: Record<number, EstadoReq> = {};
+      reqs.forEach((r: Requisito) => {
+        estados[r.id] = { archivo: null, subido: false, subiendo: false, error: '' };
+      });
+      setEstadosReq(estados);
+    } catch {
+      setRequisitos([]);
+      setEstadosReq({});
+    }
+  };
 
   const buscarDni = async () => {
     if (form.tipoDocumento !== 'DNI' || form.dni.length !== 8) return;
@@ -68,6 +82,36 @@ export default function PortalPage() {
     finally { setBuscandoDni(false); }
   };
 
+  // Manejar archivo seleccionado para un requisito
+  const handleArchivoReq = (reqId: number, archivo: File | null) => {
+    setEstadosReq(prev => ({
+      ...prev,
+      [reqId]: { ...prev[reqId], archivo, error: '' },
+    }));
+  };
+
+  // Subir documento de un requisito (antes de registrar el expediente)
+  // Si el expediente aún no existe, guardamos el archivo para subirlo después
+  const handleSubirReq = async (reqId: number) => {
+    const estado = estadosReq[reqId];
+    if (!estado?.archivo) return;
+
+    // Si ya tenemos expedienteId (registro ya hecho), subir directo
+    if (expedienteId > 0) {
+      setEstadosReq(prev => ({ ...prev, [reqId]: { ...prev[reqId], subiendo: true, error: '' } }));
+      try {
+        await portalService.subirDocumentoRequisito(expedienteId, reqId, estado.archivo!);
+        setEstadosReq(prev => ({ ...prev, [reqId]: { ...prev[reqId], subiendo: false, subido: true } }));
+      } catch {
+        setEstadosReq(prev => ({ ...prev, [reqId]: { ...prev[reqId], subiendo: false, error: 'Error al subir. Intenta de nuevo.' } }));
+      }
+      return;
+    }
+
+    // Si no hay expediente aún, marcar como "listo para subir" (se subirá después del registro)
+    setEstadosReq(prev => ({ ...prev, [reqId]: { ...prev[reqId], subido: true, error: '' } }));
+  };
+
   const handleRegistrar = async () => {
     if (!form.dni || !form.nombres || !form.apellido_pat || !form.email || !tipoSeleccionado) {
       toast.warning({ titulo: 'Completa todos los campos obligatorios.' }); return;
@@ -75,8 +119,18 @@ export default function PortalPage() {
     if (!turnstileToken) {
       toast.warning({ titulo: 'Completa la verificación de seguridad.' }); return;
     }
+
+    // Verificar requisitos obligatorios
+    const reqOblig = requisitos.filter(r => r.obligatorio);
+    const faltantes = reqOblig.filter(r => !estadosReq[r.id]?.subido && !estadosReq[r.id]?.archivo);
+    if (faltantes.length > 0) {
+      toast.warning({ titulo: 'Faltan documentos obligatorios', descripcion: `Adjunta: ${faltantes.map(r => r.nombre).join(', ')}` });
+      return;
+    }
+
     setLoading(true);
     try {
+      // 1. Registrar el expediente
       const res = await portalService.registrar({
         tipoDocumento:           form.tipoDocumento,
         dni:                     form.dni,
@@ -92,24 +146,30 @@ export default function PortalPage() {
         'cf-turnstile-response': turnstileToken,
       });
 
+      const expId = res.expediente.id;
       setCodigoGenerado(res.expediente.codigo);
-      setExpedienteId(res.expediente.id);
+      setExpedienteId(expId);
       setTipoRegistrado(tipoSeleccionado);
 
-      // Cargar requisitos del trámite
-      const reqs = await portalService.requisitos(tipoSeleccionado.id);
-      setRequisitos(reqs);
+      // 2. Subir todos los archivos adjuntados
+      const archivosParaSubir = requisitos.filter(r => estadosReq[r.id]?.archivo);
+      for (const req of archivosParaSubir) {
+        const archivo = estadosReq[req.id].archivo;
+        if (!archivo) continue;
+        try {
+          await portalService.subirDocumentoRequisito(expId, req.id, archivo);
+          setEstadosReq(prev => ({ ...prev, [req.id]: { ...prev[req.id], subido: true, subiendo: false } }));
+        } catch {
+          console.warn(`No se pudo subir documento del requisito ${req.id}`);
+        }
+      }
 
-      // Si hay requisitos vamos al paso de documentos, si no directo al pago
-      setPaso(reqs.length > 0 ? 3 : 4);
+      // 3. Ir al pago
+      setPaso(3);
     } catch (err: any) {
       toast.error({ titulo: err?.response?.data?.error ?? 'Error al registrar el trámite.' });
       setTurnstileToken('');
     } finally { setLoading(false); }
-  };
-
-  const handleSubirDocumento = async (requisitoId: number, archivo: File) => {
-    await portalService.subirDocumentoRequisito(expedienteId, requisitoId, archivo);
   };
 
   const setF = (field: string, value: string) =>
@@ -118,8 +178,8 @@ export default function PortalPage() {
   const resetForm = () => {
     setPaso(1); setTipoSeleccionado(null);
     setTipoRegistrado(null); setTurnstileToken('');
-    setRequisitos([]); setExpedienteId(0);
-    setForm(FORM_INICIAL);
+    setRequisitos([]); setEstadosReq({});
+    setExpedienteId(0); setForm(FORM_INICIAL);
   };
 
   return (
@@ -133,7 +193,7 @@ export default function PortalPage() {
               tipos={tipos}
               seleccionado={tipoSeleccionado}
               paso={1}
-              onSeleccionar={setTipoSeleccionado}
+              onSeleccionar={handleSeleccionarTramite}
               onContinuar={() => {
                 if (!tipoSeleccionado) { toast.warning({ titulo: 'Selecciona un tipo de trámite.' }); return; }
                 setPaso(2);
@@ -141,7 +201,7 @@ export default function PortalPage() {
             />
       )}
 
-      {/* PASO 2 — Datos personales */}
+      {/* PASO 2 — Datos + Requisitos + Turnstile */}
       {paso === 2 && tipoSeleccionado && (
         <Paso2Datos
           tipoSeleccionado={tipoSeleccionado}
@@ -154,24 +214,17 @@ export default function PortalPage() {
           loading={loading}
           onAtras={() => { setPaso(1); setTurnstileToken(''); }}
           onRegistrar={handleRegistrar}
-          onTurnstileExpire={() => { setTurnstileToken(''); toast.warning({ titulo: 'La verificación expiró. Complétala nuevamente.' }); }}
-          onTurnstileError={() => { setTurnstileToken(''); toast.error({ titulo: 'Error en la verificación de seguridad.' }); }}
-        />
-      )}
-
-      {/* PASO 3 — Adjuntar documentos por requisito */}
-      {paso === 3 && expedienteId > 0 && (
-        <Paso2Requisitos
+          onTurnstileExpire={() => { setTurnstileToken(''); toast.warning({ titulo: 'La verificación expiró.' }); }}
+          onTurnstileError={() => { setTurnstileToken(''); toast.error({ titulo: 'Error en la verificación.' }); }}
           requisitos={requisitos}
-          expedienteId={expedienteId}
-          codigoExp={codigoGenerado}
-          onSubirDoc={handleSubirDocumento}
-          onContinuar={() => setPaso(4)}
+          estadosReq={estadosReq}
+          onArchivoReq={handleArchivoReq}
+          onSubirReq={handleSubirReq}
         />
       )}
 
-      {/* PASO 4 — Pago */}
-      {paso === 4 && tipoRegistrado && (
+      {/* PASO 3 — Pago */}
+      {paso === 3 && tipoRegistrado && (
         <Paso3Pago
           codigoGenerado={codigoGenerado}
           tipoRegistrado={tipoRegistrado}

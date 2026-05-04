@@ -95,9 +95,9 @@ model Usuario {
     created_at      DateTime @default(now())
     updated_at      DateTime @updatedAt
     url_firma_png   String?  @db.VarChar(500)
-
-    rolId  Int
-    areaId Int?
+    pin_derivacion  String?  @db.VarChar(6)
+    rolId           Int
+    areaId          Int?
 
     rol  Rol   @relation(fields: [rolId], references: [id])
     area Area? @relation(fields: [areaId], references: [id])

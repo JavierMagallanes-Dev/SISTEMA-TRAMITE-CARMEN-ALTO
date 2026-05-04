@@ -21,7 +21,7 @@ import dashboardRoutes  from './routes/dashboard.routes';
 import recepcionRoutes  from './routes/recepcion.routes';
 import reportesRoutes   from './routes/reportes.routes';
 import stripeRoutes     from './routes/stripe.routes';
-
+import tramitesRoutes from './routes/tramites.routes';
 // ── Middleware de error ──────────────────────────────────────────
 import { errorHandler } from './middlewares/error.middleware';
 
@@ -79,6 +79,7 @@ app.use('/api/dashboard',   dashboardRoutes);
 app.use('/api/recepcion',   recepcionRoutes);
 app.use('/api/reportes',    reportesRoutes);
 app.use('/api/stripe',      stripeRoutes);
+app.use('/api/tramites', tramitesRoutes);
 
 // ── Ruta no encontrada ───────────────────────────────────────────
 app.use((_req, res) => {
