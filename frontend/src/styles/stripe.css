@@ -357,3 +357,26 @@
   background: #FEF0F0; border: 1.5px solid #FECACA;
   border-radius: 14px; padding: 20px 22px; margin-bottom: 20px;
 }
+
+/* ── AGREGAR AL FINAL DE src/styles/stripe.css ────────────────
+   Transición flip 3D para la tarjeta visual
+   ──────────────────────────────────────────────────────────── */
+
+/* El sp-card-visual ya existe — solo mejoramos su sombra y bordes */
+.sp-card-visual {
+  box-shadow: 0 12px 36px rgba(4,44,83,.28), 0 4px 12px rgba(0,0,0,.12) !important;
+  transition: box-shadow .3s ease;
+}
+
+.sp-card-visual:hover {
+  box-shadow: 0 18px 48px rgba(4,44,83,.35), 0 6px 16px rgba(0,0,0,.15) !important;
+}
+
+/* Transición suave del número y fecha en la tarjeta */
+.sp-cv-number,
+.sp-cv-value {
+  transition: color .3s ease, opacity .3s ease;
+}
+
+.sp-cv-number.filled { color: rgba(255,255,255,.95) !important; }
+.sp-cv-value.filled  { color: #fff !important; }

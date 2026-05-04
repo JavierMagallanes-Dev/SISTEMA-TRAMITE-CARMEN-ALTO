@@ -200,9 +200,9 @@ function SidebarContent({ items, onNavigate, onLogout, onCloseMobile, usuario }:
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-gray-800 truncate">{usuario.nombre}</p>
-            <p className="text-[10px] text-gray-500 truncate">
-              {usuario.rol}{usuario.area ? ` · ${usuario.area}` : ''}
-            </p>
+            <p className="text-[10px] text-gray-500 truncate max-w-[180px]">
+  {usuario.rol}{usuario.area ? ` · ${usuario.area}` : ''}
+</p>
           </div>
         </div>
 
@@ -304,7 +304,7 @@ export default function MainLayout({ children }: { children?: ReactNode }) {
       />
 
       {/* ── Sidebar Desktop ──────────────────────────────── */}
-      <aside className="hidden lg:flex w-64 shrink-0 border-r border-gray-100 fixed inset-y-0 left-0 z-30">
+      <aside className="hidden lg:flex w-64 shrink-0 border-r border-gray-100 fixed inset-y-0 left-0 z-30 overflow-hidden">
         <SidebarContent
           items={items}
           onNavigate={() => {}}
@@ -337,7 +337,7 @@ export default function MainLayout({ children }: { children?: ReactNode }) {
       </aside>
 
       {/* ── Main column ─────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
+    <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         {/* Topbar */}
         <header className="h-14 bg-white border-b border-gray-100 flex items-center justify-between gap-3 px-4 sm:px-6 sticky top-0 z-20">
           <div className="flex items-center gap-3 min-w-0">

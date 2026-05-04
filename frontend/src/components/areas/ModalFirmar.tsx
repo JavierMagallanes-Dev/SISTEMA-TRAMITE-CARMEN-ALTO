@@ -74,8 +74,8 @@ export default function ModalFirmar({
           </div>
 
           {/* Visor con PDF real */}
-          <div className="relative border-2 border-gray-200 rounded-xl overflow-hidden bg-gray-100 mx-auto"
-            style={{ width: VISOR_W, height: VISOR_H }}>
+          <div className="relative border-2 border-gray-200 rounded-xl overflow-hidden bg-gray-100 mx-auto w-full"
+  style={{ maxWidth: VISOR_W, height: VISOR_H }}>
 
             {loadingPdfFirma ? (
               <div className="absolute inset-0 flex items-center justify-center">

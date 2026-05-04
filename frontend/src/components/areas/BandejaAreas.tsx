@@ -43,8 +43,8 @@ export default function BandejaAreas({
         const dias = diasRestantes(exp.fecha_limite);
         return (
           <Card key={exp.id}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+  <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-mono text-sm font-bold text-blue-600">{exp.codigo}</span>
                   <EstadoBadge estado={exp.estado} size="sm" />
@@ -61,7 +61,7 @@ export default function BandejaAreas({
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 shrink-0">
+              <div className="flex flex-wrap gap-2 max-w-full">
                 <Button size="sm" variant="ghost" icon={<Eye size={13} />} onClick={() => onVerDetalle(exp.id)}>Ver</Button>
 
                 {/* Técnico */}

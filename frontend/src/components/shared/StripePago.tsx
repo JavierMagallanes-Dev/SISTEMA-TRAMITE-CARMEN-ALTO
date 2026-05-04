@@ -35,26 +35,7 @@ const STRIPE_STYLE = {
   },
 };
 
-// ── Hero ─────────────────────────────────────────────────────────
-function Hero() {
-  return (
-    <div className="sp-hero">
-      <div className="sp-label"><span className="sp-dot" />Portal Ciudadano — Pago</div>
-      <h1 className="sp-title">Pago seguro con tarjeta</h1>
-      <p className="sp-sub">
-        Tus datos de tarjeta viajan cifrados y nunca son almacenados por la Municipalidad.
-        El pago es procesado directamente por Stripe.
-      </p>
-      <div className="sp-tabs">
-        <div className="sp-tab done"><span className="sp-tab-num">✓</span>Seleccionar trámite</div>
-        <span className="sp-tab-sep">›</span>
-        <div className="sp-tab done"><span className="sp-tab-num">✓</span>Tus datos</div>
-        <span className="sp-tab-sep">›</span>
-        <div className="sp-tab active"><span className="sp-tab-num">3</span>Pago</div>
-      </div>
-    </div>
-  );
-}
+
 
 // ── Formulario interno ───────────────────────────────────────────
 interface FormPagoProps {
@@ -68,6 +49,9 @@ interface FormPagoProps {
   onCancel:        () => void;
 }
 
+// Reemplaza SOLO la función FormPago en StripePago.tsx
+// El resto del archivo queda igual.
+
 function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCancel }: FormPagoProps) {
   const stripe   = useStripe();
   const elements = useElements();
@@ -77,49 +61,40 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
   const [cardReady,   setCardReady]   = useState(false);
   const [expiryReady, setExpiryReady] = useState(false);
   const [cvcReady,    setCvcReady]    = useState(false);
-  const [cardExpStr,  setCardExpStr]  = useState('MM/AA');
+
+  // Estado visual de la tarjeta
+  const [cardNumber, setCardNumber] = useState('•••• •••• •••• ••••');
+  const [cardExpiry, setCardExpiry] = useState('MM/AA');
+  const [cardCvc,    setCardCvc]    = useState('•••');
+  const [isFlipped,  setIsFlipped]  = useState(false);
 
   const todoListo = cardReady && expiryReady && cvcReady;
 
   const handlePagar = async () => {
     if (!stripe || !elements) return;
-    const cardNumber = elements.getElement(CardNumberElement);
-    if (!cardNumber) return;
-
-    setProcesando(true);
-    setErrorLocal('');
-
+    const cardNumberEl = elements.getElement(CardNumberElement);
+    if (!cardNumberEl) return;
+    setProcesando(true); setErrorLocal('');
     try {
       const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: { card: cardNumber },
+        payment_method: { card: cardNumberEl },
       });
-
       if (error) {
         const msg = error.message ?? 'Error al procesar el pago.';
-        setErrorLocal(msg);
-        onError(msg);
-        return;
+        setErrorLocal(msg); onError(msg); return;
       }
-
       if (paymentIntent?.status === 'succeeded') {
         const res = await fetch(`${VITE_API_URL}/stripe/confirmar-pago`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ paymentIntentId: paymentIntent.id, codigo }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentIntentId: paymentIntent.id, codigo }),
         });
-        if (!res.ok) {
-          const data = await res.json();
-          console.warn('⚠️ Backend confirmación:', data.error);
-        }
+        if (!res.ok) { const d = await res.json(); console.warn('Backend:', d.error); }
         onExito();
       }
     } catch (err: any) {
       const msg = err.message ?? 'Error inesperado.';
-      setErrorLocal(msg);
-      onError(msg);
-    } finally {
-      setProcesando(false);
-    }
+      setErrorLocal(msg); onError(msg);
+    } finally { setProcesando(false); }
   };
 
   return (
@@ -143,71 +118,167 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
         </div>
       </div>
 
-      
-
-      {/* Section label */}
       <p className="sp-section-label">Datos de la tarjeta</p>
 
       {/* Card type badges */}
       <div className="sp-card-types">
         {['Visa', 'Mastercard', 'Amex'].map((b) => (
           <div key={b} className="sp-card-badge">
-            <CreditCard size={13} strokeWidth={2} />
-            {b}
+            <CreditCard size={13} strokeWidth={2} />{b}
           </div>
         ))}
       </div>
 
-      {/* Card visual + fields */}
+      {/* ── Tarjeta visual mejorada con flip ── */}
       <div className="sp-card-wrap">
+        <div style={{ width: 220, flexShrink: 0, perspective: 900 }}>
+          <div style={{
+            width: 220, height: 135,
+            position: 'relative',
+            transformStyle: 'preserve-3d',
+            transition: 'transform 0.55s cubic-bezier(.4,0,.2,1)',
+            transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          }}>
 
-        {/* Tarjeta visual */}
-        <div className="sp-card-visual">
-          <div className="sp-cv-chip" />
-          <div className="sp-cv-number">•••• •••• •••• ••••</div>
-          <div className="sp-cv-bottom">
-            <div>
-              <div className="sp-cv-label">Vence</div>
-              <div className="sp-cv-value">{cardExpStr}</div>
+            {/* FRENTE */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, #042C53 0%, #185FA5 60%, #1a7bc4 100%)',
+              padding: '18px 20px',
+              boxShadow: '0 12px 32px rgba(4,44,83,.3), 0 2px 8px rgba(0,0,0,.1)',
+              display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+              overflow: 'hidden',
+            }}>
+              {/* Círculos decorativos */}
+              <div style={{
+                position: 'absolute', top: -30, right: -30,
+                width: 120, height: 120, borderRadius: '50%',
+                background: 'rgba(255,255,255,.07)', pointerEvents: 'none',
+              }} />
+              <div style={{
+                position: 'absolute', bottom: -20, left: -20,
+                width: 90, height: 90, borderRadius: '50%',
+                background: 'rgba(255,255,255,.05)', pointerEvents: 'none',
+              }} />
+
+              {/* Top: chip + brand */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+                <div style={{
+                  width: 32, height: 24, borderRadius: 5,
+                  background: 'linear-gradient(135deg, #e8c84a, #c8902a)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,.3)',
+                }} />
+                <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 16, fontWeight: 900, fontStyle: 'italic' }}>
+                  VISA
+                </span>
+              </div>
+
+              {/* Número */}
+              <div style={{
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: 16, fontWeight: 600, letterSpacing: 2,
+                color: cardNumber === '•••• •••• •••• ••••' ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.95)',
+                position: 'relative', zIndex: 1,
+                transition: 'color .3s',
+              }}>
+                {cardNumber}
+              </div>
+
+              {/* Bottom: vence */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', position: 'relative', zIndex: 1 }}>
+                <div>
+                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: .6, marginBottom: 2 }}>Vence</div>
+                  <div style={{
+                    fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 700,
+                    color: cardExpiry === 'MM/AA' ? 'rgba(255,255,255,.4)' : '#fff',
+                    transition: 'color .3s',
+                  }}>{cardExpiry}</div>
+                </div>
+              </div>
             </div>
-            <div className="sp-cv-brand">VISA</div>
+
+            {/* REVERSO */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)',
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, #1a2a3a 0%, #0d1d2e 100%)',
+              boxShadow: '0 12px 32px rgba(4,44,83,.3)',
+              overflow: 'hidden',
+              display: 'flex', flexDirection: 'column',
+            }}>
+              {/* Banda magnética */}
+              <div style={{ height: 36, background: 'linear-gradient(to bottom, #111, #2a2a2a, #111)', marginTop: 20, marginBottom: 14 }} />
+              {/* Strip CVC */}
+              <div style={{ padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  flex: 1, height: 32, borderRadius: 4,
+                  background: 'repeating-linear-gradient(-45deg, #f8f8f8, #f8f8f8 3px, #e8e8e8 3px, #e8e8e8 6px)',
+                  display: 'flex', alignItems: 'center', padding: '0 8px',
+                }}>
+                  <span style={{ fontSize: 9, color: '#aaa', fontStyle: 'italic' }}>Firma autorizada</span>
+                </div>
+                <div style={{
+                  background: '#fff', borderRadius: 6, padding: '4px 10px', textAlign: 'center', minWidth: 44,
+                }}>
+                  <div style={{ fontSize: 7, color: '#999', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>CVC</div>
+                  <div style={{
+                    fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 800, color: '#1a1d2e',
+                    letterSpacing: 2, transition: 'all .2s',
+                  }}>
+                    {cardCvc === '•••' ? '•••' : '•'.repeat(cardCvc.length)}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Campos Stripe */}
         <div className="sp-card-fields">
-
-          {/* Número */}
           <div className="sp-field">
             <label className="sp-field-label">
               Número de tarjeta <span className="req">*</span>
               {cardReady && <span className="sp-field-check"><CheckCircle size={13} color="#1D9E75" /></span>}
             </label>
-            <div className={`sp-stripe-wrap ${cardReady ? 'valid' : ''}`}>
+            <div className={`sp-stripe-wrap${cardReady ? ' valid' : ''}`}>
               <div className="sp-stripe-inner">
                 <CardNumberElement
                   options={STRIPE_STYLE}
-                  onChange={(e) => setCardReady(!e.empty && !e.error)}
+                  onChange={(e) => {
+                    setCardReady(!e.empty && !e.error);
+                    if (e.empty) setCardNumber('•••• •••• •••• ••••');
+                    else if (e.complete) setCardNumber('•••• •••• •••• ••••');
+                    // Stripe no expone el número real por seguridad — mostramos placeholder animado
+                    else setCardNumber('•••• •••• •••• ••••');
+                  }}
+                  onFocus={() => setIsFlipped(false)}
                 />
               </div>
             </div>
           </div>
 
-          {/* Vencimiento + CVC */}
           <div className="sp-field-row">
             <div>
               <label className="sp-field-label">
                 Vencimiento <span className="req">*</span>
                 {expiryReady && <span className="sp-field-check"><CheckCircle size={13} color="#1D9E75" /></span>}
               </label>
-              <div className={`sp-stripe-wrap ${expiryReady ? 'valid' : ''}`}>
+              <div className={`sp-stripe-wrap${expiryReady ? ' valid' : ''}`}>
                 <div className="sp-stripe-inner">
                   <CardExpiryElement
                     options={STRIPE_STYLE}
                     onChange={(e) => {
                       setExpiryReady(e.complete && !e.error);
-                      setCardExpStr(e.complete ? '••/••' : 'MM/AA');
+                      if (e.complete) setCardExpiry('••/••');
+                      else if (e.empty) setCardExpiry('MM/AA');
                     }}
+                    onFocus={() => setIsFlipped(false)}
                   />
                 </div>
               </div>
@@ -217,18 +288,23 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
                 CVC <span className="req">*</span>
                 {cvcReady && <span className="sp-field-check"><CheckCircle size={13} color="#1D9E75" /></span>}
               </label>
-              <div className={`sp-stripe-wrap ${cvcReady ? 'valid' : ''}`}>
+              <div className={`sp-stripe-wrap${cvcReady ? ' valid' : ''}`}>
                 <div className="sp-stripe-inner">
                   <CardCvcElement
                     options={STRIPE_STYLE}
-                    onChange={(e) => setCvcReady(e.complete && !e.error)}
+                    onChange={(e) => {
+                      setCvcReady(e.complete && !e.error);
+                      if (e.complete) setCardCvc('•••');
+                      else if (e.empty) setCardCvc('•••');
+                    }}
+                    onFocus={() => { setIsFlipped(true); setCardCvc('···'); }}
+                    onBlur={() => setIsFlipped(false)}
                   />
                 </div>
               </div>
               <p className="sp-cvc-hint">3 dígitos al dorso de tu tarjeta</p>
             </div>
           </div>
-
         </div>
       </div>
 
@@ -253,20 +329,14 @@ function FormPago({ clientSecret, codigo, monto, tramite, onExito, onError, onCa
 
       <div className="sp-divider" />
 
-      {/* Botón pagar */}
-      <button
-        className="sp-btn-pay"
-        onClick={handlePagar}
-        disabled={procesando || !stripe || !todoListo}>
+      <button className="sp-btn-pay" onClick={handlePagar} disabled={procesando || !stripe || !todoListo}>
         {procesando
           ? <><Loader size={18} className="animate-spin" />Procesando...</>
-          : <><Lock size={18} />Pagar S/ {monto.toFixed(2)} de forma segura</>
-        }
+          : <><Lock size={18} />Pagar S/ {monto.toFixed(2)} de forma segura</>}
       </button>
 
       <button className="sp-back" onClick={onCancel}>
-        <ArrowLeft size={14} />
-        Volver a las opciones de pago
+        <ArrowLeft size={14} />Volver a las opciones de pago
       </button>
     </div>
   );
@@ -324,7 +394,7 @@ export default function StripePago({ codigo, onExito, onCancel }: StripePagoProp
   // Pago exitoso
   if (pagoExitoso) return (
     <div>
-      <Hero />
+      
       <div className="sp-main">
         <div className="sp-success">
           <div className="sp-success-icon">
@@ -355,7 +425,7 @@ export default function StripePago({ codigo, onExito, onCancel }: StripePagoProp
   // Cargando
   if (cargando) return (
     <div>
-      <Hero />
+      
       <div className="sp-main">
         <div className="sp-loading">
           <Loader size={28} className="animate-spin" style={{ color: '#185FA5' }} />
@@ -369,7 +439,7 @@ export default function StripePago({ codigo, onExito, onCancel }: StripePagoProp
   // Error inicialización
   if (errorInit) return (
     <div>
-      <Hero />
+      
       <div className="sp-main">
         <div className="sp-init-error">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -392,7 +462,7 @@ export default function StripePago({ codigo, onExito, onCancel }: StripePagoProp
   // Formulario
   return (
     <div>
-      <Hero />
+      
       <Elements stripe={stripePromise} options={{ clientSecret }}>
         <FormPago
           clientSecret={clientSecret}
