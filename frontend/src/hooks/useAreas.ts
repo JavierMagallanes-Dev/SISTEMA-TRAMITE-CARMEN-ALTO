@@ -1,9 +1,9 @@
 // src/hooks/useAreas.ts
 // Hook que centraliza toda la lógica del módulo de Áreas.
-// Usado por Técnico y Jefe de Área.
+// Actualizado: Soporte para firma técnica (conformidad) y firma de resolución.
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import api                  from '../services/api';
+import api                 from '../services/api';
 import { areasService }     from '../services/areas.service';
 import { documentosService }from '../services/documentos.service';
 import { useAuth }          from '../context/AuthContext';
@@ -77,9 +77,10 @@ export function useAreas() {
   const [archivoAdjunto, setArchivoAdjunto] = useState<File | null>(null);
   const [loadingAdjunto, setLoadingAdjunto] = useState(false);
 
-  // Firma
-  const [modalFirma,      setModalFirma]      = useState(false);
-  const [expFirma,        setExpFirma]        = useState<ExpedienteBandeja | null>(null);
+  // Firma (General / Jefe)
+  const [modalFirma,       setModalFirma]       = useState(false);
+  const [modalFirmaTecnico, setModalFirmaTecnico] = useState(false); // NUEVO: Modal para técnico
+  const [expFirma,         setExpFirma]         = useState<ExpedienteBandeja | null>(null);
   const [loadingPdfFirma, setLoadingPdfFirma] = useState(false);
   const [urlPdfFirma,     setUrlPdfFirma]     = useState('');
   const [loadingCodigo,   setLoadingCodigo]   = useState(false);
@@ -102,7 +103,7 @@ export function useAreas() {
 
   // Subir firma
   const [modalSubirFirma,    setModalSubirFirma]    = useState(false);
-  const [archivoFirma,       setArchivoFirma]       = useState<File | null>(null);
+  const [archivoFirma,        setArchivoFirma]       = useState<File | null>(null);
   const [loadingSubirFirma,  setLoadingSubirFirma]  = useState(false);
   const [previewFirmaLocal,  setPreviewFirmaLocal]  = useState('');
   const [emailEditable,      setEmailEditable]      = useState('');
@@ -122,8 +123,9 @@ export function useAreas() {
     finally { setCargando(false); }
   };
 
+  // CAMBIO 2: verificarPerfil ahora corre para Jefe y Técnico
   const verificarPerfil = async () => {
-    if (!esJefe) return;
+    if (!usuario) return;
     try {
       const res = await api.get('/usuarios/mi-perfil');
       setTieneFirma(!!res.data.url_firma_png);
@@ -133,7 +135,7 @@ export function useAreas() {
     } catch { /* silencioso */ }
   };
 
-  useEffect(() => { cargarBandeja(); verificarPerfil(); }, []);
+  useEffect(() => { cargarBandeja(); verificarPerfil(); }, [usuario]);
 
   // ── Drag ───────────────────────────────────────────────────
   const onMouseDown = (e: React.MouseEvent) => {
@@ -248,7 +250,6 @@ export function useAreas() {
     finally { setLoadingAdjunto(false); }
   };
 
-  // ── Firma ──────────────────────────────────────────────────
   const abrirModalFirma = async (exp: ExpedienteBandeja) => {
     if (!tieneFirma) {
       toast.warning({ titulo: 'Debes subir tu firma primero', descripcion: 'Haz clic en "Mi firma" para configurarla.' });
@@ -259,9 +260,34 @@ export function useAreas() {
     setModalFirma(true);
     setLoadingPdfFirma(true);
     try {
-      const res     = await api.get(`/areas/expediente/${exp.id}/pdf-unificado`, { responseType: 'blob' });
-      const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      setUrlPdfFirma(blobUrl);
+      // Buscar el PDF firmado por el técnico
+      const det = await areasService.detalle(exp.id);
+      const docFirmadoTecnico = det.documentos?.find((d: any) =>
+        d.nombre?.startsWith('FIRMADO_TECNICO:')
+      );
+
+      if (docFirmadoTecnico) {
+        // Usar el PDF con firma del técnico para que el Jefe vea dónde firmar
+        const response = await fetch(docFirmadoTecnico.url);
+        const blob     = await response.blob();
+        const blobUrl  = window.URL.createObjectURL(blob);
+        setUrlPdfFirma(blobUrl);
+      } else {
+        // Fallback: sin firma del técnico, usar PDF unificado
+        const docUnificado = det.documentos?.find((d: any) =>
+          d.nombre?.startsWith('PDF_UNIFICADO:')
+        );
+        if (docUnificado) {
+          const response = await fetch(docUnificado.url);
+          const blob     = await response.blob();
+          const blobUrl  = window.URL.createObjectURL(blob);
+          setUrlPdfFirma(blobUrl);
+        } else {
+          const res     = await api.get(`/areas/expediente/${exp.id}/pdf-unificado`, { responseType: 'blob' });
+          const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+          setUrlPdfFirma(blobUrl);
+        }
+      }
     } catch { setUrlPdfFirma(''); }
     finally { setLoadingPdfFirma(false); }
   };
@@ -293,6 +319,61 @@ export function useAreas() {
       });
       toast.success({ titulo: '¡Expediente firmado y resuelto!' });
       cerrarModalFirma(); cargarBandeja();
+    } catch (e: any) { toast.error({ titulo: e?.response?.data?.error ?? 'Error al firmar.' }); }
+    finally { setLoadingFirmar(false); }
+  };
+
+  // REEMPLAZA abrirModalFirmaTecnico en useAreas.ts
+// Ahora obtiene el detalle del expediente y usa el PDF_UNIFICADO guardado
+// en lugar de regenerarlo desde el endpoint.
+
+  const abrirModalFirmaTecnico = async (exp: ExpedienteBandeja) => {
+    if (!tieneFirma) {
+      toast.warning({ titulo: 'Debes subir tu firma primero', descripcion: 'Ve a "Mi firma" en tu perfil.' });
+      return;
+    }
+    setExpFirma(exp);
+    setPaginaFirma(1);
+    setFirmaPos({ x: VISOR_W - FIRMA_PX_W - 16, y: VISOR_H - FIRMA_PX_H - 16 });
+    setModalFirmaTecnico(true);
+    setLoadingPdfFirma(true);
+    try {
+      // Obtener detalle para encontrar el PDF_UNIFICADO guardado
+      const det = await areasService.detalle(exp.id);
+      const docUnificado = det.documentos?.find((d: any) =>
+        d.nombre?.startsWith('PDF_UNIFICADO:')
+      );
+
+      if (docUnificado) {
+        // Usar el PDF unificado guardado directamente
+        const response = await fetch(docUnificado.url);
+        const blob     = await response.blob();
+        const blobUrl  = window.URL.createObjectURL(blob);
+        setUrlPdfFirma(blobUrl);
+      } else {
+        // Fallback: regenerar desde el endpoint
+        const res     = await api.get(`/areas/expediente/${exp.id}/pdf-unificado`, { responseType: 'blob' });
+        const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+        setUrlPdfFirma(blobUrl);
+      }
+    } catch {
+      setUrlPdfFirma('');
+    } finally {
+      setLoadingPdfFirma(false);
+    }
+  };
+
+  const handleFirmarTecnico = async () => {
+    if (!expFirma) return;
+    setLoadingFirmar(true);
+    const { x, y } = toPdfCoords();
+    try {
+      await api.post(`/areas/firmar-tecnico/${expFirma.id}`, {
+        pagina: paginaFirma,
+        posicion_x: x, posicion_y: y, ancho: 150, alto: 60,
+      });
+      toast.success({ titulo: 'Expediente firmado y enviado al Jefe.' });
+      setModalFirmaTecnico(false); cargarBandeja();
     } catch (e: any) { toast.error({ titulo: e?.response?.data?.error ?? 'Error al firmar.' }); }
     finally { setLoadingFirmar(false); }
   };
@@ -365,7 +446,7 @@ export function useAreas() {
     confirmArchivar,  setConfirmArchivar,
     confirmReactivar, setConfirmReactivar,
     handleTomar, handleVistoBueno, handleReactivar, handleArchivar,
-    // Firma
+    // Firma Jefe
     modalFirma, expFirma, loadingPdfFirma, urlPdfFirma,
     loadingCodigo, codigoEnviado, setCodigoEnviado,
     codigoInput, setCodigoInput,
@@ -374,6 +455,9 @@ export function useAreas() {
     firmaPos, visorRef, onMouseDown,
     abrirModalFirma, cerrarModalFirma,
     solicitarCodigo, handleFirmar,
+    // Firma Técnico (NUEVO)
+    modalFirmaTecnico, setModalFirmaTecnico,
+    abrirModalFirmaTecnico, handleFirmarTecnico,
     // Subir firma
     modalSubirFirma, setModalSubirFirma,
     archivoFirma, setArchivoFirma,

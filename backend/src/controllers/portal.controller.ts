@@ -100,45 +100,27 @@ export const registrarTramitePublico = async (
     const tipoTramite = await prisma.tipoTramite.findUnique({ where: { id: Number(tipoTramiteId) } });
     if (!tipoTramite || !tipoTramite.activo) throw new AppError(400, 'Tipo de trámite no válido o inactivo.');
 
-    const ciudadanoExistente = await prisma.ciudadano.findUnique({
-      where: { email: email.toLowerCase().trim() },
-    });
+   let ciudadano = await prisma.ciudadano.findFirst({
+  where: { numero_documento: numeroDoc.trim().toUpperCase(), tipo_documento: tipoDoc },
+});
 
-    let ciudadano;
-    if (ciudadanoExistente) {
-      ciudadano = await prisma.ciudadano.update({
-        where: { id: ciudadanoExistente.id },
-        data: {
-          tipo_documento:   tipoDoc,
-          numero_documento: numeroDoc.trim().toUpperCase(),
-          dni:              tipoDoc === 'DNI' ? numeroDoc.trim() : ciudadanoExistente.dni,
-          nombres:          nombres.trim(),
-          apellido_pat:     apellido_pat.trim(),
-          apellido_mat:     (apellido_mat ?? '').trim(),
-          telefono:         telefono ? telefono.trim() : null,
-          ...(pais_emision      && { pais_emision:      pais_emision.trim() }),
-          ...(fecha_vencimiento && { fecha_vencimiento: fecha_vencimiento.trim() }),
-          ...(fecha_nacimiento  && { fecha_nacimiento:  fecha_nacimiento.trim() }),
-        },
-      });
-    } else {
-      ciudadano = await prisma.ciudadano.create({
-        data: {
-          tipo_documento:   tipoDoc,
-          numero_documento: numeroDoc.trim().toUpperCase(),
-          dni:              tipoDoc === 'DNI' ? numeroDoc.trim() : null,
-          nombres:          nombres.trim(),
-          apellido_pat:     apellido_pat.trim(),
-          apellido_mat:     (apellido_mat ?? '').trim(),
-          email:            email.toLowerCase().trim(),
-          telefono:         telefono ? telefono.trim() : null,
-          pais_emision:     pais_emision      ? pais_emision.trim()      : null,
-          fecha_vencimiento:fecha_vencimiento ? fecha_vencimiento.trim() : null,
-          fecha_nacimiento: fecha_nacimiento  ? fecha_nacimiento.trim()  : null,
-        },
-      });
-    }
-
+if (!ciudadano) {
+  ciudadano = await prisma.ciudadano.create({
+    data: {
+      tipo_documento:    tipoDoc,
+      numero_documento:  numeroDoc.trim().toUpperCase(),
+      dni:               tipoDoc === 'DNI' ? numeroDoc.trim() : null,
+      nombres:           nombres.trim(),
+      apellido_pat:      apellido_pat.trim(),
+      apellido_mat:      (apellido_mat ?? '').trim(),
+      email:             email.toLowerCase().trim(),
+      telefono:          telefono ? telefono.trim() : null,
+      pais_emision:      pais_emision      ? pais_emision.trim()      : null,
+      fecha_vencimiento: fecha_vencimiento ? fecha_vencimiento.trim() : null,
+      fecha_nacimiento:  fecha_nacimiento  ? fecha_nacimiento.trim()  : null,
+    },
+  });
+}
     const codigo       = await generarCodigoExpediente();
     const fecha_limite = new Date();
     fecha_limite.setDate(fecha_limite.getDate() + tipoTramite.plazo_dias);
@@ -174,7 +156,7 @@ export const registrarTramitePublico = async (
 
     try {
       await notificarRegistro({
-        email:          ciudadano.email,
+        email:          email.toLowerCase().trim(), 
         nombres:        ciudadano.nombres,
         codigo:         expediente.codigo,
         tipoTramite:    tipoTramite.nombre,
@@ -183,7 +165,7 @@ export const registrarTramitePublico = async (
         costo_soles:    Number(tipoTramite.costo_soles),
       });
     } catch (e) {
-      console.error('❌ Error RF19 al enviar email:', e);
+      console.error('Error RF19 al enviar email:', e);
     }
 
     res.status(201).json({

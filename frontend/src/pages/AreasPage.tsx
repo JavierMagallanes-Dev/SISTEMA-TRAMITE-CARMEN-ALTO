@@ -8,6 +8,7 @@ import ConfirmModal          from '../components/shared/ConfirmModal';
 import BandejaAreas          from '../components/areas/BandejaAreas';
 import ModalDetalleAreas     from '../components/areas/ModalDetalleAreas';
 import ModalFirmar           from '../components/areas/ModalFirmar';
+import ModalFirmarTecnico    from '../components/areas/ModalFirmarTecnico';
 import ModalSubirFirma       from '../components/areas/ModalSubirFirma';
 import ModalAdjuntar         from '../components/areas/ModalAdjuntar';
 import ModalComentarioAreas  from '../components/areas/ModalComentarioAreas';
@@ -32,14 +33,13 @@ export default function AreasPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          {a.esJefe && (
-            <Button
-              variant={a.tieneFirma ? 'secondary' : 'primary'}
-              icon={<ImagePlus size={14} />}
-              onClick={() => a.setModalSubirFirma(true)}>
-              {a.tieneFirma ? 'Mi firma ✓' : 'Subir mi firma'}
-            </Button>
-          )}
+          {/* Botón Mi firma — disponible para Jefe Y Técnico */}
+          <Button
+            variant={a.tieneFirma ? 'secondary' : 'primary'}
+            icon={<ImagePlus size={14} />}
+            onClick={() => a.setModalSubirFirma(true)}>
+            {a.tieneFirma ? 'Mi firma ✓' : 'Subir mi firma'}
+          </Button>
           <Button variant="secondary" icon={<RefreshCw size={14} />} onClick={a.cargarBandeja}>
             Actualizar
           </Button>
@@ -51,17 +51,18 @@ export default function AreasPage() {
         bandeja={a.bandeja}
         esJefe={a.esJefe}
         onVerDetalle={a.verDetalle}
-        onTomar={(exp)     => a.setConfirmTomar(exp)}
-        onReactivar={(exp) => a.setConfirmReactivar(exp)}
-        onAdjuntar={(exp)  => { a.setExpAdjuntar(exp); a.setArchivoAdjunto(null); a.setModalAdjuntar(true); }}
-        onObservar={(exp)  => { a.setExpAccion(exp); a.setComentario(''); a.setModalObservar(true); }}
-        onRechazar={(exp)  => { a.setExpAccion(exp); a.setComentario(''); a.setModalRechazar(true); }}
-        onVistoBueno={(exp)=> a.setConfirmVisto(exp)}
+        onTomar={(exp)          => a.setConfirmTomar(exp)}
+        onReactivar={(exp)      => a.setConfirmReactivar(exp)}
+        onAdjuntar={(exp)       => { a.setExpAdjuntar(exp); a.setArchivoAdjunto(null); a.setModalAdjuntar(true); }}
+        onObservar={(exp)       => { a.setExpAccion(exp); a.setComentario(''); a.setModalObservar(true); }}
+        onRechazar={(exp)       => { a.setExpAccion(exp); a.setComentario(''); a.setModalRechazar(true); }}
+        onVistoBueno={(exp)     => a.setConfirmVisto(exp)}
         onFirmar={a.abrirModalFirma}
-        onArchivar={(exp)  => a.setConfirmArchivar(exp)}
+        onFirmarTecnico={a.abrirModalFirmaTecnico}
+        onArchivar={(exp)       => a.setConfirmArchivar(exp)}
       />
 
-      {/* Modales */}
+      {/* ── Modales ── */}
       <ModalDetalleAreas
         open={a.modalDetalle}
         onClose={a.cerrarDetalle}
@@ -118,6 +119,7 @@ export default function AreasPage() {
         confirmText="Rechazar"
       />
 
+      {/* Firma Jefe — con código de aprobación */}
       <ModalFirmar
         open={a.modalFirma}
         onClose={a.cerrarModalFirma}
@@ -145,6 +147,27 @@ export default function AreasPage() {
         FIRMA_PX_H={a.FIRMA_PX_H}
       />
 
+      {/* Firma Técnico — sin código, solo conformidad técnica */}
+      <ModalFirmarTecnico
+        open={a.modalFirmaTecnico}
+        onClose={() => a.setModalFirmaTecnico(false)}
+        expFirma={a.expFirma}
+        loadingPdfFirma={a.loadingPdfFirma}
+        urlPdfFirma={a.urlPdfFirma}
+        urlFirmaPreview={a.urlFirmaPreview}
+        paginaFirma={a.paginaFirma}
+        setPaginaFirma={a.setPaginaFirma}
+        firmaPos={a.firmaPos}
+        visorRef={a.visorRef}
+        onMouseDown={a.onMouseDown}
+        loadingFirmar={a.loadingFirmar}
+        onFirmar={a.handleFirmarTecnico}
+        VISOR_W={a.VISOR_W}
+        VISOR_H={a.VISOR_H}
+        FIRMA_PX_W={a.FIRMA_PX_W}
+        FIRMA_PX_H={a.FIRMA_PX_H}
+      />
+
       <ModalSubirFirma
         open={a.modalSubirFirma}
         onClose={() => a.setModalSubirFirma(false)}
@@ -163,11 +186,44 @@ export default function AreasPage() {
         onSubirFirma={a.handleSubirFirma}
       />
 
-      {/* Confirms */}
-      <ConfirmModal open={!!a.confirmTomar}     onClose={() => a.setConfirmTomar(null)}     onConfirm={() => a.confirmTomar     && a.handleTomar(a.confirmTomar)}        title="Tomar expediente"    message={`¿Tomar ${a.confirmTomar?.codigo}?`}     confirmText="Tomar"           loading={a.loading} />
-      <ConfirmModal open={!!a.confirmVisto}     onClose={() => a.setConfirmVisto(null)}     onConfirm={() => a.confirmVisto     && a.handleVistoBueno(a.confirmVisto)}   title="Dar visto bueno"     message={`¿Visto bueno para ${a.confirmVisto?.codigo}?`} confirmText="Dar visto bueno" loading={a.loading} />
-      <ConfirmModal open={!!a.confirmArchivar}  onClose={() => a.setConfirmArchivar(null)}  onConfirm={() => a.confirmArchivar  && a.handleArchivar(a.confirmArchivar)}  title="Archivar expediente"  message={`¿Archivar ${a.confirmArchivar?.codigo}?`}  confirmText="Archivar"        loading={a.loading} danger />
-      <ConfirmModal open={!!a.confirmReactivar} onClose={() => a.setConfirmReactivar(null)} onConfirm={() => a.confirmReactivar && a.handleReactivar(a.confirmReactivar)} title="Reactivar expediente" message={`¿Reactivar ${a.confirmReactivar?.codigo}?`} confirmText="Reactivar"       loading={a.loading} />
+      {/* ── Confirms ── */}
+      <ConfirmModal
+        open={!!a.confirmTomar}
+        onClose={() => a.setConfirmTomar(null)}
+        onConfirm={() => a.confirmTomar && a.handleTomar(a.confirmTomar)}
+        title="Tomar expediente"
+        message={`¿Tomar el expediente ${a.confirmTomar?.codigo}?`}
+        confirmText="Tomar"
+        loading={a.loading}
+      />
+      <ConfirmModal
+        open={!!a.confirmVisto}
+        onClose={() => a.setConfirmVisto(null)}
+        onConfirm={() => a.confirmVisto && a.handleVistoBueno(a.confirmVisto)}
+        title="Dar visto bueno"
+        message={`¿Dar visto bueno al expediente ${a.confirmVisto?.codigo}?`}
+        confirmText="Dar visto bueno"
+        loading={a.loading}
+      />
+      <ConfirmModal
+        open={!!a.confirmArchivar}
+        onClose={() => a.setConfirmArchivar(null)}
+        onConfirm={() => a.confirmArchivar && a.handleArchivar(a.confirmArchivar)}
+        title="Archivar expediente"
+        message={`¿Archivar el expediente ${a.confirmArchivar?.codigo}?`}
+        confirmText="Archivar"
+        loading={a.loading}
+        danger
+      />
+      <ConfirmModal
+        open={!!a.confirmReactivar}
+        onClose={() => a.setConfirmReactivar(null)}
+        onConfirm={() => a.confirmReactivar && a.handleReactivar(a.confirmReactivar)}
+        title="Reactivar expediente"
+        message={`¿Reactivar el expediente ${a.confirmReactivar?.codigo}?`}
+        confirmText="Reactivar"
+        loading={a.loading}
+      />
     </div>
   );
 }

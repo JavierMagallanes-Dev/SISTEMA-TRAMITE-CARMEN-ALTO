@@ -7,24 +7,27 @@ import EstadoBadge  from '../shared/EstadoBadge';
 import { FileText, Clock, Eye, Play, CheckCircle, AlertCircle, XCircle, Paperclip, Archive, PenLine } from 'lucide-react';
 import { formatFecha, diasRestantes, colorDiasRestantes } from '../../utils/formato';
 import type { ExpedienteBandeja } from '../../hooks/useAreas';
+
 interface Props {
-  bandeja:          ExpedienteBandeja[];
-  esJefe:           boolean;
-  onVerDetalle:     (id: number) => void;
-  onTomar:          (exp: ExpedienteBandeja) => void;
-  onReactivar:      (exp: ExpedienteBandeja) => void;
-  onAdjuntar:       (exp: ExpedienteBandeja) => void;
-  onObservar:       (exp: ExpedienteBandeja) => void;
-  onRechazar:       (exp: ExpedienteBandeja) => void;
-  onVistoBueno:     (exp: ExpedienteBandeja) => void;
-  onFirmar:         (exp: ExpedienteBandeja) => void;
-  onArchivar:       (exp: ExpedienteBandeja) => void;
+  bandeja:              ExpedienteBandeja[];
+  esJefe:                boolean;
+  onVerDetalle:         (id: number) => void;
+  onTomar:              (exp: ExpedienteBandeja) => void;
+  onReactivar:          (exp: ExpedienteBandeja) => void;
+  onAdjuntar:           (exp: ExpedienteBandeja) => void;
+  onObservar:           (exp: ExpedienteBandeja) => void;
+  onRechazar:           (exp: ExpedienteBandeja) => void;
+  onVistoBueno:         (exp: ExpedienteBandeja) => void;
+  onFirmar:             (exp: ExpedienteBandeja) => void;
+  onFirmarTecnico:      (exp: ExpedienteBandeja) => void; // Nueva prop
+  onArchivar:           (exp: ExpedienteBandeja) => void;
 }
 
 export default function BandejaAreas({
   bandeja, esJefe,
   onVerDetalle, onTomar, onReactivar, onAdjuntar,
-  onObservar, onRechazar, onVistoBueno, onFirmar, onArchivar,
+  onObservar, onRechazar, onVistoBueno, onFirmar,
+  onFirmarTecnico, onArchivar,
 }: Props) {
   if (bandeja.length === 0) {
     return (
@@ -44,7 +47,7 @@ export default function BandejaAreas({
         return (
           <Card key={exp.id}>
             <div className="flex items-start justify-between gap-4 flex-wrap">
-  <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-mono text-sm font-bold text-blue-600">{exp.codigo}</span>
                   <EstadoBadge estado={exp.estado} size="sm" />
@@ -64,23 +67,38 @@ export default function BandejaAreas({
               <div className="flex flex-wrap gap-2 max-w-full">
                 <Button size="sm" variant="ghost" icon={<Eye size={13} />} onClick={() => onVerDetalle(exp.id)}>Ver</Button>
 
-                {/* Técnico */}
-                {!esJefe && exp.estado === 'DERIVADO'   && <Button size="sm" icon={<Play size={13} />}         onClick={() => onTomar(exp)}>Tomar</Button>}
-                {!esJefe && exp.estado === 'OBSERVADO'  && <Button size="sm" icon={<CheckCircle size={13} />}  onClick={() => onReactivar(exp)}>Reactivar</Button>}
-                {!esJefe && exp.estado === 'EN_PROCESO' && (<>
-                  <Button size="sm" variant="secondary" icon={<Paperclip   size={13} />} onClick={() => onAdjuntar(exp)}>Adjuntar</Button>
-                  <Button size="sm" variant="secondary" icon={<AlertCircle size={13} />} onClick={() => onObservar(exp)}>Observar</Button>
-                  <Button size="sm" variant="danger"    icon={<XCircle     size={13} />} onClick={() => onRechazar(exp)}>Rechazar</Button>
-                  <Button size="sm"                     icon={<CheckCircle size={13} />} onClick={() => onVistoBueno(exp)}>Enviar al Jefe</Button>
-                </>)}
+                {/* ── Acciones para el Técnico ── */}
+                {!esJefe && exp.estado === 'DERIVADO'   && (
+                  <Button size="sm" icon={<Play size={13} />} onClick={() => onTomar(exp)}>Tomar</Button>
+                )}
+                {!esJefe && exp.estado === 'OBSERVADO'  && (
+                  <Button size="sm" icon={<CheckCircle size={13} />} onClick={() => onReactivar(exp)}>Reactivar</Button>
+                )}
+                {!esJefe && exp.estado === 'EN_PROCESO' && (
+                  <>
+                    <Button size="sm" variant="secondary" icon={<Paperclip   size={13} />} onClick={() => onAdjuntar(exp)}>Adjuntar</Button>
+                    <Button size="sm" variant="secondary" icon={<AlertCircle size={13} />} onClick={() => onObservar(exp)}>Observar</Button>
+                    <Button size="sm" variant="danger"    icon={<XCircle     size={13} />} onClick={() => onRechazar(exp)}>Rechazar</Button>
+                    {/* Cambio principal aquí: Enviar al Jefe -> Firmar y enviar al Jefe */}
+                    <Button size="sm" icon={<PenLine size={13} />} onClick={() => onFirmarTecnico(exp)}>
+                      Firmar y enviar al Jefe
+                    </Button>
+                  </>
+                )}
 
-                {/* Jefe */}
-                {esJefe && exp.estado === 'EN_PROCESO'    && (<>
-                  <Button size="sm" variant="secondary" icon={<Paperclip   size={13} />} onClick={() => onAdjuntar(exp)}>Adjuntar</Button>
-                  <Button size="sm"                     icon={<CheckCircle size={13} />} onClick={() => onVistoBueno(exp)}>Visto bueno</Button>
-                </>)}
-                {esJefe && exp.estado === 'LISTO_DESCARGA' && <Button size="sm" icon={<PenLine size={13} />}  onClick={() => onFirmar(exp)}>Firmar expediente</Button>}
-                {esJefe && exp.estado === 'RESUELTO'       && <Button size="sm" variant="secondary" icon={<Archive size={13} />} onClick={() => onArchivar(exp)}>Archivar</Button>}
+                {/* ── Acciones para el Jefe de Área ── */}
+                {esJefe && exp.estado === 'EN_PROCESO'    && (
+                  <>
+                    <Button size="sm" variant="secondary" icon={<Paperclip   size={13} />} onClick={() => onAdjuntar(exp)}>Adjuntar</Button>
+                    <Button size="sm" icon={<CheckCircle size={13} />} onClick={() => onVistoBueno(exp)}>Visto bueno</Button>
+                  </>
+                )}
+                {esJefe && exp.estado === 'LISTO_DESCARGA' && (
+                  <Button size="sm" icon={<PenLine size={13} />} onClick={() => onFirmar(exp)}>Firmar expediente</Button>
+                )}
+                {esJefe && exp.estado === 'RESUELTO' && (
+                  <Button size="sm" variant="secondary" icon={<Archive size={13} />} onClick={() => onArchivar(exp)}>Archivar</Button>
+                )}
               </div>
             </div>
           </Card>

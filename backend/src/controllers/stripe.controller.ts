@@ -57,7 +57,7 @@ export const crearPaymentIntent = async (
         email:             expediente.ciudadano.email,
       },
       description:   `Trámite: ${expediente.tipoTramite.nombre} | Expediente: ${expediente.codigo}`,
-      receipt_email: expediente.ciudadano.email,
+      receipt_email: expediente.ciudadano.email ?? undefined,
     });
 
     console.log(`💳 Payment Intent creado para ${expediente.codigo}: ${paymentIntent.id}`);
@@ -142,7 +142,7 @@ export const confirmarPago = async (
 
     try {
       await notificarCambioEstado({
-        email:       expediente.ciudadano.email,
+        email: expediente.ciudadano.email ?? '',
         nombres:     expediente.ciudadano.nombres,
         codigo:      expediente.codigo,
         tipoTramite: expediente.tipoTramite.nombre,

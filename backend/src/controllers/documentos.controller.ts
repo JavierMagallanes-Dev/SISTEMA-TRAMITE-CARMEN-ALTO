@@ -173,7 +173,7 @@ export const subirPdfFirmado = async (
     console.log('📧 Enviando email RESUELTO a:', expediente.ciudadano.email);
 
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email: expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,

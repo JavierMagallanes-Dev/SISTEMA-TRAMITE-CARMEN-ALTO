@@ -31,7 +31,6 @@ function Stepper({ currentStep }: { currentStep: number }) {
       {STEPS.map((label, i) => {
         const done    = i + 1 < currentStep;
         const active  = i + 1 === currentStep;
-        const pending = i + 1 > currentStep;
         return (
           <div key={label} className="flex items-center flex-1 last:flex-none">
             <div className="flex flex-col items-center shrink-0">

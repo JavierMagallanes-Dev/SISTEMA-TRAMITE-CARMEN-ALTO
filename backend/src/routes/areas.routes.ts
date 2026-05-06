@@ -13,6 +13,7 @@ import {
   reactivarExpediente,
   solicitarCodigoFirma,
   firmarExpediente,
+  firmarExpedienteTecnico, // 1. Importar la nueva función
 } from '../controllers/areas.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { autorizar }  from '../middlewares/roles.middleware';
@@ -33,8 +34,11 @@ router.patch('/visto-bueno/:id',              darVistoBueno);
 router.patch('/archivar/:id',                 archivarExpediente);
 router.patch('/reactivar/:id',                reactivarExpediente);
 
-// Firma digital con imagen PNG + código por email
+// Firma digital con imagen PNG + código por email (Jefe)
 router.post('/solicitar-codigo-firma/:id',    solicitarCodigoFirma);
 router.post('/firmar/:id',                    firmarExpediente);
+
+// 2. Nueva ruta para la firma del Técnico (Sin código de aprobación)
+router.post('/firmar-tecnico/:id',            firmarExpedienteTecnico);
 
 export default router;

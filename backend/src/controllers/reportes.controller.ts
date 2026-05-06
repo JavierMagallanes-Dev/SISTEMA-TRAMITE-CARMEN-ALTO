@@ -167,7 +167,7 @@ export const exportarExcel = async (
         ? [
             idx + 1, exp.codigo,
             `${exp.ciudadano.apellido_pat} ${exp.ciudadano.apellido_mat}, ${exp.ciudadano.nombres}`,
-            exp.ciudadano.dni, exp.tipoTramite.nombre,
+            exp.ciudadano.dni ?? '', exp.tipoTramite.nombre,
             exp.estado.replace(/_/g, ' '),
             exp.areaActual?.nombre ?? '—',
             areaDerivada,
@@ -179,7 +179,7 @@ export const exportarExcel = async (
         : [
             idx + 1, exp.codigo,
             `${exp.ciudadano.apellido_pat} ${exp.ciudadano.apellido_mat}, ${exp.ciudadano.nombres}`,
-            exp.ciudadano.dni, exp.tipoTramite.nombre,
+            exp.ciudadano.dni ?? '', exp.tipoTramite.nombre,
             exp.estado.replace(/_/g, ' '),
             exp.areaActual?.nombre ?? '—',
             fmtFechaHora(exp.fecha_registro),
@@ -347,7 +347,7 @@ export const exportarPdf = async (
         const datos = [
           { x: cols[0].x, w: cols[0].w, text: exp.codigo,                        bold: true,  color: AZUL_PRIMARIO },
           { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`, bold: false, color: NEGRO },
-          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni,                  bold: false, color: GRIS         },
+          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni ?? '',                  bold: false, color: GRIS         },
           { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,             bold: false, color: NEGRO        },
           { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),      bold: true,  color: '#1a4f8a'    },
           { x: cols[5].x, w: cols[5].w, text: exp.areaActual?.nombre ?? '—',      bold: false, color: NEGRO        },
@@ -364,7 +364,7 @@ export const exportarPdf = async (
         const datos = [
           { x: cols[0].x, w: cols[0].w, text: exp.codigo,                        bold: true,  color: AZUL_PRIMARIO },
           { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`, bold: false, color: NEGRO },
-          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni,                  bold: false, color: GRIS         },
+          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni ?? '',             bold: false, color: GRIS         },
           { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,             bold: false, color: NEGRO        },
           { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),      bold: true,  color: '#1a4f8a'    },
           { x: cols[5].x, w: cols[5].w, text: fmtFechaHora(exp.fecha_registro),   bold: false, color: GRIS         },

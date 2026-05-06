@@ -1,330 +1,304 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider  = "postgresql"
-    url       = env("DATABASE_URL")
-    directUrl = env("DIRECT_URL")
-}
-
-enum NombreRol {
-    ADMIN
-    MESA_DE_PARTES
-    CAJERO
-    TECNICO
-    JEFE_AREA
-}
-
-enum EstadoExpediente {
-    PENDIENTE_PAGO
-    RECIBIDO
-    EN_REVISION_MDP
-    DERIVADO
-    EN_PROCESO
-    LISTO_DESCARGA
-    PDF_FIRMADO
-    RESUELTO
-    OBSERVADO
-    RECHAZADO
-    ARCHIVADO
-}
-
-enum EstadoPago {
-    PENDIENTE
-    VERIFICADO
-    ANULADO
-}
-
-enum CanalNotificacion {
-    EMAIL
-    WHATSAPP
-}
-
-enum OperacionAuditoria {
-    INSERT
-    UPDATE
-    DELETE
-}
-
-enum TipoAccion {
-    REGISTRO
-    VERIFICACION_PAGO
-    ANULACION_PAGO
-    REVISION_MDP
-    DERIVACION
-    TOMA_EXPEDIENTE
-    OBSERVACION
-    VISTO_BUENO
-    DESCARGA_PDF
-    SUBIDA_PDF_FIRMADO
-    RECHAZO
-    ARCHIVADO
-    SUBSANACION
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Rol {
-    id       Int       @id @default(autoincrement())
-    nombre   NombreRol @unique
-    usuarios Usuario[]
+  id       Int       @id @default(autoincrement())
+  nombre   NombreRol @unique
+  usuarios Usuario[]
 
-    @@map("roles")
+  @@map("roles")
 }
 
 model Area {
-    id     Int    @id @default(autoincrement())
-    nombre String @unique @db.VarChar(100)
-    sigla  String @unique @db.VarChar(10)
+  id                     Int                   @id @default(autoincrement())
+  nombre                 String                @unique @db.VarChar(100)
+  sigla                  String                @unique @db.VarChar(10)
+  derivacionesPendientes DerivacionPendiente[] @relation("AreaDestinoDer")
+  expedientesActivos     Expediente[]          @relation("AreaActual")
+  movimientosDestino     Movimiento[]          @relation("AreaDestino")
+  movimientosOrigen      Movimiento[]          @relation("AreaOrigen")
+  usuarios               Usuario[]
 
-    usuarios               Usuario[]
-    expedientesActivos     Expediente[]          @relation("AreaActual")
-    movimientosOrigen      Movimiento[]          @relation("AreaOrigen")
-    movimientosDestino     Movimiento[]          @relation("AreaDestino")
-    derivacionesPendientes DerivacionPendiente[] @relation("AreaDestinoDer")
-
-    @@map("areas")
+  @@map("areas")
 }
 
 model Usuario {
-    id              Int      @id @default(autoincrement())
-    dni             String   @unique @db.VarChar(8)
-    nombre_completo String   @db.VarChar(150)
-    email           String   @unique @db.VarChar(150)
-    password_hash   String
-    activo          Boolean  @default(true)
-    created_at      DateTime @default(now())
-    updated_at      DateTime @updatedAt
-    url_firma_png   String?  @db.VarChar(500)
-    pin_derivacion  String?  @db.VarChar(6)
-    rolId           Int
-    areaId          Int?
+  id                     Int          @id @default(autoincrement())
+  dni                    String       @unique @db.VarChar(8)
+  nombre_completo        String       @db.VarChar(150)
+  email                  String       @unique @db.VarChar(150)
+  password_hash          String
+  activo                 Boolean      @default(true)
+  created_at             DateTime     @default(now())
+  updated_at             DateTime     @updatedAt
+  rolId                  Int
+  areaId                 Int?
+  url_firma_png          String?      @db.VarChar(500)
+  pin_derivacion         String?      @db.VarChar(6)
+  expedientesFirmados    Expediente[] @relation("FirmadoPor")
+  expedientesRegistrados Expediente[] @relation("RegistradoPor")
+  movimientos            Movimiento[]
+  pagosVerificados       Pago[]       @relation("PagoVerificadoPor")
+  area                   Area?        @relation(fields: [areaId], references: [id])
+  rol                    Rol          @relation(fields: [rolId], references: [id])
 
-    rol  Rol   @relation(fields: [rolId], references: [id])
-    area Area? @relation(fields: [areaId], references: [id])
-
-    expedientesRegistrados Expediente[] @relation("RegistradoPor")
-    expedientesFirmados    Expediente[] @relation("FirmadoPor")
-    pagosVerificados       Pago[]       @relation("PagoVerificadoPor")
-    movimientos            Movimiento[]
-
-    @@index([rolId])
-    @@index([areaId])
-    @@index([activo])
-    @@map("usuarios")
+  @@index([rolId])
+  @@index([areaId])
+  @@index([activo])
+  @@map("usuarios")
 }
 
 model Ciudadano {
-    id Int @id @default(autoincrement())
+  id                Int          @id @default(autoincrement())
+  dni               String?      @unique @db.VarChar(8)
+  nombres           String       @db.VarChar(100)
+  apellido_pat      String       @db.VarChar(80)
+  apellido_mat      String       @default("") @db.VarChar(80)
+  email             String?      @db.VarChar(150)
+  telefono          String?      @db.VarChar(15)
+  created_at        DateTime     @default(now())
+  updated_at        DateTime     @updatedAt
+  tipo_documento    String       @default("DNI") @db.VarChar(10)
+  numero_documento  String       @default("") @db.VarChar(20)
+  pais_emision      String?      @db.VarChar(60)
+  fecha_vencimiento String?      @db.VarChar(10)
+  fecha_nacimiento  String?      @db.VarChar(10)
+  expedientes       Expediente[]
 
-    // Documento de identidad
-    tipo_documento    String  @default("DNI") @db.VarChar(10)
-    numero_documento  String  @db.VarChar(20)
-    pais_emision      String? @db.VarChar(60) // Solo PASAPORTE
-    fecha_vencimiento String? @db.VarChar(10) // Solo PASAPORTE (YYYY-MM-DD)
-    fecha_nacimiento  String? @db.VarChar(10) // Solo CARNET   (YYYY-MM-DD)
-
-    // Mantener dni para compatibilidad con registros existentes
-    dni String? @db.VarChar(20)
-
-    nombres      String   @db.VarChar(100)
-    apellido_pat String   @db.VarChar(80)
-    apellido_mat String   @default("") @db.VarChar(80)
-    email        String   @unique @db.VarChar(150)
-    telefono     String?  @db.VarChar(15)
-    created_at   DateTime @default(now())
-    updated_at   DateTime @updatedAt
-
-    expedientes Expediente[]
-
-    @@index([numero_documento])
-    @@index([email])
-    @@map("ciudadanos")
+  @@index([numero_documento])
+  @@index([email])
+  @@index([dni])
+  @@map("ciudadanos")
 }
 
 model TipoTramite {
-    id          Int     @id @default(autoincrement())
-    nombre      String  @unique @db.VarChar(120)
-    descripcion String?
-    plazo_dias  Int
-    costo_soles Decimal @db.Decimal(8, 2)
-    activo      Boolean @default(true)
+  id          Int          @id @default(autoincrement())
+  nombre      String       @unique @db.VarChar(120)
+  descripcion String?
+  plazo_dias  Int
+  costo_soles Decimal      @db.Decimal(8, 2)
+  activo      Boolean      @default(true)
+  expedientes Expediente[]
+  requisitos  Requisito[]
 
-    expedientes Expediente[]
-    requisitos  Requisito[]
-
-    @@index([activo])
-    @@map("tipos_tramite")
+  @@index([activo])
+  @@map("tipos_tramite")
 }
 
 model Expediente {
-    id     Int    @id @default(autoincrement())
-    codigo String @unique @db.VarChar(20)
+  id                        Int                   @id @default(autoincrement())
+  codigo                    String                @unique @db.VarChar(20)
+  ciudadanoId               Int
+  tipoTramiteId             Int
+  estado                    EstadoExpediente      @default(PENDIENTE_PAGO)
+  fecha_registro            DateTime              @default(now())
+  fecha_limite              DateTime
+  fecha_resolucion          DateTime?
+  updated_at                DateTime              @updatedAt
+  url_pdf_firmado           String?               @db.VarChar(500)
+  codigo_verificacion_firma String?               @unique @db.VarChar(100)
+  fecha_firma               DateTime?
+  firmadoPorId              Int?
+  registradoPorId           Int?
+  areaActualId              Int?
+  derivacionesPendientes    DerivacionPendiente[]
+  documentos                Documento[]
+  areaActual                Area?                 @relation("AreaActual", fields: [areaActualId], references: [id])
+  ciudadano                 Ciudadano             @relation(fields: [ciudadanoId], references: [id])
+  firmadoPor                Usuario?              @relation("FirmadoPor", fields: [firmadoPorId], references: [id])
+  registradoPor             Usuario?              @relation("RegistradoPor", fields: [registradoPorId], references: [id])
+  tipoTramite               TipoTramite           @relation(fields: [tipoTramiteId], references: [id])
+  movimientos               Movimiento[]
+  notificaciones            Notificacion[]
+  pagos                     Pago[]
 
-    ciudadanoId Int
-    ciudadano   Ciudadano @relation(fields: [ciudadanoId], references: [id])
-
-    tipoTramiteId Int
-    tipoTramite   TipoTramite @relation(fields: [tipoTramiteId], references: [id])
-
-    estado EstadoExpediente @default(PENDIENTE_PAGO)
-
-    fecha_registro   DateTime  @default(now())
-    fecha_limite     DateTime
-    fecha_resolucion DateTime?
-    updated_at       DateTime  @updatedAt
-
-    url_pdf_firmado           String?   @db.VarChar(500)
-    codigo_verificacion_firma String?   @unique @db.VarChar(100)
-    fecha_firma               DateTime?
-
-    firmadoPorId Int?
-    firmadoPor   Usuario? @relation("FirmadoPor", fields: [firmadoPorId], references: [id])
-
-    registradoPorId Int?
-    registradoPor   Usuario? @relation("RegistradoPor", fields: [registradoPorId], references: [id])
-
-    areaActualId Int?
-    areaActual   Area? @relation("AreaActual", fields: [areaActualId], references: [id])
-
-    pagos                  Pago[]
-    movimientos            Movimiento[]
-    documentos             Documento[]
-    derivacionesPendientes DerivacionPendiente[]
-    notificaciones         Notificacion[]
-
-    @@index([ciudadanoId])
-    @@index([estado])
-    @@index([areaActualId])
-    @@index([fecha_registro])
-    @@index([tipoTramiteId])
-    @@index([fecha_limite])
-    @@map("expedientes")
+  @@index([ciudadanoId])
+  @@index([estado])
+  @@index([areaActualId])
+  @@index([fecha_registro])
+  @@index([tipoTramiteId])
+  @@index([fecha_limite])
+  @@map("expedientes")
 }
 
 model Pago {
-    id               Int        @id @default(autoincrement())
-    expedienteId     Int
-    cajeroId         Int
-    boleta           String     @db.VarChar(50)
-    monto_cobrado    Decimal    @db.Decimal(8, 2)
-    estado           EstadoPago @default(VERIFICADO)
-    motivo_anulacion String?    @db.VarChar(200)
-    fecha_pago       DateTime   @default(now())
-    url_comprobante  String?    @db.VarChar(500) // ← AGREGAR ESTO
+  id               Int        @id @default(autoincrement())
+  expedienteId     Int
+  cajeroId         Int
+  boleta           String     @db.VarChar(50)
+  monto_cobrado    Decimal    @db.Decimal(8, 2)
+  estado           EstadoPago @default(VERIFICADO)
+  motivo_anulacion String?    @db.VarChar(200)
+  fecha_pago       DateTime   @default(now())
+  url_comprobante  String?    @db.VarChar(500)
+  cajero           Usuario    @relation("PagoVerificadoPor", fields: [cajeroId], references: [id])
+  expediente       Expediente @relation(fields: [expedienteId], references: [id])
 
-    expediente Expediente @relation(fields: [expedienteId], references: [id])
-    cajero     Usuario    @relation("PagoVerificadoPor", fields: [cajeroId], references: [id])
-
-    @@index([expedienteId])
-    @@index([cajeroId])
-    @@index([estado])
-    @@index([fecha_pago])
-    @@map("pagos")
+  @@index([expedienteId])
+  @@index([cajeroId])
+  @@index([estado])
+  @@index([fecha_pago])
+  @@map("pagos")
 }
 
 model Movimiento {
-    id               Int              @id @default(autoincrement())
-    expedienteId     Int
-    usuarioId        Int
-    tipo_accion      TipoAccion
-    estado_resultado EstadoExpediente
-    comentario       String?
-    fecha_hora       DateTime         @default(now())
+  id               Int              @id @default(autoincrement())
+  expedienteId     Int
+  usuarioId        Int
+  tipo_accion      TipoAccion
+  estado_resultado EstadoExpediente
+  comentario       String?
+  fecha_hora       DateTime         @default(now())
+  areaOrigenId     Int?
+  areaDestinoId    Int?
+  areaDestino      Area?            @relation("AreaDestino", fields: [areaDestinoId], references: [id])
+  areaOrigen       Area?            @relation("AreaOrigen", fields: [areaOrigenId], references: [id])
+  expediente       Expediente       @relation(fields: [expedienteId], references: [id])
+  usuario          Usuario          @relation(fields: [usuarioId], references: [id])
 
-    areaOrigenId  Int?
-    areaDestinoId Int?
-
-    expediente  Expediente @relation(fields: [expedienteId], references: [id])
-    usuario     Usuario    @relation(fields: [usuarioId], references: [id])
-    areaOrigen  Area?      @relation("AreaOrigen", fields: [areaOrigenId], references: [id])
-    areaDestino Area?      @relation("AreaDestino", fields: [areaDestinoId], references: [id])
-
-    @@index([expedienteId])
-    @@index([usuarioId])
-    @@index([fecha_hora])
-    @@index([tipo_accion])
-    @@map("movimientos")
+  @@index([expedienteId])
+  @@index([usuarioId])
+  @@index([fecha_hora])
+  @@index([tipo_accion])
+  @@map("movimientos")
 }
 
 model Documento {
-    id           Int      @id @default(autoincrement())
-    expedienteId Int
-    nombre       String   @db.VarChar(200)
-    url          String
-    tipo_mime    String   @db.VarChar(100)
-    uploaded_at  DateTime @default(now())
+  id           Int        @id @default(autoincrement())
+  expedienteId Int
+  nombre       String     @db.VarChar(200)
+  url          String
+  tipo_mime    String     @db.VarChar(100)
+  uploaded_at  DateTime   @default(now())
+  expediente   Expediente @relation(fields: [expedienteId], references: [id])
 
-    expediente Expediente @relation(fields: [expedienteId], references: [id])
-
-    @@index([expedienteId])
-    @@map("documentos")
+  @@index([expedienteId])
+  @@map("documentos")
 }
 
 model DerivacionPendiente {
-    id            Int      @id @default(autoincrement())
-    expedienteId  Int
-    token         String   @unique @db.VarChar(100)
-    instrucciones String?
-    estado        String   @default("PENDIENTE") @db.VarChar(20)
-    created_at    DateTime @default(now())
-    expires_at    DateTime
+  id            Int        @id @default(autoincrement())
+  expedienteId  Int
+  token         String     @unique @db.VarChar(100)
+  instrucciones String?
+  estado        String     @default("PENDIENTE") @db.VarChar(20)
+  created_at    DateTime   @default(now())
+  expires_at    DateTime
+  areaDestinoId Int
+  areaDestino   Area       @relation("AreaDestinoDer", fields: [areaDestinoId], references: [id])
+  expediente    Expediente @relation(fields: [expedienteId], references: [id])
 
-    areaDestinoId Int
-    areaDestino   Area @relation("AreaDestinoDer", fields: [areaDestinoId], references: [id])
-
-    expediente Expediente @relation(fields: [expedienteId], references: [id])
-
-    @@index([expedienteId])
-    @@index([estado])
-    @@index([expires_at])
-    @@map("derivaciones_pendientes")
+  @@index([expedienteId])
+  @@index([estado])
+  @@index([expires_at])
+  @@map("derivaciones_pendientes")
 }
 
 model Notificacion {
-    id           Int               @id @default(autoincrement())
-    expedienteId Int
-    canal        CanalNotificacion
-    mensaje      String
-    enviado      Boolean           @default(false)
-    enviado_at   DateTime?
-    created_at   DateTime          @default(now())
+  id           Int               @id @default(autoincrement())
+  expedienteId Int
+  canal        CanalNotificacion
+  mensaje      String
+  enviado      Boolean           @default(false)
+  enviado_at   DateTime?
+  created_at   DateTime          @default(now())
+  expediente   Expediente        @relation(fields: [expedienteId], references: [id])
 
-    expediente Expediente @relation(fields: [expedienteId], references: [id])
-
-    @@index([expedienteId])
-    @@index([enviado])
-    @@index([canal])
-    @@map("notificaciones")
+  @@index([expedienteId])
+  @@index([enviado])
+  @@index([canal])
+  @@map("notificaciones")
 }
 
 model Auditoria {
-    id               Int                @id @default(autoincrement())
-    tabla            String             @db.VarChar(50)
-    operacion        OperacionAuditoria
-    registro_id      Int?
-    datos_anteriores Json?
-    datos_nuevos     Json?
-    usuario_bd       String?            @db.VarChar(100)
-    usuario_app_id   Int?
-    fecha_hora       DateTime           @default(now())
+  id               Int                @id @default(autoincrement())
+  tabla            String             @db.VarChar(50)
+  operacion        OperacionAuditoria
+  registro_id      Int?
+  datos_anteriores Json?
+  datos_nuevos     Json?
+  usuario_bd       String?            @db.VarChar(100)
+  usuario_app_id   Int?
+  fecha_hora       DateTime           @default(now())
 
-    @@index([tabla, operacion, fecha_hora])
-    @@index([registro_id])
-    @@index([usuario_app_id])
-    @@map("auditoria")
+  @@index([tabla, operacion, fecha_hora])
+  @@index([registro_id])
+  @@index([usuario_app_id])
+  @@map("auditoria")
 }
 
 model Requisito {
-    id              Int      @id @default(autoincrement())
-    tipo_tramite_id Int
-    nombre          String   @db.VarChar(200)
-    descripcion     String?  @db.VarChar(400)
-    obligatorio     Boolean  @default(true)
-    orden           Int      @default(0)
-    created_at      DateTime @default(now())
+  id              Int         @id @default(autoincrement())
+  tipo_tramite_id Int
+  nombre          String      @db.VarChar(200)
+  descripcion     String?     @db.VarChar(400)
+  obligatorio     Boolean     @default(true)
+  orden           Int         @default(0)
+  created_at      DateTime?   @default(now()) @db.Timestamp(6)
+  tipoTramite     TipoTramite @relation(fields: [tipo_tramite_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-    tipoTramite TipoTramite @relation(fields: [tipo_tramite_id], references: [id], onDelete: Cascade)
+  @@index([tipo_tramite_id], map: "requisitos_tipo_tramite_idx")
+  @@map("requisitos")
+}
 
-    @@index([tipo_tramite_id])
-    @@map("requisitos")
+enum NombreRol {
+  ADMIN
+  MESA_DE_PARTES
+  CAJERO
+  TECNICO
+  JEFE_AREA
+}
+
+enum EstadoExpediente {
+  PENDIENTE_PAGO
+  RECIBIDO
+  EN_REVISION_MDP
+  DERIVADO
+  EN_PROCESO
+  LISTO_DESCARGA
+  PDF_FIRMADO
+  RESUELTO
+  OBSERVADO
+  RECHAZADO
+  ARCHIVADO
+}
+
+enum EstadoPago {
+  PENDIENTE
+  VERIFICADO
+  ANULADO
+}
+
+enum CanalNotificacion {
+  EMAIL
+  WHATSAPP
+}
+
+enum OperacionAuditoria {
+  INSERT
+  UPDATE
+  DELETE
+}
+
+enum TipoAccion {
+  REGISTRO
+  VERIFICACION_PAGO
+  ANULACION_PAGO
+  REVISION_MDP
+  DERIVACION
+  TOMA_EXPEDIENTE
+  OBSERVACION
+  VISTO_BUENO
+  DESCARGA_PDF
+  SUBIDA_PDF_FIRMADO
+  RECHAZO
+  ARCHIVADO
+  SUBSANACION
 }

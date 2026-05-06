@@ -1,7 +1,7 @@
 // src/components/consulta/BuscadorHero.tsx
-import Button from '../ui/Button';
+
 import { Search, FileText, Phone, Clock, ArrowRight } from 'lucide-react';
-import { PRIMARY, PRIMARY_DARKER, TINT } from '../../hooks/useConsulta';
+import { PRIMARY, TINT } from '../../hooks/useConsulta';
 
 interface Props {
   codigo:      string;

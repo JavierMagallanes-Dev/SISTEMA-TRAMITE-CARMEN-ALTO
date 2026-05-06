@@ -9,7 +9,7 @@ import { AppError } from '../middlewares/error.middleware';
 import { generarCodigoExpediente } from '../utils/codigo';
 import { consultarReniec } from '../utils/reniec';
 import { notificarRegistro, notificarCambioEstado } from '../services/email.service';
-
+import { storageService } from '../services/storage.service';
 const selectNotificacion = {
   codigo:      true,
   ciudadano:   { select: { email: true, nombres: true } },
@@ -71,33 +71,21 @@ export const registrarExpediente = async (
     const tipoTramite = await prisma.tipoTramite.findUnique({ where: { id: Number(tipoTramiteId) } });
     if (!tipoTramite || !tipoTramite.activo) throw new AppError(400, 'Tipo de trámite no válido.');
 
-    const ciudadanoExistente = await prisma.ciudadano.findUnique({
-      where: { email: email.toLowerCase().trim() },
-    });
+    let ciudadano = await prisma.ciudadano.findFirst({
+  where: { numero_documento: dni, tipo_documento: 'DNI' },
+});
 
-    let ciudadano;
-    if (ciudadanoExistente) {
-      ciudadano = await prisma.ciudadano.update({
-        where: { id: ciudadanoExistente.id },
-        data: {
-          tipo_documento: 'DNI', numero_documento: dni, dni,
-          nombres: nombres.trim(), apellido_pat: apellido_pat.trim(),
-          apellido_mat: (apellido_mat ?? '').trim(),
-          ...(telefono && { telefono: telefono.trim() }),
-        },
-      });
-    } else {
-      ciudadano = await prisma.ciudadano.create({
-        data: {
-          tipo_documento: 'DNI', numero_documento: dni, dni,
-          nombres: nombres.trim(), apellido_pat: apellido_pat.trim(),
-          apellido_mat: (apellido_mat ?? '').trim(),
-          email: email.toLowerCase().trim(),
-          telefono: telefono ? telefono.trim() : null,
-        },
-      });
-    }
-
+if (!ciudadano) {
+  ciudadano = await prisma.ciudadano.create({
+    data: {
+      tipo_documento: 'DNI', numero_documento: dni, dni,
+      nombres: nombres.trim(), apellido_pat: apellido_pat.trim(),
+      apellido_mat: (apellido_mat ?? '').trim(),
+      email: email.toLowerCase().trim(),
+      telefono: telefono ? telefono.trim() : null,
+    },
+  });
+}
     const codigo       = await generarCodigoExpediente();
     const fecha_limite = new Date();
     fecha_limite.setDate(fecha_limite.getDate() + tipoTramite.plazo_dias);
@@ -114,7 +102,8 @@ export const registrarExpediente = async (
     });
 
     notificarRegistro({
-      email: ciudadano.email, nombres: ciudadano.nombres,
+      nombres: ciudadano.nombres ?? '',
+      email: ciudadano.email ?? '',
       codigo: expediente.codigo, tipoTramite: tipoTramite.nombre,
       fecha_registro: expediente.fecha_registro, fecha_limite: expediente.fecha_limite,
       costo_soles: Number(tipoTramite.costo_soles),
@@ -209,8 +198,13 @@ export const descargarPdfUnificado = async (
   } catch (err) { next(err); }
 };
 
-// ── POST /api/mesa-partes/derivar ────────────────────────────
-// Valida el PIN de seguridad del funcionario antes de derivar.
+// REEMPLAZA la función derivarExpediente en mesaPartes.controller.ts
+// Al derivar, genera y guarda el PDF unificado en Supabase
+// para que el Técnico reciba un único archivo listo para firmar.
+
+// Primero agrega este import al inicio del archivo si no existe:
+// import { storageService } from '../services/storage.service';
+
 export const derivarExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -221,12 +215,11 @@ export const derivarExpediente = async (
     if (!expedienteId || !areaDestinoId) throw new AppError(400, 'Faltan campos: expedienteId, areaDestinoId.');
     if (!pin?.trim()) throw new AppError(400, 'El PIN de seguridad es obligatorio.');
 
-    // Validar PIN del funcionario
     const usuario = await prisma.usuario.findUnique({
       where:  { id: usuarioId },
       select: { pin_derivacion: true, nombre_completo: true },
     });
-    if (!usuario) throw new AppError(404, 'Usuario no encontrado.');
+    if (!usuario)               throw new AppError(404, 'Usuario no encontrado.');
     if (!usuario.pin_derivacion) throw new AppError(400, 'No tienes un PIN asignado. Contacta al Administrador.');
     if (usuario.pin_derivacion !== pin.trim()) throw new AppError(401, 'PIN incorrecto.');
 
@@ -241,6 +234,81 @@ export const derivarExpediente = async (
     const area = await prisma.area.findUnique({ where: { id: Number(areaDestinoId) } });
     if (!area) throw new AppError(400, 'Área destino no encontrada.');
 
+    // ── Generar y guardar PDF unificado para el Técnico ──────
+    // Obtener documentos del expediente (solo PDFs originales)
+    const documentos = await prisma.documento.findMany({
+      where:   { expedienteId: Number(expedienteId), tipo_mime: 'application/pdf' },
+      orderBy: { uploaded_at: 'asc' },
+    });
+
+    if (documentos.length > 0) {
+      try {
+        const pdfFinal = await PDFDocument.create();
+
+        // Portada
+        const portada = pdfFinal.addPage([595, 842]);
+        const { width, height } = portada.getSize();
+        portada.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+        portada.drawText('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', { x: 40, y: height - 30, size: 13, color: { red: 1, green: 1, blue: 1, type: 'RGB' as any } });
+        portada.drawText('Sistema de Tramite Documentario', { x: 40, y: height - 50, size: 10, color: { red: 0.75, green: 0.85, blue: 0.95, type: 'RGB' as any } });
+        portada.drawText('EXPEDIENTE UNIFICADO', { x: 40, y: height - 120, size: 16, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+        portada.drawText(`Codigo: ${expediente.codigo}`, { x: 40, y: height - 150, size: 12, color: { red: 0.1, green: 0.37, blue: 0.65, type: 'RGB' as any } });
+        portada.drawText(`Ciudadano: ${expediente.ciudadano.nombres} ${expediente.ciudadano.apellido_pat}`, { x: 40, y: height - 175, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
+        portada.drawText(`Tramite: ${expediente.tipoTramite.nombre}`, { x: 40, y: height - 195, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
+        portada.drawText(`Derivado a: ${area.nombre}`, { x: 40, y: height - 215, size: 11, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } });
+        portada.drawText(`Generado: ${new Date().toLocaleString('es-PE')}`, { x: 40, y: height - 235, size: 10, color: { red: 0.5, green: 0.5, blue: 0.5, type: 'RGB' as any } });
+        portada.drawText('DOCUMENTOS INCLUIDOS:', { x: 40, y: height - 275, size: 11, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+
+        documentos.forEach((doc, i) => {
+          const nombre = doc.nombre.startsWith('REQ-') ? doc.nombre.replace(/^REQ-\d+:\s*/, '') : doc.nombre;
+          portada.drawText(`${i + 1}. ${nombre}`, { x: 40, y: height - 297 - (i * 22), size: 10, color: { red: 0.2, green: 0.2, blue: 0.2, type: 'RGB' as any } });
+        });
+
+        // Fusionar PDFs
+        for (const doc of documentos) {
+          try {
+            const response    = await fetch(doc.url);
+            if (!response.ok) continue;
+            const arrayBuffer = await response.arrayBuffer();
+            const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+            const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
+            const separador   = pdfFinal.addPage([595, 842]);
+            const nombre      = doc.nombre.startsWith('REQ-') ? doc.nombre.replace(/^REQ-\d+:\s*/, '') : doc.nombre;
+            separador.drawRectangle({ x: 0, y: 380, width: 595, height: 82, color: { red: 0.93, green: 0.95, blue: 0.98, type: 'RGB' as any } });
+            separador.drawText(nombre, { x: 40, y: 430, size: 14, color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any } });
+            paginas.forEach(p => pdfFinal.addPage(p));
+          } catch { continue; }
+        }
+
+        // Subir a Supabase y guardar como documento del expediente
+        const pdfBytes  = await pdfFinal.save();
+        const pdfBuffer = Buffer.from(pdfBytes);
+        const { storageService } = await import('../services/storage.service');
+        const urlUnificado = await storageService.subirArchivo(pdfBuffer, 'application/pdf', 'expedientes');
+
+        // Eliminar PDF unificado anterior si existe
+        await prisma.documento.deleteMany({
+          where: { expedienteId: Number(expedienteId), nombre: `PDF_UNIFICADO: ${expediente.codigo}` },
+        });
+
+        // Guardar nuevo PDF unificado
+        await prisma.documento.create({
+          data: {
+            expedienteId: Number(expedienteId),
+            nombre:       `PDF_UNIFICADO: ${expediente.codigo}`,
+            url:          urlUnificado,
+            tipo_mime:    'application/pdf',
+          },
+        });
+
+        console.log(`✅ PDF unificado guardado para expediente ${expediente.codigo}`);
+      } catch (e) {
+        console.warn('⚠️ No se pudo generar el PDF unificado al derivar:', e);
+        // No lanzar error — la derivación continúa aunque falle el PDF
+      }
+    }
+
+    // ── Derivación normal ────────────────────────────────────
     const token      = randomBytes(32).toString('hex');
     const expires_at = new Date();
     expires_at.setHours(expires_at.getHours() + 24);
@@ -258,7 +326,6 @@ export const derivarExpediente = async (
       });
     });
 
-    // Auto-confirmar derivación
     await prisma.$transaction(async (tx) => {
       await tx.derivacionPendiente.update({ where: { token }, data: { estado: 'CONFIRMADO' } });
       await tx.expediente.update({ where: { id: Number(expedienteId) }, data: { estado: 'DERIVADO' } });
@@ -268,7 +335,7 @@ export const derivarExpediente = async (
     });
 
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email:       expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
@@ -308,10 +375,14 @@ export const observarExpedienteMDP = async (
     });
 
     notificarCambioEstado({
-      email: expediente.ciudadano.email, nombres: expediente.ciudadano.nombres,
-      codigo: expediente.codigo, tipoTramite: expediente.tipoTramite.nombre,
-      estado: 'OBSERVADO', comentario: comentario.trim(), area: expediente.areaActual?.nombre,
-    }).catch((e) => console.warn('⚠️ Email OBSERVADO MDP:', e));
+  email:       expediente.ciudadano.email ?? '',
+  nombres:     expediente.ciudadano.nombres,
+  codigo:      expediente.codigo,
+  tipoTramite: expediente.tipoTramite.nombre,
+  estado:      'OBSERVADO',
+  comentario:  comentario.trim(),
+  area:        expediente.areaActual?.nombre,
+}).catch((e) => console.warn('⚠️ Email OBSERVADO MDP:', e));
 
     res.json({ message: 'Expediente marcado como OBSERVADO.' });
   } catch (err) { next(err); }
@@ -341,11 +412,14 @@ export const reactivarExpediente = async (
     });
 
     notificarCambioEstado({
-      email: expediente.ciudadano.email, nombres: expediente.ciudadano.nombres,
-      codigo: expediente.codigo, tipoTramite: expediente.tipoTramite.nombre,
-      estado: 'SUBSANADO', comentario: 'Tus documentos han sido revisados y aceptados.',
-      area: expediente.areaActual?.nombre,
-    }).catch((e) => console.warn('⚠️ Email SUBSANACION MDP:', e));
+  email:       expediente.ciudadano.email ?? '',
+  nombres:     expediente.ciudadano.nombres,
+  codigo:      expediente.codigo,
+  tipoTramite: expediente.tipoTramite.nombre,
+  estado:      'SUBSANADO',
+  comentario:  'Tus documentos han sido revisados y aceptados.',
+  area:        expediente.areaActual?.nombre,
+}).catch((e) => console.warn('⚠️ Email SUBSANACION MDP:', e));
 
     res.json({ message: 'Expediente reactivado. Estado: RECIBIDO.' });
   } catch (err) { next(err); }

@@ -117,7 +117,7 @@ export const verificarPago = async (
       });
       if (datos) {
         await notificarCambioEstado({
-          email:       datos.ciudadano.email,
+          email: datos.ciudadano.email ?? '',
           nombres:     datos.ciudadano.nombres,
           codigo:      datos.codigo,
           tipoTramite: datos.tipoTramite.nombre,

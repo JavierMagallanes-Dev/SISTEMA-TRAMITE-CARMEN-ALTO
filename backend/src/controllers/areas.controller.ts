@@ -236,8 +236,9 @@ export const solicitarCodigoFirma = async (
   } catch (err) { next(err); }
 };
 
-// ── POST /api/areas/firmar/:id ───────────────────────────────
-// Valida el código, inserta la firma PNG en el PDF y lo sube.
+// REEMPLAZA la función firmarExpediente en areas.controller.ts
+// El Jefe ahora firma sobre el PDF que ya tiene la firma del Técnico.
+
 export const firmarExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -245,26 +246,24 @@ export const firmarExpediente = async (
     const id        = Number(req.params['id']);
     const usuarioId = req.usuario!.id;
     const { codigo, pagina, posicion_x, posicion_y, ancho, alto } = req.body as {
-      codigo:      string;
-      pagina:      number;
-      posicion_x:  number;
-      posicion_y:  number;
-      ancho:       number;
-      alto:        number;
+      codigo:     string;
+      pagina:     number;
+      posicion_x: number;
+      posicion_y: number;
+      ancho:      number;
+      alto:       number;
     };
 
     if (!codigo?.trim()) throw new AppError(400, 'El código de aprobación es obligatorio.');
 
     // Validar código
     const entry = codigosFirma.get(usuarioId);
-    if (!entry)                      throw new AppError(400, 'No hay un código activo. Solicita uno nuevo.');
-    if (entry.expedienteId !== id)   throw new AppError(400, 'El código no corresponde a este expediente.');
-    if (new Date() > entry.expira)   { codigosFirma.delete(usuarioId); throw new AppError(400, 'El código ha expirado. Solicita uno nuevo.'); }
+    if (!entry)                         throw new AppError(400, 'No hay un código activo. Solicita uno nuevo.');
+    if (entry.expedienteId !== id)      throw new AppError(400, 'El código no corresponde a este expediente.');
+    if (new Date() > entry.expira)      { codigosFirma.delete(usuarioId); throw new AppError(400, 'El código ha expirado. Solicita uno nuevo.'); }
     if (entry.codigo !== codigo.trim()) throw new AppError(400, 'Código incorrecto.');
-
     codigosFirma.delete(usuarioId);
 
-    // Obtener expediente y usuario
     const expediente = await prisma.expediente.findUnique({
       where:  { id },
       select: {
@@ -272,7 +271,7 @@ export const firmarExpediente = async (
         ciudadano:   { select: { email: true, nombres: true } },
         tipoTramite: { select: { nombre: true } },
         areaActual:  { select: { nombre: true } },
-        documentos:  { select: { url: true, tipo_mime: true }, orderBy: { uploaded_at: 'asc' } },
+        documentos:  { select: { url: true, tipo_mime: true, nombre: true }, orderBy: { uploaded_at: 'asc' } },
       },
     });
 
@@ -286,54 +285,68 @@ export const firmarExpediente = async (
 
     if (!usuario?.url_firma_png) throw new AppError(400, 'No tienes firma configurada. Ve a tu perfil y sube tu firma.');
 
-    // Descargar todos los PDFs y fusionarlos
-    const docsPdf = expediente.documentos.filter(d => d.tipo_mime === 'application/pdf');
-    if (docsPdf.length === 0) throw new AppError(400, 'El expediente no tiene documentos PDF para firmar.');
+    // ── Buscar el PDF firmado por el Técnico ──────────────────
+    // Si existe, el Jefe firma encima de ese PDF (que ya tiene la firma del técnico).
+    // Si no existe (flujo sin técnico), fusionar todos los PDFs originales.
+    const docFirmadoTecnico = expediente.documentos.find(d =>
+      d.nombre.startsWith('FIRMADO_TECNICO:') && d.tipo_mime === 'application/pdf'
+    );
 
     const pdfFinal = await PDFDocument.create();
 
-    for (const doc of docsPdf) {
-      try {
-        const response    = await fetch(doc.url);
-        const arrayBuffer = await response.arrayBuffer();
-        const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
-        const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
-        paginas.forEach(p => pdfFinal.addPage(p));
-      } catch { continue; }
+    if (docFirmadoTecnico) {
+      // Usar el PDF que ya tiene la firma del técnico
+      const response    = await fetch(docFirmadoTecnico.url);
+      const arrayBuffer = await response.arrayBuffer();
+      const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+      const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
+      paginas.forEach(p => pdfFinal.addPage(p));
+    } else {
+      // Sin firma del técnico — fusionar todos los PDFs originales
+      const docsPdf = expediente.documentos.filter(d =>
+        d.tipo_mime === 'application/pdf' && !d.nombre.startsWith('FIRMADO_TECNICO:')
+      );
+      if (docsPdf.length === 0) throw new AppError(400, 'El expediente no tiene documentos PDF para firmar.');
+
+      for (const doc of docsPdf) {
+        try {
+          const response    = await fetch(doc.url);
+          const arrayBuffer = await response.arrayBuffer();
+          const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+          const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
+          paginas.forEach(p => pdfFinal.addPage(p));
+        } catch { continue; }
+      }
     }
 
     if (pdfFinal.getPageCount() === 0) throw new AppError(500, 'No se pudo generar el PDF para firmar.');
 
-    // Descargar imagen de firma PNG
+    // ── Insertar firma PNG del Jefe ───────────────────────────
     const firmaResponse    = await fetch(usuario.url_firma_png);
     const firmaArrayBuffer = await firmaResponse.arrayBuffer();
     const firmaBytes       = new Uint8Array(firmaArrayBuffer);
 
-    // Incrustar firma PNG en el PDF
     let firmaImg;
-// Detectar tipo por los primeros bytes del archivo
-const header = firmaBytes.slice(0, 4);
-const isPng  = header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47;
+    const header = firmaBytes.slice(0, 4);
+    const isPng  = header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47;
+    if (isPng) {
+      firmaImg = await pdfFinal.embedPng(firmaBytes);
+    } else {
+      const sharp     = require('sharp');
+      const pngBuffer = await sharp(Buffer.from(firmaBytes)).png().toBuffer();
+      firmaImg        = await pdfFinal.embedPng(new Uint8Array(pngBuffer));
+    }
 
-if (isPng) {
-  firmaImg = await pdfFinal.embedPng(firmaBytes);
-} else {
-  // Asumir JPEG/WebP — convertir con sharp a PNG primero
-  const sharp = require('sharp');
-  const pngBuffer = await sharp(Buffer.from(firmaBytes)).png().toBuffer();
-  firmaImg = await pdfFinal.embedPng(new Uint8Array(pngBuffer));
-}
     const paginaIdx = Math.max(0, Math.min((pagina ?? 1) - 1, pdfFinal.getPageCount() - 1));
     const paginaPdf = pdfFinal.getPage(paginaIdx);
 
     paginaPdf.drawImage(firmaImg, {
-      x:      posicion_x  ?? 400,
-      y:      posicion_y  ?? 50,
-      width:  ancho       ?? 150,
-      height: alto        ?? 60,
+      x:      posicion_x ?? 400,
+      y:      posicion_y ?? 50,
+      width:  ancho      ?? 150,
+      height: alto       ?? 60,
     });
 
-    // Agregar texto de validación bajo la firma
     paginaPdf.drawText(`Firmado por: ${usuario.nombre_completo}`, {
       x:    posicion_x ?? 400,
       y:    (posicion_y ?? 50) - 14,
@@ -347,20 +360,18 @@ if (isPng) {
       color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any },
     });
 
-    // Guardar PDF firmado
-    const pdfBytes  = await pdfFinal.save();
-    const pdfBuffer = Buffer.from(pdfBytes);
+    // ── Subir PDF final a Supabase ────────────────────────────
+    const pdfBytes        = await pdfFinal.save();
+    const pdfBuffer       = Buffer.from(pdfBytes);
+    const url_pdf_firmado = await storageService.subirArchivo(pdfBuffer, 'application/pdf', 'firmados');
+    const codigo_verificacion = randomUUID();
 
-    // Subir a Supabase Storage
-    const url_pdf_firmado      = await storageService.subirArchivo(pdfBuffer, 'application/pdf', 'firmados');
-    const codigo_verificacion  = randomUUID();
-
-    // Actualizar expediente
+    // ── Actualizar expediente ─────────────────────────────────
     await prisma.$transaction(async (tx) => {
       await tx.expediente.update({
         where: { id },
         data: {
-          estado:                   'PDF_FIRMADO',
+          estado:                    'PDF_FIRMADO',
           url_pdf_firmado,
           codigo_verificacion_firma: codigo_verificacion,
           fecha_firma:               new Date(),
@@ -370,37 +381,36 @@ if (isPng) {
       });
       await tx.movimiento.create({
         data: {
-          expedienteId: id, usuarioId,
+          expedienteId:     id, usuarioId,
           tipo_accion:      'SUBIDA_PDF_FIRMADO',
           estado_resultado: 'PDF_FIRMADO',
-          comentario: `PDF firmado con imagen digital. Página ${pagina}. Código: ${codigo_verificacion}`,
+          comentario: `PDF firmado por Jefe de Área. Código: ${codigo_verificacion}`,
         },
       });
       await tx.expediente.update({ where: { id }, data: { estado: 'RESUELTO' } });
       await tx.movimiento.create({
         data: {
-          expedienteId: id, usuarioId,
+          expedienteId:     id, usuarioId,
           tipo_accion:      'SUBIDA_PDF_FIRMADO',
           estado_resultado: 'RESUELTO',
-          comentario: 'Expediente resuelto. Documento firmado disponible para el ciudadano.',
+          comentario: 'Expediente resuelto. Documento con firmas técnica y de Jefe disponible.',
         },
       });
     });
 
-    // Notificar ciudadano
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email:       expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
       estado:      'RESUELTO',
-      comentario:  `Su documento oficial ha sido firmado y está listo para descargar.`,
+      comentario:  'Su documento oficial ha sido firmado y está listo para descargar.',
       area:        expediente.areaActual?.nombre,
       urlDescarga: url_pdf_firmado,
     }).catch((e) => console.error('❌ Email RESUELTO:', e));
 
     res.json({
-      message:                  'Expediente firmado y resuelto correctamente.',
+      message:                   'Expediente firmado y resuelto correctamente.',
       codigo_verificacion_firma: codigo_verificacion,
       url_pdf_firmado,
     });
@@ -433,7 +443,7 @@ export const tomarExpediente = async (
     });
 
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email: expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
@@ -474,7 +484,7 @@ export const observarExpediente = async (
     });
 
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email: expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
@@ -515,7 +525,7 @@ export const rechazarExpediente = async (
     });
 
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email: expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
@@ -554,7 +564,7 @@ export const darVistoBueno = async (
     });
 
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email: expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
@@ -645,7 +655,7 @@ export const reactivarExpediente = async (
     });
 
     notificarCambioEstado({
-      email:       expediente.ciudadano.email,
+      email: expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
@@ -655,5 +665,157 @@ export const reactivarExpediente = async (
     }).catch((e) => console.warn('⚠️ Email SUBSANACION:', e));
 
     res.json({ message: 'Expediente reactivado. Estado: EN_PROCESO.' });
+  } catch (err) { next(err); }
+
+  };
+
+// REEMPLAZA firmarExpedienteTecnico en areas.controller.ts
+// Ahora usa el PDF_UNIFICADO guardado por Mesa de Partes al derivar.
+
+export const firmarExpedienteTecnico = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id        = Number(req.params['id']);
+    const usuarioId = req.usuario!.id;
+    const { pagina, posicion_x, posicion_y, ancho, alto } = req.body as {
+      pagina: number; posicion_x: number; posicion_y: number; ancho: number; alto: number;
+    };
+
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: {
+        estado: true, codigo: true,
+        ciudadano:   { select: { email: true, nombres: true } },
+        tipoTramite: { select: { nombre: true } },
+        areaActual:  { select: { nombre: true } },
+        documentos:  { select: { url: true, tipo_mime: true, nombre: true }, orderBy: { uploaded_at: 'asc' } },
+      },
+    });
+
+    if (!expediente)                        throw new AppError(404, 'Expediente no encontrado.');
+    if (expediente.estado !== 'EN_PROCESO') throw new AppError(400, 'El expediente debe estar EN_PROCESO para firmar.');
+
+    const usuario = await prisma.usuario.findUnique({
+      where:  { id: usuarioId },
+      select: { nombre_completo: true, url_firma_png: true },
+    });
+
+    if (!usuario?.url_firma_png) throw new AppError(400, 'Debes subir tu imagen de firma antes de firmar. Ve a "Mi firma".');
+
+    // ── Buscar el PDF unificado guardado por Mesa de Partes ──
+    const docUnificado = expediente.documentos.find(d =>
+      d.nombre.startsWith('PDF_UNIFICADO:') && d.tipo_mime === 'application/pdf'
+    );
+
+    const pdfFinal = await PDFDocument.create();
+
+    if (docUnificado) {
+      // Usar el PDF unificado guardado
+      const response    = await fetch(docUnificado.url);
+      const arrayBuffer = await response.arrayBuffer();
+      const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+      const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
+      paginas.forEach(p => pdfFinal.addPage(p));
+    } else {
+      // Fallback: fusionar documentos originales si no hay PDF unificado
+      const docsPdf = expediente.documentos.filter(d =>
+        d.tipo_mime === 'application/pdf' &&
+        !d.nombre.startsWith('PDF_UNIFICADO:') &&
+        !d.nombre.startsWith('FIRMADO_TECNICO:')
+      );
+      if (docsPdf.length === 0) throw new AppError(400, 'El expediente no tiene documentos PDF para firmar.');
+      for (const doc of docsPdf) {
+        try {
+          const response    = await fetch(doc.url);
+          const arrayBuffer = await response.arrayBuffer();
+          const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+          const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
+          paginas.forEach(p => pdfFinal.addPage(p));
+        } catch { continue; }
+      }
+    }
+
+    if (pdfFinal.getPageCount() === 0) throw new AppError(500, 'No se pudo cargar el PDF para firmar.');
+
+    // ── Insertar firma PNG del Técnico ───────────────────────
+    const firmaResponse    = await fetch(usuario.url_firma_png);
+    const firmaArrayBuffer = await firmaResponse.arrayBuffer();
+    const firmaBytes       = new Uint8Array(firmaArrayBuffer);
+
+    let firmaImg;
+    const header = firmaBytes.slice(0, 4);
+    const isPng  = header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47;
+    if (isPng) {
+      firmaImg = await pdfFinal.embedPng(firmaBytes);
+    } else {
+      const sharp     = require('sharp');
+      const pngBuffer = await sharp(Buffer.from(firmaBytes)).png().toBuffer();
+      firmaImg        = await pdfFinal.embedPng(new Uint8Array(pngBuffer));
+    }
+
+    const paginaIdx = Math.max(0, Math.min((pagina ?? 1) - 1, pdfFinal.getPageCount() - 1));
+    const paginaPdf = pdfFinal.getPage(paginaIdx);
+
+    paginaPdf.drawImage(firmaImg, {
+      x: posicion_x ?? 400, y: posicion_y ?? 50,
+      width: ancho ?? 150,  height: alto ?? 60,
+    });
+    paginaPdf.drawText(`Revisado por: ${usuario.nombre_completo}`, {
+      x: posicion_x ?? 400, y: (posicion_y ?? 50) - 14,
+      size: 8, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any },
+    });
+    paginaPdf.drawText(`Fecha: ${new Date().toLocaleString('es-PE')}`, {
+      x: posicion_x ?? 400, y: (posicion_y ?? 50) - 25,
+      size: 8, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any },
+    });
+
+    // ── Subir PDF firmado por técnico ────────────────────────
+    const pdfBytes        = await pdfFinal.save();
+    const pdfBuffer       = Buffer.from(pdfBytes);
+    const url_pdf_tecnico = await storageService.subirArchivo(pdfBuffer, 'application/pdf', 'firmados');
+
+    await prisma.$transaction(async (tx) => {
+      // Eliminar FIRMADO_TECNICO anterior si existe
+      await tx.documento.deleteMany({
+        where: { expedienteId: id, nombre: { startsWith: 'FIRMADO_TECNICO:' } },
+      });
+
+      // Guardar nuevo PDF firmado por técnico
+      await tx.documento.create({
+        data: {
+          expedienteId: id,
+          nombre:       `FIRMADO_TECNICO: ${expediente.codigo}`,
+          url:          url_pdf_tecnico,
+          tipo_mime:    'application/pdf',
+        },
+      });
+
+      await tx.expediente.update({
+        where: { id },
+        data:  { estado: 'LISTO_DESCARGA' },
+      });
+
+      await tx.movimiento.create({
+        data: {
+          expedienteId:     id, usuarioId,
+          tipo_accion:      'VISTO_BUENO',
+          estado_resultado: 'LISTO_DESCARGA',
+          comentario:       `Expediente firmado por ${usuario.nombre_completo} (Técnico). Listo para firma del Jefe de Área.`,
+        },
+      });
+    });
+
+    notificarCambioEstado({
+      email:       expediente.ciudadano.email ?? '',
+      nombres:     expediente.ciudadano.nombres,
+      codigo:      expediente.codigo,
+      tipoTramite: expediente.tipoTramite.nombre,
+      estado:      'LISTO_DESCARGA',
+      comentario:  'Tu expediente fue revisado y firmado por el técnico. Pendiente de firma del Jefe de Área.',
+      area:        expediente.areaActual?.nombre,
+    }).catch((e) => console.warn('⚠️ Email FIRMA_TECNICO:', e));
+
+    res.json({ message: 'Expediente firmado correctamente. Enviado al Jefe de Área.' });
   } catch (err) { next(err); }
 };
