@@ -20,11 +20,19 @@ const NEGRO           = '#111827';
 
 const LOGO_PATH = path.join(__dirname, '../assets/logoCA.webp');
 
-const getLogoPng = (): Promise<Buffer> =>
-  sharp(LOGO_PATH)
-    .resize(55, 55, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
-    .png()
-    .toBuffer();
+const getLogoPng = async (): Promise<Buffer> => {
+  try {
+    const sharp = require('sharp');
+    return await sharp(LOGO_PATH)
+      .resize(55, 55, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+      .png()
+      .toBuffer();
+  } catch {
+    // Si Sharp falla en producción, devolver un buffer vacío
+    // El PDF se generará sin logo
+    return Buffer.alloc(0);
+  }
+};
 
 // ── Helper: construir filtros según rol ──────────────────────
 const buildWhere = (query: Record<string, string>, req: Request) => {
@@ -296,12 +304,17 @@ export const exportarPdf = async (
     const xInicio    = esMDP ? 20 : 40;
 
     const dibujarEncabezado = (subtitulo: string) => {
-      doc.rect(0, 0, 842, 70).fill(AZUL_PRIMARIO);
-      doc.rect(0, 60, 842, 10).fill(AZUL_OSCURO);
-      doc.rect(0, 70, 842, 3).fill(AZUL_SECUNDARIO);
+  doc.rect(0, 0, 842, 70).fill(AZUL_PRIMARIO);
+  doc.rect(0, 60, 842, 10).fill(AZUL_OSCURO);
+  doc.rect(0, 70, 842, 3).fill(AZUL_SECUNDARIO);
+  // Solo insertar logo si el buffer tiene contenido
+  if (logoPng.length > 0) {
+    try {
       doc.image(logoPng, 15, 7, { width: 50, height: 50 });
-      doc.fillColor('white').fontSize(13).font('Helvetica-Bold')
-         .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 75, 10, { width: 752 });
+    } catch { /* sin logo */ }
+  }
+  doc.fillColor('white').fontSize(13).font('Helvetica-Bold')
+     .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 75, 10, { width: 752 });
       doc.fontSize(8).font('Helvetica')
          .text(subtitulo, 75, 28, { width: 752 });
       doc.fillColor(AZUL_SECUNDARIO).fontSize(7.5).font('Helvetica')
