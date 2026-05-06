@@ -1,7 +1,3 @@
-// src/hooks/useAreas.ts
-// Hook que centraliza toda la lógica del módulo de Áreas.
-// Actualizado: Soporte para firma técnica (conformidad) y firma de resolución.
-
 import { useEffect, useState, useRef, useCallback } from 'react';
 import api                 from '../services/api';
 import { areasService }     from '../services/areas.service';
@@ -76,6 +72,8 @@ export function useAreas() {
   const [expAdjuntar,    setExpAdjuntar]    = useState<ExpedienteBandeja | null>(null);
   const [archivoAdjunto, setArchivoAdjunto] = useState<File | null>(null);
   const [loadingAdjunto, setLoadingAdjunto] = useState(false);
+  const [archivoReemplazo,   setArchivoReemplazo]   = useState<File | null>(null);
+  const [loadingReemplazo,   setLoadingReemplazo]   = useState(false);
 
   // Firma (General / Jefe)
   const [modalFirma,       setModalFirma]       = useState(false);
@@ -250,6 +248,25 @@ export function useAreas() {
     finally { setLoadingAdjunto(false); }
   };
 
+  const handleReemplazarPdf = async () => {
+  if (!expAdjuntar || !archivoReemplazo) return;
+  setLoadingReemplazo(true);
+  try {
+    const formData = new FormData();
+    formData.append('archivo', archivoReemplazo);
+    await api.post(`/areas/expediente/${expAdjuntar.id}/reemplazar-pdf`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    toast.success({ titulo: 'PDF reemplazado correctamente.' });
+    setArchivoReemplazo(null);
+    setModalAdjuntar(false);
+  } catch (e: any) {
+    toast.error({ titulo: e?.response?.data?.error ?? 'Error al reemplazar el PDF.' });
+  } finally {
+    setLoadingReemplazo(false);
+  }
+};
+
   const abrirModalFirma = async (exp: ExpedienteBandeja) => {
     if (!tieneFirma) {
       toast.warning({ titulo: 'Debes subir tu firma primero', descripcion: 'Haz clic en "Mi firma" para configurarla.' });
@@ -322,10 +339,6 @@ export function useAreas() {
     } catch (e: any) { toast.error({ titulo: e?.response?.data?.error ?? 'Error al firmar.' }); }
     finally { setLoadingFirmar(false); }
   };
-
-  // REEMPLAZA abrirModalFirmaTecnico en useAreas.ts
-// Ahora obtiene el detalle del expediente y usa el PDF_UNIFICADO guardado
-// en lugar de regenerarlo desde el endpoint.
 
   const abrirModalFirmaTecnico = async (exp: ExpedienteBandeja) => {
     if (!tieneFirma) {
@@ -440,6 +453,8 @@ export function useAreas() {
     expAdjuntar, setExpAdjuntar,
     archivoAdjunto, setArchivoAdjunto,
     loadingAdjunto, handleAdjuntar,
+    archivoReemplazo, setArchivoReemplazo,
+    loadingReemplazo, handleReemplazarPdf,
     // Confirms
     confirmTomar,     setConfirmTomar,
     confirmVisto,     setConfirmVisto,

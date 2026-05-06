@@ -169,7 +169,34 @@ export default function Paso2Datos({
   ];
 
   return (
+    
     <div>
+      {/* Pantalla de registro en proceso */}
+{loading && (
+  <div className="p2-registrando-overlay">
+    {/* Spinner */}
+    <div className="p2-reg-spinner" />
+ 
+    {/* Título y subtítulo */}
+    <div style={{ textAlign: 'center' }}>
+      <p className="p2-reg-title">Registrando tu trámite...</p>
+      <p className="p2-reg-sub">
+        <br />
+        No cierres esta página, solo tomará unos segundos.
+      </p>
+    </div>
+ 
+    {/* Pasos animados */}
+    <div className="p2-reg-steps">
+      <div className="p2-reg-step"><span className="p2-reg-step-dot" />Verificando tu identidad</div>
+      <div className="p2-reg-step"><span className="p2-reg-step-dot" />Creando tu expediente</div>
+      <div className="p2-reg-step"><span className="p2-reg-step-dot" />Subiendo documentos adjuntos</div>
+      <div className="p2-reg-step"><span className="p2-reg-step-dot" />Enviando confirmación a tu correo</div>
+    </div>
+ 
+  </div>
+)}
+ 
       {/* ── Barra de progreso sticky ── */}
       <div className="p2-progress-sticky">
         <div className="p2-progress-sticky-inner">

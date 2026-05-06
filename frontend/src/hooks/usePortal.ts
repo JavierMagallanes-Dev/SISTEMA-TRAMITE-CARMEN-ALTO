@@ -39,7 +39,7 @@ export function usePortal() {
   const [turnstileToken,   setTurnstileToken]   = useState('');
   const [buscandoDni,      setBuscandoDni]      = useState(false);
   const [form,             setForm]             = useState(FORM_INICIAL);
-
+  const [cargandoReqs, setCargandoReqs] = useState(false);
   // ── Carga inicial ──────────────────────────────────────────
   useEffect(() => {
     portalService.tiposTramite().then(setTipos).catch(() => {});
@@ -47,19 +47,23 @@ export function usePortal() {
 
   // ── Selección de trámite ───────────────────────────────────
   const handleSeleccionarTramite = async (tipo: TipoTramite) => {
-    setTipoSeleccionado(tipo);
-    try {
-      const reqs = await portalService.requisitos(tipo.id);
-      setRequisitos(reqs);
-      const estados: Record<number, EstadoReq> = {};
-      reqs.forEach((r: Requisito) => {
-        estados[r.id] = { archivo: null, subido: false, subiendo: false, error: '' };
-      });
-      setEstadosReq(estados);
-    } catch {
-      setRequisitos([]); setEstadosReq({});
-    }
-  };
+  setTipoSeleccionado(tipo);
+  setCargandoReqs(true);
+  try {
+    const reqs = await portalService.requisitos(tipo.id);
+    setRequisitos(reqs);
+    const estados: Record<number, EstadoReq> = {};
+    reqs.forEach((r: Requisito) => {
+      estados[r.id] = { archivo: null, subido: false, subiendo: false, error: '' };
+    });
+    setEstadosReq(estados);
+  } catch {
+    setRequisitos([]); setEstadosReq({});
+  } finally {
+    setCargandoReqs(false);
+  }
+};
+ 
 
   const handleContinuar = () => {
     if (!tipoSeleccionado) { toast.warning({ titulo: 'Selecciona un tipo de trámite.' }); return; }
@@ -160,16 +164,15 @@ export function usePortal() {
       setExpedienteId(expId);
       setTipoRegistrado(tipoSeleccionado);
 
-      // Subir archivos adjuntados
-      const archivosParaSubir = requisitos.filter(r => estadosReq[r.id]?.archivo);
-      for (const req of archivosParaSubir) {
-        const archivo = estadosReq[req.id].archivo;
-        if (!archivo) continue;
-        try {
-          await portalService.subirDocumentoRequisito(expId, req.id, archivo);
-          setEstadosReq(prev => ({ ...prev, [req.id]: { ...prev[req.id], subido: true, subiendo: false } }));
-        } catch { console.warn(`No se pudo subir documento del requisito ${req.id}`); }
-      }
+     const archivosParaSubir = requisitos.filter(r => estadosReq[r.id]?.archivo);
+for (const req of archivosParaSubir) {
+  const archivo = estadosReq[req.id].archivo;
+  if (!archivo) continue;
+  try {
+    await portalService.subirDocumentoRequisito(expId, req.id, archivo);
+    setEstadosReq(prev => ({ ...prev, [req.id]: { ...prev[req.id], subido: true, subiendo: false } }));
+  } catch { console.warn(`No se pudo subir documento del requisito ${req.id}`); }
+}
 
       setPaso(3);
     } catch (err: any) {
@@ -202,5 +205,6 @@ export function usePortal() {
     loading, handleRegistrar, handleAtras,
     // Pago
     codigoGenerado, tipoRegistrado, resetForm,
+    cargandoReqs,
   };
 }

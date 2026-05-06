@@ -82,14 +82,20 @@ export default function AreasPage() {
       />
 
       <ModalAdjuntar
-        open={a.modalAdjuntar}
-        onClose={() => a.setModalAdjuntar(false)}
-        expAdjuntar={a.expAdjuntar}
-        archivoAdjunto={a.archivoAdjunto}
-        setArchivo={a.setArchivoAdjunto}
-        loading={a.loadingAdjunto}
-        onAdjuntar={a.handleAdjuntar}
-      />
+  open={a.modalAdjuntar}
+  onClose={() => a.setModalAdjuntar(false)}
+  expAdjuntar={a.expAdjuntar}
+  archivoAdjunto={a.archivoAdjunto}
+  setArchivo={a.setArchivoAdjunto}
+  loading={a.loadingAdjunto}
+  loadingUnif={a.loadingUnif}
+  onAdjuntar={a.handleAdjuntar}
+  onDescargarUnif={a.descargarUnificado}
+  onReemplazarPdf={a.handleReemplazarPdf}
+  archivoReemplazo={a.archivoReemplazo}
+  setArchivoReemplazo={a.setArchivoReemplazo}
+  loadingReemplazo={a.loadingReemplazo}
+/>
 
       <ModalComentarioAreas
         open={a.modalObservar}

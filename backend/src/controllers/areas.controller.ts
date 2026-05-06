@@ -819,3 +819,52 @@ export const firmarExpedienteTecnico = async (
     res.json({ message: 'Expediente firmado correctamente. Enviado al Jefe de Área.' });
   } catch (err) { next(err); }
 };
+// POST /api/areas/expediente/:id/reemplazar-pdf
+export const reemplazarPdfUnificado = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id   = Number(req.params['id']);
+    const file = req.file;
+ 
+    if (!file) throw new AppError(400, 'No se recibió ningún archivo.');
+    if (file.mimetype !== 'application/pdf') throw new AppError(400, 'Solo se aceptan archivos PDF.');
+    if (file.size > 20 * 1024 * 1024) throw new AppError(400, 'El archivo no puede superar 20MB.');
+ 
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: { estado: true, codigo: true },
+    });
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+ 
+    // Subir nuevo PDF a Supabase
+    const url = await storageService.subirArchivo(file.buffer, 'application/pdf', 'expedientes');
+ 
+    // Eliminar PDF_UNIFICADO anterior si existe
+    await prisma.documento.deleteMany({
+      where: { expedienteId: id, nombre: { startsWith: 'PDF_UNIFICADO:' } },
+    });
+ 
+    // Guardar nuevo
+    await prisma.documento.create({
+      data: {
+        expedienteId: id,
+        nombre:       `PDF_UNIFICADO: ${expediente.codigo}`,
+        url,
+        tipo_mime:    'application/pdf',
+      },
+    });
+ 
+    await prisma.movimiento.create({
+      data: {
+        expedienteId:     id,
+        usuarioId:        req.usuario!.id,
+        tipo_accion:      'REVISION_MDP',
+        estado_resultado: expediente.estado as any,
+        comentario:       'PDF del expediente reemplazado por versión modificada.',
+      },
+    });
+ 
+    res.json({ message: 'PDF del expediente reemplazado correctamente.', url });
+  } catch (err) { next(err); }
+};

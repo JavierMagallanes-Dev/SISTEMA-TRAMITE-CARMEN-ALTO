@@ -13,18 +13,19 @@ export default function PortalPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* PASO 1 — Selección de trámite */}
-      {p.paso === 1 && (
-        p.tipos.length === 0
-          ? <div className="flex items-center justify-center min-h-96"><Spinner text="Cargando trámites..." /></div>
-          : <SeleccionTramite
-              tipos={p.tipos}
-              seleccionado={p.tipoSeleccionado}
-              paso={1}
-              onSeleccionar={p.handleSeleccionarTramite}
-              onContinuar={p.handleContinuar}
-            />
-      )}
+     {p.paso === 1 && (
+  p.tipos.length === 0
+    ? <div className="flex items-center justify-center min-h-96"><Spinner text="Cargando trámites..." /></div>
+    : <SeleccionTramite
+        tipos={p.tipos}
+        seleccionado={p.tipoSeleccionado}
+        requisitos={p.requisitos}
+        cargandoReqs={p.cargandoReqs}
+        paso={1}
+        onSeleccionar={p.handleSeleccionarTramite}
+        onContinuar={p.handleContinuar}
+      />
+)}
 
       {/* PASO 2 — Datos + Requisitos + Turnstile */}
       {p.paso === 2 && p.tipoSeleccionado && (
