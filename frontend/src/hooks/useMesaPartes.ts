@@ -1,6 +1,5 @@
 // src/hooks/useMesaPartes.ts
 // Hook que centraliza toda la lógica de Mesa de Partes.
-// Las páginas y componentes solo consumen este hook.
 
 import { useEffect, useState, useRef } from 'react';
 import api                   from '../services/api';
@@ -21,8 +20,8 @@ export interface Documento {
 
 export interface ExpedienteBandeja {
   id:             number;
-  codigo:         string;
-  estado:         EstadoExpediente;
+  codigo:          string;
+  estado:          EstadoExpediente;
   fecha_registro: string;
   fecha_limite:   string;
   ciudadano:      { dni: string; nombres: string; apellido_pat: string; email: string };
@@ -51,19 +50,21 @@ const FORM_INICIAL: FormRegistro = {
   email: '', telefono: '', tipoTramiteId: '',
 };
 
+export type TabMDP = 'bandeja' | 'registrar' | 'vencidos';
+
 // ── Hook ─────────────────────────────────────────────────────
-export function useMesaPartes() {
-  const [tab,      setTab]      = useState<'bandeja' | 'registrar'>('bandeja');
+export function useMesaPartes(initialTab: TabMDP = 'bandeja') {
+  const [tab,      setTab]      = useState<TabMDP>(initialTab);
   const [bandeja,  setBandeja]  = useState<ExpedienteBandeja[]>([]);
   const [tipos,    setTipos]    = useState<TipoTramite[]>([]);
   const [areas,    setAreas]    = useState<Area[]>([]);
   const [cargando, setCargando] = useState(true);
 
   // Registro
-  const [form,        setForm]        = useState<FormRegistro>(FORM_INICIAL);
-  const [archivoPdf,  setArchivoPdf]  = useState<File | null>(null);
+  const [form,        setForm]       = useState<FormRegistro>(FORM_INICIAL);
+  const [archivoPdf,  setArchivoPdf] = useState<File | null>(null);
   const [buscandoDni, setBuscandoDni] = useState(false);
-  const [loadingReg,  setLoadingReg]  = useState(false);
+  const [loadingReg,  setLoadingReg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Detalle
@@ -195,7 +196,7 @@ export function useMesaPartes() {
     finally { setLoadingUnificado(false); }
   };
 
-  const abrirPreview = (doc: Documento) => { setPreviewDoc(doc); setModalPreview(true); };
+  const abrirPreview  = (doc: Documento) => { setPreviewDoc(doc); setModalPreview(true); };
   const cerrarPreview = () => { setModalPreview(false); setPreviewDoc(null); };
 
   // ── Acciones de observación ────────────────────────────────
@@ -245,13 +246,13 @@ export function useMesaPartes() {
         instrucciones,
         pin:           pinInput.trim(),
       });
-      toast.success({ titulo: 'Expediente derivado', descripcion: `${expDerivar.codigo} enviado al área técnica.` });
+      toast.success({ titulo: 'Expediente enviado', descripcion: `${expDerivar.codigo} derivado con éxito.` });
       cerrarDerivar(); cargarDatos();
     } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error al derivar.' }); }
     finally { setLoadingDerivar(false); }
   };
 
-  // ── Helper ─────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────
   const nombreDoc = (nombre: string) =>
     nombre.startsWith('REQ-') ? nombre.replace(/^REQ-\d+:\s*/, '') : nombre;
 
@@ -268,7 +269,7 @@ export function useMesaPartes() {
     modalObservar, setModalObservar, expObservar, comentarioObs, setComentarioObs, loadingObservar,
     modalDerivar, expDerivar, areaDestino, setAreaDestino,
     instrucciones, setInstrucciones, pinInput, setPinInput, loadingDerivar,
-    
+
     // Acciones
     cargarDatos,
     buscarDni, handleArchivoChange, handleRegistrar, limpiarArchivo,

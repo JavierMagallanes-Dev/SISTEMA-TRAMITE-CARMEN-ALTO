@@ -30,24 +30,25 @@ model Area {
 }
 
 model Usuario {
-  id                     Int          @id @default(autoincrement())
-  dni                    String       @unique @db.VarChar(8)
-  nombre_completo        String       @db.VarChar(150)
-  email                  String       @unique @db.VarChar(150)
+  id                     Int            @id @default(autoincrement())
+  dni                    String         @unique @db.VarChar(8)
+  nombre_completo        String         @db.VarChar(150)
+  email                  String         @unique @db.VarChar(150)
   password_hash          String
-  activo                 Boolean      @default(true)
-  created_at             DateTime     @default(now())
-  updated_at             DateTime     @updatedAt
+  activo                 Boolean        @default(true)
+  created_at             DateTime       @default(now())
+  updated_at             DateTime       @updatedAt
   rolId                  Int
   areaId                 Int?
-  url_firma_png          String?      @db.VarChar(500)
-  pin_derivacion         String?      @db.VarChar(6)
-  expedientesFirmados    Expediente[] @relation("FirmadoPor")
-  expedientesRegistrados Expediente[] @relation("RegistradoPor")
+  url_firma_png          String?        @db.VarChar(500)
+  pin_derivacion         String?        @db.VarChar(6)
+  expedientesFirmados    Expediente[]   @relation("FirmadoPor")
+  expedientesRegistrados Expediente[]   @relation("RegistradoPor")
   movimientos            Movimiento[]
-  pagosVerificados       Pago[]       @relation("PagoVerificadoPor")
-  area                   Area?        @relation(fields: [areaId], references: [id])
-  rol                    Rol          @relation(fields: [rolId], references: [id])
+  notificaciones         Notificacion[]
+  pagosVerificados       Pago[]         @relation("PagoVerificadoPor")
+  area                   Area?          @relation(fields: [areaId], references: [id])
+  rol                    Rol            @relation(fields: [rolId], references: [id])
 
   @@index([rolId])
   @@index([areaId])
@@ -202,18 +203,19 @@ model DerivacionPendiente {
 }
 
 model Notificacion {
-  id           Int               @id @default(autoincrement())
-  expedienteId Int
-  canal        CanalNotificacion
-  mensaje      String
-  enviado      Boolean           @default(false)
-  enviado_at   DateTime?
-  created_at   DateTime          @default(now())
-  expediente   Expediente        @relation(fields: [expedienteId], references: [id])
+  id           Int         @id @default(autoincrement())
+  expedienteId Int?
+  mensaje      String      @db.VarChar(300)
+  created_at   DateTime    @default(now())
+  usuarioId    Int?
+  titulo       String?     @db.VarChar(120)
+  leida        Boolean?    @default(false)
+  expediente   Expediente? @relation(fields: [expedienteId], references: [id], onDelete: Restrict)
+  usuario      Usuario?    @relation(fields: [usuarioId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([leida])
   @@index([expedienteId])
-  @@index([enviado])
-  @@index([canal])
+  @@index([usuarioId], map: "notificaciones_usuario_idx")
   @@map("notificaciones")
 }
 

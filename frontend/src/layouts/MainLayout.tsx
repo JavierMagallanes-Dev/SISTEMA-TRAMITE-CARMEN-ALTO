@@ -4,13 +4,13 @@ import { useEffect, useState, useMemo } from 'react';
 import type { ReactNode, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Home, FolderOpen, Layers, CreditCard, Users, BarChart3,
-  Bell, ChevronDown, Menu, X, LogOut, Building2, Archive, Shield,
+  Home, FolderOpen, Layers, CreditCard, Users, BarChart3, ChevronDown, Menu, X, LogOut, Building2, Archive, Shield,
   AlertTriangle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logoCA from '../assets/logoCA.webp';
+import CampanaNotificaciones from '../components/shared/CampanaNotificaciones';
 
 // ── Tipos ───────────────────────────────────────────────────────────
 type RolNombre =
@@ -35,6 +35,7 @@ const MENU: readonly MenuItem[] = [
   { to: '/areas',       label: 'Mi Área',        Icon: Layers,     roles: ['ADMIN', 'TECNICO', 'JEFE_AREA'] },
   { to: '/historial',   label: 'Historial',      Icon: Archive,    roles: ['ADMIN', 'JEFE_AREA'] },
   { to: '/reportes',    label: 'Reportes',       Icon: BarChart3,  roles: ['ADMIN', 'MESA_DE_PARTES', 'JEFE_AREA'] },
+  { to: '/mesa-partes/alertas', label: 'Alertas de vencimiento', Icon: AlertTriangle, roles: ['ADMIN', 'MESA_DE_PARTES'] },
   { to: '/usuarios',    label: 'Usuarios',       Icon: Users,      roles: ['ADMIN'] },
   { to: '/auditoria',   label: 'Auditoría',      Icon: Shield,     roles: ['ADMIN'] },
 ] as const;
@@ -361,7 +362,7 @@ export default function MainLayout({ children }: { children?: ReactNode }) {
             <button type="button"
               className="relative w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center"
               aria-label="Notificaciones">
-              <Bell size={18} className="text-gray-600" />
+              <CampanaNotificaciones />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
             </button>
             <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-gray-100">

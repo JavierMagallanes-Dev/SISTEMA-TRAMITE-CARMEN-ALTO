@@ -5,6 +5,7 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma }   from '../config/prisma';
 import { AppError } from '../middlewares/error.middleware';
 import { notificarCambioEstado } from '../services/email.service';
+import { crearNotificacion } from './notificaciones.controller';
 
 // ── GET /api/cajero/pendientes ───────────────────────────────
 export const listarPendientesPago = async (
@@ -74,7 +75,9 @@ export const verificarPago = async (
             fecha_pago:    new Date(),
           },
         });
-      } else {
+      } 
+      
+      else {
         // No hay comprobante — cajero registra pago directamente (pago en ventanilla)
         pago = await tx.pago.create({
           data: {
@@ -86,7 +89,16 @@ export const verificarPago = async (
           },
         });
       }
-
+const usuariosMDPPago = await prisma.usuario.findMany({
+  where: { activo: true, rol: { nombre: 'MESA_DE_PARTES' } },
+  select: { id: true },
+});
+usuariosMDPPago.forEach(u => crearNotificacion(
+  u.id,
+  'Pago verificado',
+  `El pago del expediente ${expediente.codigo} fue verificado. Ya puede ser revisado en bandeja.`,
+  expediente.id,
+));
       await tx.expediente.update({
         where: { id: Number(expedienteId) },
         data:  { estado: 'RECIBIDO' },

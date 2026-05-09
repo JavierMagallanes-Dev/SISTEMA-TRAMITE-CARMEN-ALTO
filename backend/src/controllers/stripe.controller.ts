@@ -12,7 +12,7 @@ import Stripe     from 'stripe';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middlewares/error.middleware';
 import { notificarCambioEstado } from '../services/email.service';
-
+import { crearNotificacion } from './notificaciones.controller';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-04-22.dahlia',
 });
@@ -150,7 +150,16 @@ export const confirmarPago = async (
         comentario:  'Pago procesado exitosamente con tarjeta de crédito/débito via Stripe.',
       });
     } catch (e) { console.warn('⚠️ Email no enviado:', e); }
-
+    const usuariosMDP = await prisma.usuario.findMany({
+      where: { activo: true, rol: { nombre: 'MESA_DE_PARTES' } },
+      select: { id: true },
+    });
+    usuariosMDP.forEach(u => crearNotificacion(
+      u.id,
+      'Pago recibido — trámite listo para revisar',
+      `Pago Stripe confirmado para ${expediente.codigo} — ${expediente.tipoTramite.nombre}. Listo en bandeja.`,
+      expediente.id,
+    ));
     console.log(`✅ Pago Stripe confirmado para ${codigo}`);
     res.json({ message: 'Pago confirmado. Expediente actualizado a RECIBIDO.', estado: 'RECIBIDO' });
   } catch (err) { next(err); }
@@ -234,7 +243,16 @@ export const stripeWebhook = async (
           },
         });
       });
-
+      const usuariosMDPWh = await prisma.usuario.findMany({
+        where: { activo: true, rol: { nombre: 'MESA_DE_PARTES' } },
+        select: { id: true },
+      });
+      usuariosMDPWh.forEach(u => crearNotificacion(
+        u.id,
+        'Pago recibido — trámite listo para revisar',
+        `Pago Stripe confirmado para ${codigoExp} — ${expediente.tipoTramite.nombre}. Listo en bandeja.`,
+        expediente.id,
+      ));
       console.log(`✅ Expediente ${codigoExp} → RECIBIDO (webhook)`);
     } catch (err) {
       console.error('❌ Error procesando webhook:', err);

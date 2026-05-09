@@ -3,7 +3,8 @@ import { Router } from 'express';
 import {
   consultarDni, listarTiposTramite, listarAreasTecnicas,
   registrarExpediente, bandejaMDP, descargarPdfUnificado,
-  derivarExpediente, observarExpedienteMDP, reactivarExpediente,
+  derivarExpediente, observarExpedienteMDP, reactivarExpediente,  
+  getVencidos, reactivarVencido
 } from '../controllers/mesaPartes.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { autorizar }  from '../middlewares/roles.middleware';
@@ -24,5 +25,6 @@ router.post('/derivar',                     derivarExpediente);
 
 router.patch('/observar/:id',               observarExpedienteMDP);
 router.patch('/reactivar/:id',              reactivarExpediente);
-
+router.get('/vencidos',               getVencidos);
+router.post('/reactivar-vencido/:id', reactivarVencido);
 export default router;

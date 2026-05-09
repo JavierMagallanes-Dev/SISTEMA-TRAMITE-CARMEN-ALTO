@@ -49,6 +49,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      
       {/* ── Rutas públicas con navbar + footer ─────────── */}
       <Route element={<PublicLayout />}>
         <Route path="/"                  element={<HomePage />} />
@@ -67,11 +68,14 @@ const AppRoutes = () => {
           <MainLayout />
         </PrivateRoute>
       }>
+        
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="cajero" element={
           <RolRoute roles={['CAJERO', 'ADMIN']}><CajeroPage /></RolRoute>
         } />
+        <Route path="/mesa-partes/alertas" element={<MesaPartesPage initialTab="vencidos" />} />
         <Route path="mesa-partes" element={
+          
           <RolRoute roles={['MESA_DE_PARTES', 'ADMIN']}><MesaPartesPage /></RolRoute>
         } />
         <Route path="areas" element={

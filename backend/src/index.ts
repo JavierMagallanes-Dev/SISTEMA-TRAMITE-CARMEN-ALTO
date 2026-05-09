@@ -24,7 +24,7 @@ import stripeRoutes     from './routes/stripe.routes';
 import tramitesRoutes from './routes/tramites.routes';
 // ── Middleware de error ──────────────────────────────────────────
 import { errorHandler } from './middlewares/error.middleware';
-
+import notificacionesRoutes from './routes/notificaciones.routes';
 const app = express();
 
 // ── IMPORTANTE: El webhook de Stripe DEBE registrarse ANTES de express.json()
@@ -80,7 +80,7 @@ app.use('/api/recepcion',   recepcionRoutes);
 app.use('/api/reportes',    reportesRoutes);
 app.use('/api/stripe',      stripeRoutes);
 app.use('/api/tramites', tramitesRoutes);
-
+app.use('/api/notificaciones', notificacionesRoutes)
 // ── Ruta no encontrada ───────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada.' });

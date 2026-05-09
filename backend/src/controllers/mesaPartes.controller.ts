@@ -10,10 +10,11 @@ import { generarCodigoExpediente } from '../utils/codigo';
 import { consultarReniec } from '../utils/reniec';
 import { notificarRegistro, notificarCambioEstado } from '../services/email.service';
 import { storageService } from '../services/storage.service';
+import { crearNotificacion } from './notificaciones.controller';
 const selectNotificacion = {
   codigo:      true,
   ciudadano:   { select: { email: true, nombres: true } },
-  tipoTramite: { select: { nombre: true } },
+  tipoTramite: { select: { nombre: true } }, 
   areaActual:  { select: { nombre: true } },
 } as const;
 
@@ -86,7 +87,7 @@ if (!ciudadano) {
     },
   });
 }
-    const codigo       = await generarCodigoExpediente();
+   const codigo       = await generarCodigoExpediente();
     const fecha_limite = new Date();
     fecha_limite.setDate(fecha_limite.getDate() + tipoTramite.plazo_dias);
 
@@ -100,7 +101,17 @@ if (!ciudadano) {
       });
       return exp;
     });
-
+ const usuariosMDP = await prisma.usuario.findMany({
+  where: { activo: true, rol: { nombre: 'MESA_DE_PARTES' } },
+  select: { id: true },
+});
+usuariosMDP.forEach(u => crearNotificacion(
+  u.id,
+  'Nuevo trámite registrado',
+  `${ciudadano.nombres} ${ciudadano.apellido_pat} registró: ${tipoTramite.nombre} (${expediente.codigo})`,
+  expediente.id,
+));
+    
     notificarRegistro({
       nombres: ciudadano.nombres ?? '',
       email: ciudadano.email ?? '',
@@ -126,7 +137,7 @@ export const bandejaMDP = async (
         tipoTramite: { select: { nombre: true, costo_soles: true } },
         pagos: { where: { estado: 'VERIFICADO' }, select: { boleta: true, monto_cobrado: true, fecha_pago: true }, take: 1 },
       },
-      orderBy: { fecha_registro: 'asc' },
+      orderBy: { fecha_registro: 'desc' },
     });
     res.json(expedientes);
   } catch (err) { next(err); }
@@ -198,12 +209,7 @@ export const descargarPdfUnificado = async (
   } catch (err) { next(err); }
 };
 
-// REEMPLAZA la función derivarExpediente en mesaPartes.controller.ts
-// Al derivar, genera y guarda el PDF unificado en Supabase
-// para que el Técnico reciba un único archivo listo para firmar.
 
-// Primero agrega este import al inicio del archivo si no existe:
-// import { storageService } from '../services/storage.service';
 
 export const derivarExpediente = async (
   req: Request, res: Response, next: NextFunction
@@ -307,7 +313,16 @@ export const derivarExpediente = async (
         // No lanzar error — la derivación continúa aunque falle el PDF
       }
     }
-
+const tecnicosArea = await prisma.usuario.findMany({
+  where: { activo: true, areaId: Number(areaDestinoId), rol: { nombre: { in: ['TECNICO', 'JEFE_AREA'] } } },
+  select: { id: true },
+});
+tecnicosArea.forEach(u => crearNotificacion(
+  u.id,
+  'Expediente derivado a tu área',
+  `El expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre} fue derivado a ${area.nombre} para evaluación técnica.`,
+  Number(expedienteId),
+));
     // ── Derivación normal ────────────────────────────────────
     const token      = randomBytes(32).toString('hex');
     const expires_at = new Date();
@@ -422,5 +437,142 @@ export const reactivarExpediente = async (
 }).catch((e) => console.warn('⚠️ Email SUBSANACION MDP:', e));
 
     res.json({ message: 'Expediente reactivado. Estado: RECIBIDO.' });
+  } catch (err) { next(err); }
+};
+
+export const getVencidos = async (
+  _req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const hoy         = new Date();
+    const en2Dias     = new Date(hoy.getTime() + 2 * 24 * 60 * 60 * 1000);
+    const estadosActivos = ['PENDIENTE_PAGO', 'RECIBIDO', 'EN_REVISION_MDP', 'DERIVADO', 'EN_PROCESO', 'OBSERVADO'];
+ 
+    const [vencidos, porVencer] = await Promise.all([
+      prisma.expediente.findMany({
+        where: {
+          fecha_limite: { lt: hoy },
+          estado:       { in: estadosActivos as any[] },
+        },
+        select: {
+          id: true, codigo: true, estado: true,
+          fecha_registro: true, fecha_limite: true,
+          ciudadano:   { select: { nombres: true, apellido_pat: true, dni: true, email: true } },
+          tipoTramite: { select: { nombre: true, plazo_dias: true } },
+          areaActual:  { select: { nombre: true } },
+        },
+        orderBy: { fecha_limite: 'asc' },
+      }),
+      prisma.expediente.findMany({
+        where: {
+          fecha_limite: { gte: hoy, lte: en2Dias },
+          estado:       { in: estadosActivos as any[] },
+        },
+        select: {
+          id: true, codigo: true, estado: true,
+          fecha_registro: true, fecha_limite: true,
+          ciudadano:   { select: { nombres: true, apellido_pat: true, dni: true, email: true } },
+          tipoTramite: { select: { nombre: true, plazo_dias: true } },
+          areaActual:  { select: { nombre: true } },
+        },
+        orderBy: { fecha_limite: 'asc' },
+      }),
+    ]);
+ 
+    res.json({ vencidos, porVencer });
+  } catch (err) { next(err); }
+};
+
+export const reactivarVencido = async (
+  req: Request, res: Response, next: NextFunction
+): Promise<void> => {
+  try {
+    const id        = Number(req.params['id']);
+    const usuarioId = req.usuario!.id;
+ 
+    const expediente = await prisma.expediente.findUnique({
+      where:  { id },
+      select: {
+        codigo: true, estado: true, fecha_limite: true,
+        ciudadano:   { select: { email: true, nombres: true, apellido_pat: true } },
+        tipoTramite: { select: { nombre: true, plazo_dias: true } },
+        areaActual:  { select: { nombre: true } },
+      },
+    });
+ 
+    if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
+ 
+    // Extender la fecha límite en el plazo original del trámite
+    const nuevaFecha = new Date();
+    nuevaFecha.setDate(nuevaFecha.getDate() + expediente.tipoTramite.plazo_dias);
+ 
+    await prisma.$transaction(async (tx) => {
+      await tx.expediente.update({
+        where: { id },
+        data:  { fecha_limite: nuevaFecha },
+      });
+ 
+      await tx.movimiento.create({
+        data: {
+          expedienteId:     id,
+          usuarioId,
+          tipo_accion:      'REVISION_MDP',
+          estado_resultado: expediente.estado as any,
+          comentario:       `Plazo reactivado por Mesa de Partes. Nueva fecha límite: ${nuevaFecha.toLocaleDateString('es-PE')}. Se envió disculpa al ciudadano.`,
+        },
+      });
+    });
+ 
+    // Email de disculpas al ciudadano
+    const { Resend } = await import('resend');
+    const { env }    = await import('../config/env');
+    const resend     = new Resend(env.RESEND_API_KEY);
+ 
+    await resend.emails.send({
+      from:    'Municipalidad Carmen Alto <noreply@municipalidadcarmenalto.site>',
+      to:      expediente.ciudadano.email ?? '',
+      subject: `Actualización importante sobre su trámite ${expediente.codigo}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px;">
+          <div style="background: #042C53; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;">
+            <h2 style="color: white; margin: 0; font-size: 18px;">Municipalidad Distrital de Carmen Alto</h2>
+            <p style="color: rgba(255,255,255,0.7); margin: 6px 0 0; font-size: 13px;">Sistema de Trámite Documentario</p>
+          </div>
+          <div style="background: #f8f9fb; padding: 28px; border-radius: 0 0 10px 10px; border: 1px solid #e2e8f0; border-top: none;">
+            <p style="color: #1e293b; font-size: 15px;">
+              Estimado/a <strong>${expediente.ciudadano.nombres} ${expediente.ciudadano.apellido_pat}</strong>,
+            </p>
+            <p style="color: #475569; font-size: 14px; line-height: 1.7;">
+              Le comunicamos que el plazo de atención de su trámite
+              <strong>${expediente.tipoTramite.nombre}</strong>
+              (código <strong style="color: #1d6fc7">${expediente.codigo}</strong>)
+              fue extendido por parte de Mesa de Partes.
+            </p>
+            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 16px; margin: 16px 0;">
+              <p style="color: #92400e; font-size: 13px; margin: 0;">
+                <strong>⚠ Sobre el retraso:</strong> Lamentamos sinceramente el inconveniente ocasionado por no haber atendido su trámite dentro del plazo establecido. Le pedimos disculpas por las molestias generadas.
+              </p>
+            </div>
+            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 10px; padding: 16px; margin: 16px 0;">
+              <p style="color: #14532d; font-size: 13px; margin: 0;">
+                <strong>✓ Nueva fecha límite de atención:</strong><br/>
+                <span style="font-size: 15px; font-weight: bold;">${nuevaFecha.toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              </p>
+            </div>
+            <p style="color: #475569; font-size: 14px; line-height: 1.7;">
+              Su trámite será atendido con prioridad. Puede consultar el estado en cualquier momento ingresando su código en nuestro portal.
+            </p>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 20px; text-align: center;">
+              Municipalidad Distrital de Carmen Alto · (066) 123-456
+            </p>
+          </div>
+        </div>
+      `,
+    }).catch((e: any) => console.warn('⚠️ Email disculpa no enviado:', e));
+ 
+    res.json({
+      message:      `Plazo extendido correctamente. Email de disculpa enviado a ${expediente.ciudadano.email}.`,
+      nueva_fecha:  nuevaFecha,
+    });
   } catch (err) { next(err); }
 };

@@ -11,7 +11,7 @@ import { generarCodigoExpediente } from '../utils/codigo';
 import { consultarReniec }         from '../utils/reniec';
 import { notificarRegistro }       from '../services/email.service';
 import { storageService }          from '../services/storage.service';
-
+import { crearNotificacion } from './notificaciones.controller';
 
 // ── GET /api/portal/tipos-tramite ────────────────────────────
 export const listarTiposTramitePublico = async (
@@ -153,6 +153,18 @@ if (!ciudadano) {
 
       return exp;
     });
+
+    // Notificar a Mesa de Partes
+    const usuariosMDP = await prisma.usuario.findMany({
+      where: { activo: true, rol: { nombre: 'MESA_DE_PARTES' } },
+      select: { id: true },
+    });
+    usuariosMDP.forEach(u => crearNotificacion(
+      u.id,
+      'Nuevo trámite registrado',
+      `${ciudadano.nombres} ${ciudadano.apellido_pat} registró: ${tipoTramite.nombre} (${expediente.codigo})`,
+      expediente.id,
+    ));
 
     try {
       await notificarRegistro({

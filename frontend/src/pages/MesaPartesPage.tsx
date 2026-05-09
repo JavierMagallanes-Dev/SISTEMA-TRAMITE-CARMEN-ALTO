@@ -2,6 +2,7 @@
 // Solo orquesta — toda la lógica está en useMesaPartes.
 
 import { useMesaPartes }    from '../hooks/useMesaPartes';
+import type { TabMDP }      from '../hooks/useMesaPartes';
 import { Card, CardTitle }  from '../components/ui/Card';
 import Button               from '../components/ui/Button';
 import Spinner              from '../components/ui/Spinner';
@@ -11,10 +12,15 @@ import ModalDetalleMDP      from '../components/mesa-partes/ModalDetalleMDP';
 import ModalDerivar         from '../components/mesa-partes/ModalDerivar';
 import ModalObservarMDP     from '../components/mesa-partes/ModalObservarMDP';
 import ModalPreviewDoc      from '../components/mesa-partes/ModalPreviewDoc';
-import { RefreshCw, Clock, Plus } from 'lucide-react';
+import PanelVencidos        from '../components/mesa-partes/PanelVencidos';
+import { RefreshCw, Clock, Plus, AlertTriangle } from 'lucide-react';
 
-export default function MesaPartesPage() {
-  const mdp = useMesaPartes();
+interface Props {
+  initialTab?: TabMDP;
+}
+
+export default function MesaPartesPage({ initialTab }: Props) {
+  const mdp = useMesaPartes(initialTab);
 
   if (mdp.cargando) return <Spinner text="Cargando Mesa de Partes..." />;
 
@@ -34,15 +40,18 @@ export default function MesaPartesPage() {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
         {([
-          { key: 'bandeja',   label: `Bandeja (${mdp.bandeja.length})`, icon: <Clock size={13} /> },
-          { key: 'registrar', label: 'Nuevo expediente',                icon: <Plus  size={13} /> },
+          { key: 'bandeja',   label: `Bandeja (${mdp.bandeja.length})`, icon: <Clock         size={13} /> },
+          { key: 'registrar', label: 'Nuevo expediente',                icon: <Plus          size={13} /> },
+          { key: 'vencidos',  label: 'Alertas de vencimiento',          icon: <AlertTriangle size={13} /> },
         ] as const).map((t) => (
           <button
             key={t.key}
             onClick={() => mdp.setTab(t.key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
               mdp.tab === t.key
-                ? 'border-blue-600 text-blue-600'
+                ? t.key === 'vencidos'
+                  ? 'border-amber-500 text-amber-600'
+                  : 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}>
             {t.icon}{t.label}
@@ -84,6 +93,13 @@ export default function MesaPartesPage() {
         </Card>
       )}
 
+      {/* Alertas de vencimiento */}
+      {mdp.tab === 'vencidos' && (
+        <Card>
+          <PanelVencidos onReactivado={mdp.cargarDatos} />
+        </Card>
+      )}
+
       {/* Modales */}
       <ModalDetalleMDP
         open={mdp.modalDetalle}
@@ -116,8 +132,8 @@ export default function MesaPartesPage() {
       />
 
       <ModalObservarMDP
-       open={mdp.modalObservar}
-  onClose={() => { mdp.setModalObservar(false); mdp.setComentarioObs(''); }}
+        open={mdp.modalObservar}
+        onClose={() => { mdp.setModalObservar(false); mdp.setComentarioObs(''); }}
         comentario={mdp.comentarioObs}
         setComentario={mdp.setComentarioObs}
         loading={mdp.loadingObservar}

@@ -11,6 +11,7 @@ import { notificarCambioEstado } from '../services/email.service';
 import { storageService }        from '../services/storage.service';
 import { Resend }                from 'resend';
 import { env }                   from '../config/env';
+import { crearNotificacion } from './notificaciones.controller';
 
 const resend = new Resend(env.RESEND_API_KEY);
 
@@ -50,7 +51,7 @@ export const bandejaPorArea = async (
         tipoTramite:   { select: { nombre: true, plazo_dias: true } },
         registradoPor: { select: { nombre_completo: true } },
       },
-      orderBy: { fecha_limite: 'asc' },
+      orderBy: { fecha_limite: 'desc' },
     });
 
     res.json(expedientes);
@@ -408,7 +409,16 @@ export const firmarExpediente = async (
       area:        expediente.areaActual?.nombre,
       urlDescarga: url_pdf_firmado,
     }).catch((e) => console.error('❌ Email RESUELTO:', e));
-
+    const usuariosMDPNotif = await prisma.usuario.findMany({
+  where: { activo: true, rol: { nombre: { in: ['MESA_DE_PARTES', 'ADMIN'] } } },
+  select: { id: true },
+});
+usuariosMDPNotif.forEach(u => crearNotificacion(
+  u.id,
+  'Expediente resuelto',
+  `El expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre} fue firmado y resuelto por el Jefe de Área.`,
+  id,
+));
     res.json({
       message:                   'Expediente firmado y resuelto correctamente.',
       codigo_verificacion_firma: codigo_verificacion,
@@ -795,7 +805,16 @@ export const firmarExpedienteTecnico = async (
         where: { id },
         data:  { estado: 'LISTO_DESCARGA' },
       });
-
+      const jefesArea = await prisma.usuario.findMany({
+  where: { activo: true, areaId: req.usuario!.areaId!, rol: { nombre: 'JEFE_AREA' } },
+  select: { id: true },
+});
+jefesArea.forEach(u => crearNotificacion(
+  u.id,
+  'Expediente listo para tu firma',
+  `El técnico firmó el expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre}. Requiere tu firma oficial para resolverse.`,
+  id,
+));
       await tx.movimiento.create({
         data: {
           expedienteId:     id, usuarioId,
