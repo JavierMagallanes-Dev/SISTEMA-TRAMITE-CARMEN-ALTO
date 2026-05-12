@@ -11,12 +11,60 @@ import { consultarReniec } from '../utils/reniec';
 import { notificarRegistro, notificarCambioEstado } from '../services/email.service';
 import { storageService } from '../services/storage.service';
 import { crearNotificacion } from './notificaciones.controller';
+
 const selectNotificacion = {
   codigo:      true,
   ciudadano:   { select: { email: true, nombres: true } },
-  tipoTramite: { select: { nombre: true } }, 
+  tipoTramite: { select: { nombre: true } },
   areaActual:  { select: { nombre: true } },
 } as const;
+
+// ── Helper: comentario automático según tipo de trámite ──────
+const getComentarioAutomatico = (
+  accion: 'TOMAR' | 'VISTO_BUENO' | 'FIRMA_TECNICO' | 'FIRMA_JEFE' | 'DERIVAR' | 'OBSERVAR',
+  tipoTramiteId: number
+): string => {
+  const comentarios: Record<number, Record<string, string>> = {
+    // Autorización Temporal para Puesto en Feria
+    4: {
+      TOMAR:         'Expediente tomado para evaluación técnica. Se verificará disponibilidad de espacio en padrón de ferias.',
+      VISTO_BUENO:   'Espacio disponible confirmado. Inspección de campo realizada — no obstruye el tránsito. Listo para autorización.',
+      FIRMA_TECNICO: 'Evaluación técnica completada. Puesto en feria cumple con los requisitos municipales establecidos.',
+      FIRMA_JEFE:    'Autorización temporal de puesto en feria aprobada y firmada. Resolución disponible para recojo.',
+      DERIVAR:       'Expediente derivado a Gerencia de Servicios Municipales para evaluación de disponibilidad y fiscalización.',
+      OBSERVAR:      'Expediente observado. Se requiere subsanar documentación antes de continuar con la evaluación.',
+    },
+    // Celebración de Matrimonio Civil
+    5: {
+      TOMAR:         'Expediente tomado. Se inicia revisión de requisitos y apertura del pliego matrimonial.',
+      VISTO_BUENO:   'Documentos verificados. Edicto matrimonial publicado — en espera del período legal de oposición (8-10 días hábiles).',
+      FIRMA_TECNICO: 'Período de oposición cumplido sin observaciones. Fecha de ceremonia programada en salón de actos municipal.',
+      FIRMA_JEFE:    'Acta matrimonial firmada oficialmente. Celebración de matrimonio civil realizada con éxito.',
+      DERIVAR:       'Expediente derivado a Oficina de Registro del Estado Civil para apertura de pliego matrimonial.',
+      OBSERVAR:      'Expediente observado. Documentos incompletos o con observaciones — se notifica a los contrayentes.',
+    },
+    // Licencia de Edificación
+    3: {
+      TOMAR:         'Expediente tomado. Se inicia verificación de planos y habilitación del arquitecto responsable.',
+      VISTO_BUENO:   'Planos técnicos aprobados. Inspección técnica realizada en el predio — conforme con lo declarado.',
+      FIRMA_TECNICO: 'Revisión técnica de planos completada. Copia literal SUNARP verificada. Conforme para emisión de licencia.',
+      FIRMA_JEFE:    'Licencia de edificación emitida y firmada. Autoriza construcción conforme a planos aprobados.',
+      DERIVAR:       'Expediente derivado a Gerencia de Desarrollo Urbano e Infraestructura para revisión técnica de planos.',
+      OBSERVAR:      'Expediente observado. Se requiere corrección en planos o documentación técnica faltante.',
+    },
+  };
+
+  const genericos: Record<string, string> = {
+    TOMAR:         'Expediente tomado para evaluación técnica.',
+    VISTO_BUENO:   'Evaluación técnica completada. Listo para firma del Jefe de Área.',
+    FIRMA_TECNICO: 'Expediente firmado por técnico. Conforme para revisión del Jefe de Área.',
+    FIRMA_JEFE:    'Expediente firmado oficialmente. Trámite resuelto.',
+    DERIVAR:       'Expediente derivado al área técnica correspondiente.',
+    OBSERVAR:      'Expediente observado. Se requiere subsanar documentación.',
+  };
+
+  return comentarios[tipoTramiteId]?.[accion] ?? genericos[accion];
+};
 
 // ── GET /api/mesa-partes/consultar-dni/:dni ──────────────────
 export const consultarDni = async (
@@ -337,7 +385,9 @@ tecnicosArea.forEach(u => crearNotificacion(
         data:  { estado: 'EN_REVISION_MDP', areaActualId: Number(areaDestinoId) },
       });
       await tx.movimiento.create({
-        data: { expedienteId: Number(expedienteId), usuarioId, tipo_accion: 'DERIVACION', estado_resultado: 'EN_REVISION_MDP', areaDestinoId: Number(areaDestinoId), comentario: instrucciones ? `Derivado a ${area.nombre}. Instrucciones: ${instrucciones.trim()}` : `Derivado a ${area.nombre}.` },
+        data: { expedienteId: Number(expedienteId), usuarioId, tipo_accion: 'DERIVACION', estado_resultado: 'EN_REVISION_MDP', areaDestinoId: Number(areaDestinoId),  comentario: instrucciones
+  ? `${getComentarioAutomatico('DERIVAR', expediente.tipoTramiteId)} Instrucciones: ${instrucciones.trim()}`
+  : getComentarioAutomatico('DERIVAR', expediente.tipoTramiteId)},
       });
     });
 

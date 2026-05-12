@@ -24,7 +24,53 @@ const selectNotificacion = {
   tipoTramite: { select: { nombre: true } },
   areaActual:  { select: { nombre: true } },
 } as const;
+// ── Helper: comentario automático según tipo de trámite ──────
+const getComentarioAutomatico = (
+  accion: 'TOMAR' | 'VISTO_BUENO' | 'FIRMA_TECNICO' | 'FIRMA_JEFE' | 'DERIVAR' | 'OBSERVAR',
+  tipoTramiteId: number
+): string => {
+  const comentarios: Record<number, Record<string, string>> = {
+    // Autorización Temporal para Puesto en Feria
+    4: {
+      TOMAR:         'Expediente tomado para evaluación técnica. Se verificará disponibilidad de espacio en padrón de ferias.',
+      VISTO_BUENO:   'Espacio disponible confirmado. Inspección de campo realizada — no obstruye el tránsito. Listo para autorización.',
+      FIRMA_TECNICO: 'Evaluación técnica completada. Puesto en feria cumple con los requisitos municipales establecidos.',
+      FIRMA_JEFE:    'Autorización temporal de puesto en feria aprobada y firmada. Resolución disponible para recojo.',
+      DERIVAR:       'Expediente derivado a Gerencia de Servicios Municipales para evaluación de disponibilidad y fiscalización.',
+      OBSERVAR:      'Expediente observado. Se requiere subsanar documentación antes de continuar con la evaluación.',
+    },
+    // Celebración de Matrimonio Civil
+    5: {
+      TOMAR:         'Expediente tomado. Se inicia revisión de requisitos y apertura del pliego matrimonial.',
+      VISTO_BUENO:   'Documentos verificados. Edicto matrimonial publicado — en espera del período legal de oposición (8-10 días hábiles).',
+      FIRMA_TECNICO: 'Período de oposición cumplido sin observaciones. Fecha de ceremonia programada en salón de actos municipal.',
+      FIRMA_JEFE:    'Acta matrimonial firmada oficialmente. Celebración de matrimonio civil realizada con éxito.',
+      DERIVAR:       'Expediente derivado a Oficina de Registro del Estado Civil para apertura de pliego matrimonial.',
+      OBSERVAR:      'Expediente observado. Documentos incompletos o con observaciones — se notifica a los contrayentes.',
+    },
+    // Licencia de Edificación
+    3: {
+      TOMAR:         'Expediente tomado. Se inicia verificación de planos y habilitación del arquitecto responsable.',
+      VISTO_BUENO:   'Planos técnicos aprobados. Inspección técnica realizada en el predio — conforme con lo declarado.',
+      FIRMA_TECNICO: 'Revisión técnica de planos completada. Copia literal SUNARP verificada. Conforme para emisión de licencia.',
+      FIRMA_JEFE:    'Licencia de edificación emitida y firmada. Autoriza construcción conforme a planos aprobados.',
+      DERIVAR:       'Expediente derivado a Gerencia de Desarrollo Urbano e Infraestructura para revisión técnica de planos.',
+      OBSERVAR:      'Expediente observado. Se requiere corrección en planos o documentación técnica faltante.',
+    },
+  };
 
+  // Comentario genérico si el trámite no tiene personalización
+  const genericos: Record<string, string> = {
+    TOMAR:         'Expediente tomado para evaluación técnica.',
+    VISTO_BUENO:   'Evaluación técnica completada. Listo para firma del Jefe de Área.',
+    FIRMA_TECNICO: 'Expediente firmado por técnico. Conforme para revisión del Jefe de Área.',
+    FIRMA_JEFE:    'Expediente firmado oficialmente. Trámite resuelto.',
+    DERIVAR:       'Expediente derivado al área técnica correspondiente.',
+    OBSERVAR:      'Expediente observado. Se requiere subsanar documentación.',
+  };
+
+  return comentarios[tipoTramiteId]?.[accion] ?? genericos[accion];
+};
 // ── GET /api/areas/bandeja ───────────────────────────────────
 export const bandejaPorArea = async (
   req: Request, res: Response, next: NextFunction
@@ -237,9 +283,6 @@ export const solicitarCodigoFirma = async (
   } catch (err) { next(err); }
 };
 
-// REEMPLAZA la función firmarExpediente en areas.controller.ts
-// El Jefe ahora firma sobre el PDF que ya tiene la firma del Técnico.
-
 export const firmarExpediente = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -268,7 +311,7 @@ export const firmarExpediente = async (
     const expediente = await prisma.expediente.findUnique({
       where:  { id },
       select: {
-        estado: true, codigo: true,
+        estado: true, codigo: true, tipoTramiteId: true,
         ciudadano:   { select: { email: true, nombres: true } },
         tipoTramite: { select: { nombre: true } },
         areaActual:  { select: { nombre: true } },
@@ -287,8 +330,6 @@ export const firmarExpediente = async (
     if (!usuario?.url_firma_png) throw new AppError(400, 'No tienes firma configurada. Ve a tu perfil y sube tu firma.');
 
     // ── Buscar el PDF firmado por el Técnico ──────────────────
-    // Si existe, el Jefe firma encima de ese PDF (que ya tiene la firma del técnico).
-    // Si no existe (flujo sin técnico), fusionar todos los PDFs originales.
     const docFirmadoTecnico = expediente.documentos.find(d =>
       d.nombre.startsWith('FIRMADO_TECNICO:') && d.tipo_mime === 'application/pdf'
     );
@@ -296,14 +337,12 @@ export const firmarExpediente = async (
     const pdfFinal = await PDFDocument.create();
 
     if (docFirmadoTecnico) {
-      // Usar el PDF que ya tiene la firma del técnico
       const response    = await fetch(docFirmadoTecnico.url);
       const arrayBuffer = await response.arrayBuffer();
       const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
       const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
       paginas.forEach(p => pdfFinal.addPage(p));
     } else {
-      // Sin firma del técnico — fusionar todos los PDFs originales
       const docsPdf = expediente.documentos.filter(d =>
         d.tipo_mime === 'application/pdf' && !d.nombre.startsWith('FIRMADO_TECNICO:')
       );
@@ -385,7 +424,7 @@ export const firmarExpediente = async (
           expedienteId:     id, usuarioId,
           tipo_accion:      'SUBIDA_PDF_FIRMADO',
           estado_resultado: 'PDF_FIRMADO',
-          comentario: `PDF firmado por Jefe de Área. Código: ${codigo_verificacion}`,
+          comentario:       `PDF firmado por Jefe de Área. Código: ${codigo_verificacion}`,
         },
       });
       await tx.expediente.update({ where: { id }, data: { estado: 'RESUELTO' } });
@@ -394,7 +433,7 @@ export const firmarExpediente = async (
           expedienteId:     id, usuarioId,
           tipo_accion:      'SUBIDA_PDF_FIRMADO',
           estado_resultado: 'RESUELTO',
-          comentario: 'Expediente resuelto. Documento con firmas técnica y de Jefe disponible.',
+          comentario:       getComentarioAutomatico('FIRMA_JEFE', expediente.tipoTramiteId),
         },
       });
     });
@@ -409,16 +448,18 @@ export const firmarExpediente = async (
       area:        expediente.areaActual?.nombre,
       urlDescarga: url_pdf_firmado,
     }).catch((e) => console.error('❌ Email RESUELTO:', e));
+
     const usuariosMDPNotif = await prisma.usuario.findMany({
-  where: { activo: true, rol: { nombre: { in: ['MESA_DE_PARTES', 'ADMIN'] } } },
-  select: { id: true },
-});
-usuariosMDPNotif.forEach(u => crearNotificacion(
-  u.id,
-  'Expediente resuelto',
-  `El expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre} fue firmado y resuelto por el Jefe de Área.`,
-  id,
-));
+      where: { activo: true, rol: { nombre: { in: ['MESA_DE_PARTES', 'ADMIN'] } } },
+      select: { id: true },
+    });
+    usuariosMDPNotif.forEach(u => crearNotificacion(
+      u.id,
+      'Expediente resuelto',
+      `El expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre} fue firmado y resuelto por el Jefe de Área.`,
+      id,
+    ));
+
     res.json({
       message:                   'Expediente firmado y resuelto correctamente.',
       codigo_verificacion_firma: codigo_verificacion,
@@ -438,7 +479,7 @@ export const tomarExpediente = async (
 
     const expediente = await prisma.expediente.findUnique({
       where:  { id },
-      select: { estado: true, areaActualId: true, ...selectNotificacion },
+      select: { estado: true, areaActualId: true, tipoTramiteId: true, ...selectNotificacion },
     });
 
     if (!expediente)                        throw new AppError(404, 'Expediente no encontrado.');
@@ -448,7 +489,7 @@ export const tomarExpediente = async (
     await prisma.$transaction(async (tx) => {
       await tx.expediente.update({ where: { id }, data: { estado: 'EN_PROCESO' } });
       await tx.movimiento.create({
-        data: { expedienteId: id, usuarioId, tipo_accion: 'TOMA_EXPEDIENTE', estado_resultado: 'EN_PROCESO', areaOrigenId: areaId, comentario: 'Expediente tomado para evaluación técnica.' },
+        data: { expedienteId: id, usuarioId, tipo_accion: 'TOMA_EXPEDIENTE', estado_resultado: 'EN_PROCESO', areaOrigenId: areaId, comentario: getComentarioAutomatico('TOMAR', expediente.tipoTramiteId) },
       });
     });
 
@@ -559,7 +600,7 @@ export const darVistoBueno = async (
 
     const expediente = await prisma.expediente.findUnique({
       where:  { id },
-      select: { estado: true, areaActualId: true, ...selectNotificacion },
+      select: { estado: true, areaActualId: true, tipoTramiteId: true, ...selectNotificacion },
     });
 
     if (!expediente)                        throw new AppError(404, 'Expediente no encontrado.');
@@ -569,7 +610,7 @@ export const darVistoBueno = async (
     await prisma.$transaction(async (tx) => {
       await tx.expediente.update({ where: { id }, data: { estado: 'LISTO_DESCARGA' } });
       await tx.movimiento.create({
-        data: { expedienteId: id, usuarioId, tipo_accion: 'VISTO_BUENO', estado_resultado: 'LISTO_DESCARGA', comentario: 'Visto bueno otorgado. Listo para firma del Jefe de Área.' },
+        data: { expedienteId: id, usuarioId, tipo_accion: 'VISTO_BUENO', estado_resultado: 'LISTO_DESCARGA', comentario: getComentarioAutomatico('VISTO_BUENO', expediente.tipoTramiteId)},
       });
     });
 
@@ -679,9 +720,6 @@ export const reactivarExpediente = async (
 
   };
 
-// REEMPLAZA firmarExpedienteTecnico en areas.controller.ts
-// Ahora usa el PDF_UNIFICADO guardado por Mesa de Partes al derivar.
-
 export const firmarExpedienteTecnico = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -695,7 +733,7 @@ export const firmarExpedienteTecnico = async (
     const expediente = await prisma.expediente.findUnique({
       where:  { id },
       select: {
-        estado: true, codigo: true,
+        estado: true, codigo: true, tipoTramiteId: true,
         ciudadano:   { select: { email: true, nombres: true } },
         tipoTramite: { select: { nombre: true } },
         areaActual:  { select: { nombre: true } },
@@ -721,14 +759,12 @@ export const firmarExpedienteTecnico = async (
     const pdfFinal = await PDFDocument.create();
 
     if (docUnificado) {
-      // Usar el PDF unificado guardado
       const response    = await fetch(docUnificado.url);
       const arrayBuffer = await response.arrayBuffer();
       const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
       const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
       paginas.forEach(p => pdfFinal.addPage(p));
     } else {
-      // Fallback: fusionar documentos originales si no hay PDF unificado
       const docsPdf = expediente.documentos.filter(d =>
         d.tipo_mime === 'application/pdf' &&
         !d.nombre.startsWith('PDF_UNIFICADO:') &&
@@ -786,12 +822,10 @@ export const firmarExpedienteTecnico = async (
     const url_pdf_tecnico = await storageService.subirArchivo(pdfBuffer, 'application/pdf', 'firmados');
 
     await prisma.$transaction(async (tx) => {
-      // Eliminar FIRMADO_TECNICO anterior si existe
       await tx.documento.deleteMany({
         where: { expedienteId: id, nombre: { startsWith: 'FIRMADO_TECNICO:' } },
       });
 
-      // Guardar nuevo PDF firmado por técnico
       await tx.documento.create({
         data: {
           expedienteId: id,
@@ -805,22 +839,24 @@ export const firmarExpedienteTecnico = async (
         where: { id },
         data:  { estado: 'LISTO_DESCARGA' },
       });
+
       const jefesArea = await prisma.usuario.findMany({
-  where: { activo: true, areaId: req.usuario!.areaId!, rol: { nombre: 'JEFE_AREA' } },
-  select: { id: true },
-});
-jefesArea.forEach(u => crearNotificacion(
-  u.id,
-  'Expediente listo para tu firma',
-  `El técnico firmó el expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre}. Requiere tu firma oficial para resolverse.`,
-  id,
-));
+        where: { activo: true, areaId: req.usuario!.areaId!, rol: { nombre: 'JEFE_AREA' } },
+        select: { id: true },
+      });
+      jefesArea.forEach(u => crearNotificacion(
+        u.id,
+        'Expediente listo para tu firma',
+        `El técnico firmó el expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre}. Requiere tu firma oficial para resolverse.`,
+        id,
+      ));
+
       await tx.movimiento.create({
         data: {
           expedienteId:     id, usuarioId,
           tipo_accion:      'VISTO_BUENO',
           estado_resultado: 'LISTO_DESCARGA',
-          comentario:       `Expediente firmado por ${usuario.nombre_completo} (Técnico). Listo para firma del Jefe de Área.`,
+          comentario:       getComentarioAutomatico('FIRMA_TECNICO', expediente.tipoTramiteId),
         },
       });
     });
