@@ -152,7 +152,8 @@ export const detalleExpediente = async (
 };
 
 // ── GET /api/areas/expediente/:id/pdf-unificado ──────────────
-// Fusiona todos los PDFs del expediente en uno solo.
+// Si existe PDF_UNIFICADO lo devuelve directamente.
+// Si no existe, fusiona los documentos originales.
 export const descargarPdfUnificadoArea = async (
   req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -172,7 +173,33 @@ export const descargarPdfUnificadoArea = async (
 
     if (!expediente) throw new AppError(404, 'Expediente no encontrado.');
 
-    const docsPdf = expediente.documentos.filter(d => d.tipo_mime === 'application/pdf');
+    // ── Si existe PDF_UNIFICADO devolverlo directamente ──────
+    const docUnificado = expediente.documentos.find(d =>
+      d.nombre.startsWith('PDF_UNIFICADO:') && d.tipo_mime === 'application/pdf'
+    );
+
+    if (docUnificado) {
+      const response    = await fetch(docUnificado.url);
+      if (!response.ok) throw new AppError(500, 'No se pudo descargar el PDF unificado.');
+      const arrayBuffer = await response.arrayBuffer();
+      const pdfBytes    = Buffer.from(arrayBuffer);
+      res.writeHead(200, {
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `attachment; filename="expediente-unificado-${expediente.codigo}.pdf"`,
+        'Content-Length':      pdfBytes.length,
+        'Cache-Control':       'no-cache',
+      });
+      res.end(pdfBytes);
+      return;
+    }
+
+    // ── Si no existe PDF_UNIFICADO fusionar documentos originales ──
+    const docsPdf = expediente.documentos.filter(d =>
+      d.tipo_mime === 'application/pdf' &&
+      !d.nombre.startsWith('PDF_UNIFICADO:') &&
+      !d.nombre.startsWith('FIRMADO_TECNICO:')
+    );
+
     if (docsPdf.length === 0) throw new AppError(404, 'El expediente no tiene documentos PDF adjuntos.');
 
     const pdfFinal = await PDFDocument.create();
@@ -195,7 +222,7 @@ export const descargarPdfUnificadoArea = async (
       portada.drawText(`${i + 1}. ${nombre}`, { x: 40, y: height - 290 - (i * 22), size: 10, color: { red: 0.2, green: 0.2, blue: 0.2, type: 'RGB' as any } });
     });
 
-    // Fusionar PDFs
+    // Fusionar PDFs originales
     for (const doc of docsPdf) {
       try {
         const response = await fetch(doc.url);
