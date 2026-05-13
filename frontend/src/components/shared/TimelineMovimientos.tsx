@@ -9,13 +9,62 @@ import {
 } from 'lucide-react';
 
 interface TimelineMovimientosProps {
-  movimientos:   Movimiento[];
-  soloPublicos?: boolean;
+  movimientos:    Movimiento[];
+  soloPublicos?:  boolean;
+  tipoTramiteId?: number;
 }
 
-// ── Mensajes amigables para el ciudadano por tipo de acción ──
-// '' = usar el comentario real (OBSERVACION y RECHAZO)
-const MENSAJES_PUBLICOS: Record<string, string> = {
+// ── Mensajes por tipo de trámite y acción ────────────────────
+const MENSAJES_POR_TRAMITE: Record<number, Record<string, string>> = {
+  // Autorización Temporal para Puesto en Feria (ID 4)
+  4: {
+    REGISTRO:          'Tu solicitud de Autorización de Puesto en Feria fue recibida correctamente.',
+    VERIFICACION_PAGO: 'Pago de S/ 40.00 verificado. Tu expediente está listo para ser evaluado.',
+    REVISION_MDP:      'Mesa de Partes está revisando tu expediente antes de derivarlo.',
+    DERIVACION:        'Tu expediente fue enviado a la Gerencia de Servicios Municipales para verificar la disponibilidad de espacio en el padrón de ferias.',
+    TOMA_EXPEDIENTE:   'Un técnico municipal tomó tu expediente para evaluar la disponibilidad del espacio solicitado.',
+    VISTO_BUENO:       'Evaluación técnica completada. El espacio está disponible y la inspección de campo confirmó que no obstruye el tránsito. Pendiente de firma del Jefe de Área.',
+    SUBIDA_PDF_FIRMADO:'✓ Autorización de puesto en feria emitida y firmada oficialmente. Ya puedes descargar tu permiso.',
+    ARCHIVADO:         'Tu expediente fue archivado correctamente.',
+    SUBSANACION:       'Tus documentos fueron revisados y aceptados. La evaluación del puesto en feria continúa.',
+    ANULACION_PAGO:    'Tu pago fue anulado. Comunícate con Mesa de Partes.',
+    OBSERVACION:       '',
+    RECHAZO:           '',
+  },
+  // Celebración de Matrimonio Civil (ID 5)
+  5: {
+    REGISTRO:          'Tu solicitud de Celebración de Matrimonio Civil fue recibida correctamente.',
+    VERIFICACION_PAGO: 'Pago de S/ 160.00 verificado. Tu expediente está listo para derivarse a Registro Civil.',
+    REVISION_MDP:      'Mesa de Partes está revisando tu expediente antes de derivarlo a la Oficina de Registro Civil.',
+    DERIVACION:        'Tu expediente fue enviado a la Oficina de Registro del Estado Civil para la apertura del pliego matrimonial.',
+    TOMA_EXPEDIENTE:   'El oficial de Registro Civil tomó tu expediente y está verificando los documentos presentados.',
+    VISTO_BUENO:       'Documentos verificados y válidos. El edicto matrimonial fue publicado. El expediente está en el período legal de oposición (8 a 10 días hábiles). La fecha de la ceremonia será programada al finalizar este período.',
+    SUBIDA_PDF_FIRMADO:'✓ Matrimonio civil celebrado y acta firmada oficialmente. Ya puedes descargar el acta matrimonial.',
+    ARCHIVADO:         'Tu expediente fue archivado correctamente.',
+    SUBSANACION:       'Tus documentos fueron revisados y aceptados. El proceso matrimonial continúa.',
+    ANULACION_PAGO:    'Tu pago fue anulado. Comunícate con Mesa de Partes.',
+    OBSERVACION:       '',
+    RECHAZO:           '',
+  },
+  // Licencia de Edificación (ID 3)
+  3: {
+    REGISTRO:          'Tu solicitud de Licencia de Edificación fue recibida correctamente.',
+    VERIFICACION_PAGO: 'Pago de S/ 200.00 verificado. Tu expediente está listo para derivarse a Desarrollo Urbano.',
+    REVISION_MDP:      'Mesa de Partes está revisando tu expediente antes de derivarlo al área técnica.',
+    DERIVACION:        'Tu expediente fue enviado a la Gerencia de Desarrollo Urbano e Infraestructura para revisión técnica de planos y verificación de la habilitación del arquitecto responsable.',
+    TOMA_EXPEDIENTE:   'Un técnico de Desarrollo Urbano tomó tu expediente y está revisando los planos arquitectónicos y la documentación de SUNARP.',
+    VISTO_BUENO:       'Planos técnicos aprobados. La inspección técnica en el predio fue realizada con conformidad. Pendiente de firma del Subgerente para emitir la licencia oficial.',
+    SUBIDA_PDF_FIRMADO:'✓ Licencia de edificación emitida y firmada oficialmente. Ya puedes descargar tu licencia para iniciar la construcción.',
+    ARCHIVADO:         'Tu expediente fue archivado correctamente.',
+    SUBSANACION:       'Tus documentos y planos fueron revisados y aceptados. El proceso de licencia continúa.',
+    ANULACION_PAGO:    'Tu pago fue anulado. Comunícate con Mesa de Partes.',
+    OBSERVACION:       '',
+    RECHAZO:           '',
+  },
+};
+
+// ── Mensajes genéricos (para otros tipos de trámite) ─────────
+const MENSAJES_GENERICOS: Record<string, string> = {
   REGISTRO:          'Tu solicitud fue recibida correctamente.',
   VERIFICACION_PAGO: 'Tu pago fue verificado. El trámite está en proceso.',
   REVISION_MDP:      'Tu expediente está siendo revisado por Mesa de Partes.',
@@ -28,6 +77,15 @@ const MENSAJES_PUBLICOS: Record<string, string> = {
   ANULACION_PAGO:    'Tu pago fue anulado. Comunícate con Mesa de Partes.',
   OBSERVACION:       '',
   RECHAZO:           '',
+};
+
+// ── Helper: obtener mensaje según trámite ────────────────────
+const getMensajePublico = (tipoAccion: string, tipoTramiteId?: number): string => {
+  if (tipoTramiteId && MENSAJES_POR_TRAMITE[tipoTramiteId]) {
+    const mensaje = MENSAJES_POR_TRAMITE[tipoTramiteId][tipoAccion];
+    if (mensaje !== undefined) return mensaje;
+  }
+  return MENSAJES_GENERICOS[tipoAccion] ?? '';
 };
 
 // ── Ícono + colores por tipo de acción ───────────────────────
@@ -79,6 +137,7 @@ function getIconConfig(tipoAccion: string): {
 export default function TimelineMovimientos({
   movimientos,
   soloPublicos = false,
+  tipoTramiteId,
 }: TimelineMovimientosProps) {
 
   // 1. Ordenar del más nuevo al más antiguo
@@ -87,7 +146,6 @@ export default function TimelineMovimientos({
   );
 
   // 2. En vista pública eliminar duplicados por estado_resultado
-  //    (el backend crea 2 movimientos al subir PDF: PDF_FIRMADO y RESUELTO)
   const visibles = soloPublicos
     ? ordenados.filter((mov, idx, arr) =>
         idx === 0 || mov.estado_resultado !== arr[idx - 1].estado_resultado
@@ -112,8 +170,8 @@ export default function TimelineMovimientos({
           const { Icon, bg, border, color } = getIconConfig(mov.tipo_accion);
 
           // Texto del comentario según contexto
-          const mensajePublico   = MENSAJES_PUBLICOS[mov.tipo_accion];
-          const textoComentario  = soloPublicos
+          const mensajePublico  = getMensajePublico(mov.tipo_accion, tipoTramiteId);
+          const textoComentario = soloPublicos
             ? (mensajePublico === '' ? mov.comentario : mensajePublico)
             : mov.comentario;
 

@@ -125,10 +125,13 @@ export default function ConsultaPage() {
                       {c.movimientosPublicos.length} movimiento(s)
                     </span>
                   </div>
-                  <TimelineMovimientos movimientos={c.expediente.movimientos} soloPublicos={true} />
+                  <TimelineMovimientos
+  movimientos={c.expediente.movimientos}
+  soloPublicos={true}
+  tipoTramiteId={c.expediente.tipoTramiteId}
+/>
                 </div>
               </div>
-
               {/* ── Columna lateral (1/3) ── */}
               <div className="space-y-4">
                 {/* Cargo de recepción */}

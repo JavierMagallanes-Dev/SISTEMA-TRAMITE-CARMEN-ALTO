@@ -19,6 +19,7 @@ export interface ExpedientePublico {
   id:                        number;
   codigo:                    string;
   estado:                    EstadoExpediente;
+  tipoTramiteId:             number;
   fecha_registro:            string;
   fecha_limite:              string;
   fecha_resolucion:          string | null;
