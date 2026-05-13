@@ -3,15 +3,19 @@ import { Card }    from '../ui/Card';
 import Button      from '../ui/Button';
 import EstadoBadge from '../shared/EstadoBadge';
 import { formatFecha } from '../../utils/formato';
-import { Eye, Download, Archive } from 'lucide-react';
+import { Eye, Download, Archive, Loader } from 'lucide-react';
 import type { ExpedienteHistorial } from '../../hooks/useHistorial';
 
 interface Props {
-  expedientes: ExpedienteHistorial[];
-  onVerDetalle:(id: number) => void;
+  expedientes:    ExpedienteHistorial[];
+  onVerDetalle:   (id: number) => void;
+  onArchivar:     (id: number, codigo: string) => void;
+  loadingArchivar: number | null;
 }
 
-export default function ListaHistorial({ expedientes, onVerDetalle }: Props) {
+export default function ListaHistorial({
+  expedientes, onVerDetalle, onArchivar, loadingArchivar,
+}: Props) {
   if (expedientes.length === 0) {
     return (
       <Card>
@@ -48,15 +52,41 @@ export default function ListaHistorial({ expedientes, onVerDetalle }: Props) {
               </div>
             </div>
 
-            <div className="flex gap-2 shrink-0">
-              <Button size="sm" variant="ghost" icon={<Eye size={13} />} onClick={() => onVerDetalle(exp.id)}>
+            <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Eye size={13} />}
+                onClick={() => onVerDetalle(exp.id)}
+              >
                 Ver detalle
               </Button>
+
               {exp.url_pdf_firmado && (
-                <a href={exp.url_pdf_firmado} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
-                  <Download size={13} />PDF firmado
+                <a
+                  href={exp.url_pdf_firmado}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                >
+                  <Download size={13} />
+                  PDF firmado
                 </a>
+              )}
+
+              {/* Botón archivar — solo si está RESUELTO */}
+              {exp.estado === 'RESUELTO' && (
+                <button
+                  onClick={() => onArchivar(exp.id, exp.codigo)}
+                  disabled={loadingArchivar === exp.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingArchivar === exp.id
+                    ? <Loader size={13} className="animate-spin" />
+                    : <Archive size={13} />
+                  }
+                  Archivar
+                </button>
               )}
             </div>
           </div>
