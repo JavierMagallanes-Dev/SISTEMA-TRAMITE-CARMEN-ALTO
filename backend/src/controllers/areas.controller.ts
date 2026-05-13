@@ -686,17 +686,6 @@ certPage.drawText('Sistema de Trámite Documentario — Municipalidad Distrital 
       urlDescarga: url_pdf_firmado,
     }).catch((e) => console.error('❌ Email RESUELTO:', e));
 
-    const usuariosMDPNotif = await prisma.usuario.findMany({
-      where: { activo: true, rol: { nombre: { in: ['MESA_DE_PARTES', 'ADMIN'] } } },
-      select: { id: true },
-    });
-    usuariosMDPNotif.forEach(u => crearNotificacion(
-      u.id,
-      'Expediente resuelto',
-      `El expediente ${expediente.codigo} — ${expediente.tipoTramite.nombre} fue firmado y resuelto por el Jefe de Área.`,
-      id,
-    ));
-
     res.json({
       message:                   'Expediente firmado y resuelto correctamente.',
       codigo_verificacion_firma: codigo_verificacion,
