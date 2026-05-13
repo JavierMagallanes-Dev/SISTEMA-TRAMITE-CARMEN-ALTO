@@ -48,6 +48,8 @@ export default function HistorialPage() {
       <ListaHistorial
         expedientes={h.expedientesFiltrados}
         onVerDetalle={h.verDetalle}
+        onArchivar={h.handleArchivar}
+        loadingArchivar={h.loadingArchivar}
       />
 
       {/* Modal detalle */}

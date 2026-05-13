@@ -33,10 +33,11 @@ export type FiltroEstado = 'TODOS' | 'RESUELTO' | 'ARCHIVADO';
 
 // ── Hook ─────────────────────────────────────────────────────
 export function useHistorial() {
-  const [expedientes,  setExpedientes]  = useState<ExpedienteHistorial[]>([]);
-  const [cargando,     setCargando]     = useState(true);
-  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('TODOS');
-  const [busqueda,     setBusqueda]     = useState('');
+  const [expedientes,    setExpedientes]    = useState<ExpedienteHistorial[]>([]);
+  const [cargando,       setCargando]       = useState(true);
+  const [filtroEstado,   setFiltroEstado]   = useState<FiltroEstado>('TODOS');
+  const [busqueda,       setBusqueda]       = useState('');
+  const [loadingArchivar, setLoadingArchivar] = useState<number | null>(null);
 
   const [modalDetalle, setModalDetalle] = useState(false);
   const [detalle,      setDetalle]      = useState<ExpedienteHistorial | null>(null);
@@ -66,6 +67,20 @@ export function useHistorial() {
 
   const cerrarDetalle = () => { setModalDetalle(false); setDetalle(null); };
 
+  // ── Archivar ───────────────────────────────────────────────
+  const handleArchivar = async (id: number, codigo: string) => {
+    setLoadingArchivar(id);
+    try {
+      await api.patch(`/areas/archivar/${id}`);
+      toast.success({ titulo: 'Expediente archivado', descripcion: `${codigo} archivado correctamente.` });
+      cargarHistorial();
+    } catch (err: any) {
+      toast.error({ titulo: err?.response?.data?.error ?? 'Error al archivar.' });
+    } finally {
+      setLoadingArchivar(null);
+    }
+  };
+
   // ── Filtrado ───────────────────────────────────────────────
   const expedientesFiltrados = expedientes.filter((exp) => {
     const coincideEstado   = filtroEstado === 'TODOS' || exp.estado === filtroEstado;
@@ -88,6 +103,7 @@ export function useHistorial() {
     busqueda, setBusqueda,
     totalResueltos, totalArchivados,
     modalDetalle, detalle, cargandoDet,
-    cargarHistorial, verDetalle, cerrarDetalle,
+    loadingArchivar,
+    cargarHistorial, verDetalle, cerrarDetalle, handleArchivar,
   };
 }
