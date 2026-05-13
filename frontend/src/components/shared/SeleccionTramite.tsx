@@ -2,7 +2,7 @@
 // Paso 1 del PortalPage — requisitos dinámicos desde la BD.
 import '../../styles/paso1.css';
 
-import { ArrowRight, CheckCircle, Info, Monitor, ShieldCheck, Loader } from 'lucide-react';
+import { ArrowRight, CheckCircle, Info, Monitor, ShieldCheck, Loader, Download, ExternalLink } from 'lucide-react';
 
 interface TipoTramite {
   id: number; nombre: string; descripcion: string | null;
@@ -10,8 +10,13 @@ interface TipoTramite {
 }
 
 interface Requisito {
-  id: number; nombre: string; descripcion: string | null;
-  obligatorio: boolean; orden: number;
+  id:            number;
+  nombre:        string;
+  descripcion:   string | null;
+  obligatorio:   boolean;
+  orden:         number;
+  url_plantilla: string | null;
+  url_externa:   string | null;
 }
 
 function IconTramite({ nombre, color }: { nombre: string; color: 'blue' | 'teal' }) {
@@ -32,7 +37,6 @@ function IconTramite({ nombre, color }: { nombre: string; color: 'blue' | 'teal'
   return <svg width={w} height={w} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 }
 
-// Color alternado para los íconos
 const getIconColor = (idx: number): 'blue' | 'teal' => idx % 2 === 0 ? 'blue' : 'teal';
 
 interface Props {
@@ -43,6 +47,79 @@ interface Props {
   paso:          number;
   onSeleccionar: (tipo: TipoTramite) => void;
   onContinuar:   () => void;
+}
+
+// ── Componente de un requisito con botones ───────────────────
+function RequisitoItem({ r, obligatorio }: { r: Requisito; obligatorio: boolean }) {
+  return (
+    <div key={r.id} className="p1-doc-item" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%' }}>
+        <div className="p1-doc-dot" style={{ background: obligatorio ? '#dc2626' : '#94a3b8', marginTop: 5, flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <span style={{ fontWeight: 600 }}>{r.nombre}</span>
+          {r.descripcion && (
+            <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>
+              — {r.descripcion}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Botones de acción */}
+      {(r.url_plantilla || r.url_externa) && (
+        <div style={{ display: 'flex', gap: 8, marginLeft: 16, flexWrap: 'wrap' }}>
+          {r.url_plantilla && (
+            <a
+              href={r.url_plantilla}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display:        'inline-flex',
+                alignItems:     'center',
+                gap:            5,
+                padding:        '4px 10px',
+                borderRadius:   6,
+                fontSize:       11,
+                fontWeight:     600,
+                color:          '#1d4ed8',
+                background:     '#eff6ff',
+                border:         '1px solid #bfdbfe',
+                textDecoration: 'none',
+                cursor:         'pointer',
+              }}
+            >
+              <Download size={11} />
+              Descargar plantilla
+            </a>
+          )}
+          {r.url_externa && (
+            <a
+              href={r.url_externa}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display:        'inline-flex',
+                alignItems:     'center',
+                gap:            5,
+                padding:        '4px 10px',
+                borderRadius:   6,
+                fontSize:       11,
+                fontWeight:     600,
+                color:          '#065f46',
+                background:     '#ecfdf5',
+                border:         '1px solid #a7f3d0',
+                textDecoration: 'none',
+                cursor:         'pointer',
+              }}
+            >
+              <ExternalLink size={11} />
+              Ir al sitio oficial
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function SeleccionTramite({
@@ -125,11 +202,29 @@ export default function SeleccionTramite({
               </div>
             </div>
 
-            {/* Descripción del trámite si existe */}
             {seleccionado.descripcion && (
               <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16, lineHeight: 1.6 }}>
                 {seleccionado.descripcion}
               </p>
+            )}
+
+            {/* Leyenda de botones */}
+            {requisitos.some(r => r.url_plantilla || r.url_externa) && (
+              <div style={{
+                display:      'flex', gap: 12, flexWrap: 'wrap',
+                background:   '#f8fafc', border: '1px solid #e2e8f0',
+                borderRadius: 8, padding: '8px 12px',
+                marginBottom: 14, fontSize: 11, color: '#64748b',
+              }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Download size={11} color="#1d4ed8" />
+                  <strong style={{ color: '#1d4ed8' }}>Descargar plantilla</strong> — formato oficial para llenar
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <ExternalLink size={11} color="#065f46" />
+                  <strong style={{ color: '#065f46' }}>Ir al sitio oficial</strong> — obtener el documento en línea
+                </span>
+              </div>
             )}
 
             {/* Requisitos dinámicos */}
@@ -144,17 +239,7 @@ export default function SeleccionTramite({
                   <>
                     <p className="p1-docs-label">Documentos obligatorios</p>
                     {obligatorios.map((r) => (
-                      <div key={r.id} className="p1-doc-item">
-                        <div className="p1-doc-dot" style={{ background: '#dc2626' }} />
-                        <div>
-                          <span style={{ fontWeight: 600 }}>{r.nombre}</span>
-                          {r.descripcion && (
-                            <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>
-                              — {r.descripcion}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <RequisitoItem key={r.id} r={r} obligatorio={true} />
                     ))}
                   </>
                 )}
@@ -162,17 +247,7 @@ export default function SeleccionTramite({
                   <>
                     <p className="p1-docs-label" style={{ marginTop: 12 }}>Documentos opcionales</p>
                     {opcionales.map((r) => (
-                      <div key={r.id} className="p1-doc-item">
-                        <div className="p1-doc-dot" style={{ background: '#94a3b8' }} />
-                        <div>
-                          <span>{r.nombre}</span>
-                          {r.descripcion && (
-                            <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>
-                              — {r.descripcion}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <RequisitoItem key={r.id} r={r} obligatorio={false} />
                     ))}
                   </>
                 )}

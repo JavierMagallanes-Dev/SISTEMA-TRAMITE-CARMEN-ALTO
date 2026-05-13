@@ -37,7 +37,7 @@ export const listarRequisitos = async (
 
     const requisitos = await prisma.requisito.findMany({
       where:   { tipo_tramite_id: tipoTramiteId },
-      select:  { id: true, nombre: true, descripcion: true, obligatorio: true, orden: true },
+      select:  { id: true, nombre: true, descripcion: true, obligatorio: true, orden: true, url_plantilla: true, url_externa: true },
       orderBy: { orden: 'asc' },
     });
 
