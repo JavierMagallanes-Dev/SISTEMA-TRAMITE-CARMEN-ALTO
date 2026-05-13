@@ -13,8 +13,13 @@ export interface TipoTramite {
 }
 
 export interface Requisito {
-  id: number; nombre: string; descripcion: string | null;
-  obligatorio: boolean; orden: number;
+  id:            number;
+  nombre:        string;
+  descripcion:   string | null;
+  obligatorio:   boolean;
+  orden:         number;
+  url_plantilla: string | null;
+  url_externa:   string | null;
 }
 
 export type PasoInterno = 1 | 2 | 3;
