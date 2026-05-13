@@ -3,6 +3,7 @@
 import '../../styles/paso1.css';
 
 import { ArrowRight, CheckCircle, Info, Monitor, ShieldCheck, Loader, Download, ExternalLink } from 'lucide-react';
+import type { MouseEvent } from 'react';
 
 interface TipoTramite {
   id: number; nombre: string; descripcion: string | null;
@@ -39,6 +40,82 @@ function IconTramite({ nombre, color }: { nombre: string; color: 'blue' | 'teal'
 
 const getIconColor = (idx: number): 'blue' | 'teal' => idx % 2 === 0 ? 'blue' : 'teal';
 
+// ── Componente de un requisito con botones en línea ──────────
+function RequisitoItem({ r, obligatorio }: { r: Requisito; obligatorio: boolean }) {
+  const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.stopPropagation();
+  };
+
+  return (
+    <div className="p1-doc-item" style={{ alignItems: 'center', gap: 8 }}>
+      <div
+        className="p1-doc-dot"
+        style={{ background: obligatorio ? '#dc2626' : '#94a3b8', flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontWeight: 600 }}>{r.nombre}</span>
+        {r.descripcion && (
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>
+            — {r.descripcion}
+          </span>
+        )}
+        {r.url_plantilla && (
+          <a
+            href={r.url_plantilla}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleClick}
+            style={{
+              display:        'inline-flex',
+              alignItems:     'center',
+              gap:            4,
+              padding:        '3px 9px',
+              borderRadius:   6,
+              fontSize:       11,
+              fontWeight:     600,
+              color:          '#1d4ed8',
+              background:     '#eff6ff',
+              border:         '1px solid #bfdbfe',
+              textDecoration: 'none',
+              whiteSpace:     'nowrap',
+              flexShrink:     0,
+            }}
+          >
+            <Download size={11} />
+            Descargar plantilla
+          </a>
+        )}
+        {r.url_externa && (
+          <a
+            href={r.url_externa}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleClick}
+            style={{
+              display:        'inline-flex',
+              alignItems:     'center',
+              gap:            4,
+              padding:        '3px 9px',
+              borderRadius:   6,
+              fontSize:       11,
+              fontWeight:     600,
+              color:          '#065f46',
+              background:     '#ecfdf5',
+              border:         '1px solid #a7f3d0',
+              textDecoration: 'none',
+              whiteSpace:     'nowrap',
+              flexShrink:     0,
+            }}
+          >
+            <ExternalLink size={11} />
+            Ir al sitio oficial
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   tipos:         TipoTramite[];
   seleccionado:  TipoTramite | null;
@@ -47,79 +124,6 @@ interface Props {
   paso:          number;
   onSeleccionar: (tipo: TipoTramite) => void;
   onContinuar:   () => void;
-}
-
-// ── Componente de un requisito con botones ───────────────────
-function RequisitoItem({ r, obligatorio }: { r: Requisito; obligatorio: boolean }) {
-  return (
-    <div key={r.id} className="p1-doc-item" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%' }}>
-        <div className="p1-doc-dot" style={{ background: obligatorio ? '#dc2626' : '#94a3b8', marginTop: 5, flexShrink: 0 }} />
-        <div style={{ flex: 1 }}>
-          <span style={{ fontWeight: 600 }}>{r.nombre}</span>
-          {r.descripcion && (
-            <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>
-              — {r.descripcion}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Botones de acción */}
-      {(r.url_plantilla || r.url_externa) && (
-        <div style={{ display: 'flex', gap: 8, marginLeft: 16, flexWrap: 'wrap' }}>
-          {r.url_plantilla && (
-            <a
-              href={r.url_plantilla}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display:        'inline-flex',
-                alignItems:     'center',
-                gap:            5,
-                padding:        '4px 10px',
-                borderRadius:   6,
-                fontSize:       11,
-                fontWeight:     600,
-                color:          '#1d4ed8',
-                background:     '#eff6ff',
-                border:         '1px solid #bfdbfe',
-                textDecoration: 'none',
-                cursor:         'pointer',
-              }}
-            >
-              <Download size={11} />
-              Descargar plantilla
-            </a>
-          )}
-          {r.url_externa && (
-            <a
-              href={r.url_externa}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display:        'inline-flex',
-                alignItems:     'center',
-                gap:            5,
-                padding:        '4px 10px',
-                borderRadius:   6,
-                fontSize:       11,
-                fontWeight:     600,
-                color:          '#065f46',
-                background:     '#ecfdf5',
-                border:         '1px solid #a7f3d0',
-                textDecoration: 'none',
-                cursor:         'pointer',
-              }}
-            >
-              <ExternalLink size={11} />
-              Ir al sitio oficial
-            </a>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function SeleccionTramite({
@@ -175,7 +179,8 @@ export default function SeleccionTramite({
             <div
               key={tipo.id}
               className={`p1-card ${seleccionado?.id === tipo.id ? 'selected' : ''}`}
-              onClick={() => onSeleccionar(tipo)}>
+              onClick={() => onSeleccionar(tipo)}
+            >
               <div className="p1-card-check">
                 <CheckCircle size={11} color="white" />
               </div>
@@ -269,7 +274,8 @@ export default function SeleccionTramite({
           className="p1-cta"
           onClick={onContinuar}
           disabled={!seleccionado}
-          style={{ opacity: seleccionado ? 1 : 0.4, cursor: seleccionado ? 'pointer' : 'not-allowed' }}>
+          style={{ opacity: seleccionado ? 1 : 0.4, cursor: seleccionado ? 'pointer' : 'not-allowed' }}
+        >
           Continuar con este trámite
           <ArrowRight size={19} color="white" />
         </button>
