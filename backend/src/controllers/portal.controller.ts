@@ -270,6 +270,7 @@ export const consultarEstado = async (
       where: { codigo },
       select: {
         id: true, codigo: true, estado: true,
+        tipoTramiteId: true,
         fecha_registro: true, fecha_limite: true,
         fecha_resolucion: true, url_pdf_firmado: true,
         codigo_verificacion_firma: true,
