@@ -339,7 +339,7 @@ export const firmarExpediente = async (
       where:  { id },
       select: {
         estado: true, codigo: true, tipoTramiteId: true,
-        ciudadano:   { select: { email: true, nombres: true } },
+        ciudadano:   { select: { email: true, nombres: true, apellido_pat: true } },
         tipoTramite: { select: { nombre: true } },
         areaActual:  { select: { nombre: true } },
         documentos:  { select: { url: true, tipo_mime: true, nombre: true }, orderBy: { uploaded_at: 'asc' } },
@@ -351,7 +351,7 @@ export const firmarExpediente = async (
 
     const usuario = await prisma.usuario.findUnique({
       where:  { id: usuarioId },
-      select: { nombre_completo: true, url_firma_png: true },
+      select: { nombre_completo: true, url_firma_png: true, area: { select: { nombre: true } } },
     });
 
     if (!usuario?.url_firma_png) throw new AppError(400, 'No tienes firma configurada. Ve a tu perfil y sube tu firma.');
@@ -371,10 +371,11 @@ export const firmarExpediente = async (
       paginas.forEach(p => pdfFinal.addPage(p));
     } else {
       const docsPdf = expediente.documentos.filter(d =>
-        d.tipo_mime === 'application/pdf' && !d.nombre.startsWith('FIRMADO_TECNICO:')
+        d.tipo_mime === 'application/pdf' &&
+        !d.nombre.startsWith('FIRMADO_TECNICO:') &&
+        !d.nombre.startsWith('PDF_UNIFICADO:')
       );
       if (docsPdf.length === 0) throw new AppError(400, 'El expediente no tiene documentos PDF para firmar.');
-
       for (const doc of docsPdf) {
         try {
           const response    = await fetch(doc.url);
@@ -413,25 +414,239 @@ export const firmarExpediente = async (
       width:  ancho      ?? 150,
       height: alto       ?? 60,
     });
-
     paginaPdf.drawText(`Firmado por: ${usuario.nombre_completo}`, {
-      x:    posicion_x ?? 400,
-      y:    (posicion_y ?? 50) - 14,
-      size: 8,
-      color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any },
+      x: posicion_x ?? 400, y: (posicion_y ?? 50) - 14,
+      size: 8, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any },
     });
     paginaPdf.drawText(`Fecha: ${new Date().toLocaleString('es-PE')}`, {
-      x:    posicion_x ?? 400,
-      y:    (posicion_y ?? 50) - 25,
-      size: 8,
-      color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any },
+      x: posicion_x ?? 400, y: (posicion_y ?? 50) - 25,
+      size: 8, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any },
+    });
+
+    // ── WATERMARK: sello diagonal en cada página ──────────────
+    const totalPaginas = pdfFinal.getPageCount();
+    for (let i = 0; i < totalPaginas; i++) {
+      const pag = pdfFinal.getPage(i);
+      const { width: pw, height: ph } = pag.getSize();
+
+      // Texto diagonal centrado — rotado 45 grados
+      pag.drawText('DOCUMENTO OFICIAL', {
+        x:        pw / 2 - 160,
+        y:        ph / 2 - 20,
+        size:     42,
+        color:    { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+        opacity:  0.06,
+        rotate:   { type: 'degrees' as any, angle: 45 },
+      });
+      pag.drawText('MUNICIPALIDAD CARMEN ALTO', {
+        x:        pw / 2 - 200,
+        y:        ph / 2 - 65,
+        size:     28,
+        color:    { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+        opacity:  0.06,
+        rotate:   { type: 'degrees' as any, angle: 45 },
+      });
+    }
+
+    // ── PÁGINA DE CERTIFICACIÓN ───────────────────────────────
+    const fechaFirma    = new Date();
+    const codigo_verificacion = randomUUID();
+    const certPage      = pdfFinal.addPage([595, 842]);
+    const { width: cw, height: ch } = certPage.getSize();
+
+    // Fondo superior azul
+    certPage.drawRectangle({
+      x: 0, y: ch - 120, width: cw, height: 120,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+    });
+    certPage.drawRectangle({
+      x: 0, y: ch - 124, width: cw, height: 4,
+      color: { red: 0.29, green: 0.74, blue: 0.937, type: 'RGB' as any },
+    });
+
+    // Título
+    certPage.drawText('CERTIFICADO DE FIRMA DIGITAL', {
+      x: 40, y: ch - 55, size: 20,
+      color: { red: 1, green: 1, blue: 1, type: 'RGB' as any },
+    });
+    certPage.drawText('Municipalidad Distrital de Carmen Alto — Sistema de Trámite Documentario', {
+      x: 40, y: ch - 78, size: 9,
+      color: { red: 0.75, green: 0.85, blue: 0.95, type: 'RGB' as any },
+    });
+    certPage.drawText('Documento firmado digitalmente con validez legal conforme a la normativa peruana', {
+      x: 40, y: ch - 95, size: 8,
+      color: { red: 0.6, green: 0.75, blue: 0.9, type: 'RGB' as any },
+    });
+
+    // Watermark en página de certificación también
+    certPage.drawText('DOCUMENTO OFICIAL', {
+      x: cw / 2 - 160, y: ch / 2 - 20, size: 42,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+      opacity: 0.04,
+      rotate: { type: 'degrees' as any, angle: 45 },
+    });
+
+    // ── Sección: Datos del expediente ────────────────────────
+    let cy = ch - 165;
+
+    // Caja código expediente
+    certPage.drawRectangle({
+      x: 40, y: cy - 10, width: 515, height: 50,
+      color: { red: 0.91, green: 0.95, blue: 0.99, type: 'RGB' as any },
+      borderColor: { red: 0.13, green: 0.43, blue: 0.81, type: 'RGB' as any },
+      borderWidth: 1,
+    });
+    certPage.drawText('EXPEDIENTE', {
+      x: 55, y: cy + 24, size: 7,
+      color: { red: 0.13, green: 0.43, blue: 0.81, type: 'RGB' as any },
+    });
+    certPage.drawText(expediente.codigo, {
+      x: 55, y: cy + 8, size: 16,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+    });
+    certPage.drawText('TIPO DE TRÁMITE', {
+      x: 240, y: cy + 24, size: 7,
+      color: { red: 0.13, green: 0.43, blue: 0.81, type: 'RGB' as any },
+    });
+    certPage.drawText(expediente.tipoTramite.nombre, {
+      x: 240, y: cy + 8, size: 10,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+    });
+
+    cy -= 70;
+
+    // ── Separador ────────────────────────────────────────────
+    certPage.drawRectangle({
+      x: 40, y: cy + 18, width: 515, height: 22,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+    });
+    certPage.drawText('DATOS DEL FIRMANTE', {
+      x: 50, y: cy + 23, size: 9,
+      color: { red: 1, green: 1, blue: 1, type: 'RGB' as any },
+    });
+
+    cy -= 10;
+
+    // Datos del firmante
+    const campoLabel = (label: string, valor: string, x: number, y: number, ancho = 230) => {
+      certPage.drawText(label, {
+        x, y: y + 12, size: 7,
+        color: { red: 0.43, green: 0.43, blue: 0.43, type: 'RGB' as any },
+      });
+      certPage.drawText(valor, {
+        x, y, size: 10,
+        color: { red: 0.07, green: 0.09, blue: 0.15, type: 'RGB' as any },
+      });
+    };
+
+    campoLabel('Nombre completo del firmante', usuario.nombre_completo, 55, cy - 20);
+    campoLabel('Cargo', 'Jefe de Área', 55, cy - 55);
+    campoLabel('Área', usuario.area?.nombre ?? expediente.areaActual?.nombre ?? 'Área Municipal', 300, cy - 55);
+    campoLabel('Fecha y hora de firma', fechaFirma.toLocaleString('es-PE', {
+      weekday: 'long', year: 'numeric', month: 'long',
+      day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }), 55, cy - 90);
+
+    // Imagen de firma del jefe
+    certPage.drawRectangle({
+      x: 370, y: cy - 100, width: 180, height: 70,
+      color: { red: 0.98, green: 0.99, blue: 1, type: 'RGB' as any },
+      borderColor: { red: 0.8, green: 0.87, blue: 0.95, type: 'RGB' as any },
+      borderWidth: 1,
+    });
+    certPage.drawImage(firmaImg, {
+      x: 375, y: cy - 95, width: 170, height: 60,
+    });
+    certPage.drawText('Firma digital del Jefe de Área', {
+      x: 370, y: cy - 108, size: 7,
+      color: { red: 0.43, green: 0.43, blue: 0.43, type: 'RGB' as any },
+    });
+
+    cy -= 130;
+
+    // ── Código de verificación ────────────────────────────────
+    certPage.drawRectangle({
+      x: 40, y: cy + 18, width: 515, height: 22,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+    });
+    certPage.drawText('CÓDIGO DE VERIFICACIÓN DE AUTENTICIDAD', {
+      x: 50, y: cy + 23, size: 9,
+      color: { red: 1, green: 1, blue: 1, type: 'RGB' as any },
+    });
+
+    cy -= 15;
+
+    certPage.drawRectangle({
+      x: 40, y: cy - 30, width: 515, height: 55,
+      color: { red: 0.95, green: 0.98, blue: 1, type: 'RGB' as any },
+      borderColor: { red: 0.29, green: 0.74, blue: 0.937, type: 'RGB' as any },
+      borderWidth: 1,
+    });
+    certPage.drawText('UUID de verificación:', {
+      x: 55, y: cy + 10, size: 7,
+      color: { red: 0.43, green: 0.43, blue: 0.43, type: 'RGB' as any },
+    });
+    certPage.drawText(codigo_verificacion, {
+      x: 55, y: cy - 8, size: 9,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+    });
+    certPage.drawText('Verifique la autenticidad en: municipalidadcarmenalto.site/consulta', {
+      x: 55, y: cy - 24, size: 8,
+      color: { red: 0.13, green: 0.43, blue: 0.81, type: 'RGB' as any },
+    });
+
+    cy -= 65;
+
+    // ── Texto legal ───────────────────────────────────────────
+    certPage.drawRectangle({
+      x: 40, y: cy - 55, width: 515, height: 80,
+      color: { red: 0.99, green: 0.99, blue: 0.97, type: 'RGB' as any },
+      borderColor: { red: 0.95, green: 0.82, blue: 0.36, type: 'RGB' as any },
+      borderWidth: 1,
+    });
+    certPage.drawText('BASE LEGAL', {
+      x: 55, y: cy + 12, size: 8,
+      color: { red: 0.57, green: 0.41, blue: 0.02, type: 'RGB' as any },
+    });
+    certPage.drawText(
+      'El presente documento ha sido firmado digitalmente conforme a la Ley N° 27269 — Ley de Firmas y',
+      { x: 55, y: cy - 5, size: 7.5, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } }
+    );
+    certPage.drawText(
+      'Certificados Digitales del Perú y sus modificatorias. La firma digital consignada en este documento',
+      { x: 55, y: cy - 18, size: 7.5, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } }
+    );
+    certPage.drawText(
+      'tiene la misma validez y eficacia jurídica que una firma manuscrita, conforme al artículo 141-A del',
+      { x: 55, y: cy - 31, size: 7.5, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } }
+    );
+    certPage.drawText(
+      'Código Civil Peruano. Municipalidad Distrital de Carmen Alto — Huamanga, Ayacucho.',
+      { x: 55, y: cy - 44, size: 7.5, color: { red: 0.3, green: 0.3, blue: 0.3, type: 'RGB' as any } }
+    );
+
+    // ── Pie de página de certificación ────────────────────────
+    certPage.drawRectangle({
+      x: 0, y: 0, width: cw, height: 40,
+      color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+    });
+    certPage.drawRectangle({
+      x: 0, y: 36, width: cw, height: 4,
+      color: { red: 0.29, green: 0.74, blue: 0.937, type: 'RGB' as any },
+    });
+    certPage.drawText(`Documento generado el ${fechaFirma.toLocaleString('es-PE')}`, {
+      x: 40, y: 22, size: 7,
+      color: { red: 0.75, green: 0.85, blue: 0.95, type: 'RGB' as any },
+    });
+    certPage.drawText('Sistema de Trámite Documentario — Municipalidad Distrital de Carmen Alto', {
+      x: 40, y: 9, size: 7,
+      color: { red: 0.5, green: 0.65, blue: 0.8, type: 'RGB' as any },
     });
 
     // ── Subir PDF final a Supabase ────────────────────────────
     const pdfBytes        = await pdfFinal.save();
     const pdfBuffer       = Buffer.from(pdfBytes);
     const url_pdf_firmado = await storageService.subirArchivo(pdfBuffer, 'application/pdf', 'firmados');
-    const codigo_verificacion = randomUUID();
 
     // ── Actualizar expediente ─────────────────────────────────
     await prisma.$transaction(async (tx) => {
@@ -441,9 +656,9 @@ export const firmarExpediente = async (
           estado:                    'PDF_FIRMADO',
           url_pdf_firmado,
           codigo_verificacion_firma: codigo_verificacion,
-          fecha_firma:               new Date(),
+          fecha_firma:               fechaFirma,
           firmadoPorId:              usuarioId,
-          fecha_resolucion:          new Date(),
+          fecha_resolucion:          fechaFirma,
         },
       });
       await tx.movimiento.create({
@@ -451,7 +666,7 @@ export const firmarExpediente = async (
           expedienteId:     id, usuarioId,
           tipo_accion:      'SUBIDA_PDF_FIRMADO',
           estado_resultado: 'PDF_FIRMADO',
-          comentario:       `PDF firmado por Jefe de Área. Código: ${codigo_verificacion}`,
+          comentario:       `PDF firmado por Jefe de Área. Código de verificación: ${codigo_verificacion}`,
         },
       });
       await tx.expediente.update({ where: { id }, data: { estado: 'RESUELTO' } });
@@ -471,7 +686,7 @@ export const firmarExpediente = async (
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
       estado:      'RESUELTO',
-      comentario:  'Su documento oficial ha sido firmado y está listo para descargar.',
+      comentario:  'Su documento oficial ha sido firmado digitalmente y está listo para descargar.',
       area:        expediente.areaActual?.nombre,
       urlDescarga: url_pdf_firmado,
     }).catch((e) => console.error('❌ Email RESUELTO:', e));
