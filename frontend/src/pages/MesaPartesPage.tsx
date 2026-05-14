@@ -114,6 +114,8 @@ export default function MesaPartesPage({ initialTab }: Props) {
         onAbrirPreview={mdp.abrirPreview}
         onObservar={mdp.abrirObservar}
         onReactivar={mdp.handleReactivar}
+        onReemplazarDoc={mdp.handleReemplazarDoc}
+        loadingReemplazar={mdp.loadingReemplazar}
       />
 
       <ModalDerivar

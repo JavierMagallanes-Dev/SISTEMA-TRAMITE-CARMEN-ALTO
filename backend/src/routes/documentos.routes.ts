@@ -5,7 +5,7 @@ import multer        from 'multer';
 import {
   subirDocumento,
   listarDocumentos,
-  subirPdfFirmado,
+  subirPdfFirmado, reemplazarDocumento
 } from '../controllers/documentos.controller';
 import { autenticar } from '../middlewares/auth.middleware';
 import { autorizar }  from '../middlewares/roles.middleware';
@@ -47,5 +47,14 @@ router.post(
   upload.single('archivo'),
   subirPdfFirmado
 );
+
+router.put(
+  '/:id/reemplazar',
+  autenticar,
+  autorizar('MESA_DE_PARTES', 'TECNICO', 'JEFE_AREA', 'ADMIN'),
+  upload.single('archivo'),
+  reemplazarDocumento
+);
+
 
 export default router;

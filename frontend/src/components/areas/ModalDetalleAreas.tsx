@@ -1,5 +1,6 @@
 // src/components/areas/ModalDetalleAreas.tsx
 
+import { useRef }          from 'react';
 import Modal               from '../ui/Modal';
 import Spinner             from '../ui/Spinner';
 import Button              from '../ui/Button';
@@ -7,33 +8,47 @@ import EstadoBadge         from '../shared/EstadoBadge';
 import TimelineMovimientos from '../shared/TimelineMovimientos';
 import { CardTitle }       from '../ui/Card';
 import { formatFecha, diasRestantes, colorDiasRestantes } from '../../utils/formato';
-import { FileText, Download, Package, ZoomIn, CheckCircle } from 'lucide-react';
+import { FileText, Download, Package, ZoomIn, CheckCircle, RefreshCw } from 'lucide-react';
 import type { DetalleExpediente, Documento } from '../../hooks/useAreas';
 
 interface Props {
-  open:            boolean;
-  onClose:         () => void;
-  detalle:         DetalleExpediente | null;
-  cargando:        boolean;
-  loadingUnif:     boolean;
-  nombreDoc:       (n: string) => string;
-  onDescargarUnif: (id: number, codigo: string) => void;
-  onAbrirPreview:  (doc: Documento) => void;
+  open:              boolean;
+  onClose:           () => void;
+  detalle:           DetalleExpediente | null;
+  cargando:          boolean;
+  loadingUnif:       boolean;
+  nombreDoc:         (n: string) => string;
+  onDescargarUnif:   (id: number, codigo: string) => void;
+  onAbrirPreview:    (doc: Documento) => void;
+  onReemplazarDoc?:  (docId: number, nombre: string, archivo: File) => void;
+  loadingReemplazar?: number | null;
 }
 
 export default function ModalDetalleAreas({
   open, onClose, detalle, cargando, loadingUnif,
   nombreDoc, onDescargarUnif, onAbrirPreview,
+  onReemplazarDoc, loadingReemplazar,
 }: Props) {
 
-  // Separar el PDF firmado por el técnico de los documentos originales
+  const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
   const docFirmadoTecnico = detalle?.documentos?.find(d =>
     d.nombre.startsWith('FIRMADO_TECNICO:')
   ) ?? null;
 
   const docsOriginales = detalle?.documentos?.filter(d =>
-    !d.nombre.startsWith('FIRMADO_TECNICO:')
+    !d.nombre.startsWith('FIRMADO_TECNICO:') &&
+    !d.nombre.startsWith('PDF_UNIFICADO:')
   ) ?? [];
+
+  const esObservado = detalle?.estado === 'OBSERVADO';
+
+  const handleFileChange = (docId: number, nombre: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    onReemplazarDoc?.(docId, nombre, file);
+    if (fileRefs.current[docId]) fileRefs.current[docId]!.value = '';
+  };
 
   return (
     <Modal open={open} onClose={onClose} title="Detalle del expediente" size="lg">
@@ -57,7 +72,14 @@ export default function ModalDetalleAreas({
             </div>
           </div>
 
-          {/* ── PDF firmado por el Técnico ── */}
+          {/* Aviso de observación */}
+          {esObservado && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
+              <span className="text-amber-600 text-xs font-semibold">⚠ Expediente observado — el ciudadano debe subsanar documentos. Puedes reemplazar los documentos corregidos.</span>
+            </div>
+          )}
+
+          {/* PDF firmado por el Técnico */}
           {docFirmadoTecnico ? (
             <div className="rounded-xl border border-emerald-200 overflow-hidden">
               <div className="bg-emerald-50 px-4 py-3 flex items-center gap-3 border-b border-emerald-200">
@@ -83,10 +105,7 @@ export default function ModalDetalleAreas({
                     className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
                     <ZoomIn size={13} />Vista previa
                   </button>
-                  <a
-                    href={docFirmadoTecnico.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <a href={docFirmadoTecnico.url} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1 text-xs text-emerald-700 font-medium px-3 py-1.5 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
                     <Download size={13} />Descargar
                   </a>
@@ -94,7 +113,6 @@ export default function ModalDetalleAreas({
               </div>
             </div>
           ) : (
-            /* Si no hay firma del técnico, mostrar el PDF unificado normal */
             <div>
               <div className="flex items-center justify-between mb-3">
                 <CardTitle>Documentos ({docsOriginales.length})</CardTitle>
@@ -114,7 +132,7 @@ export default function ModalDetalleAreas({
                         <p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p>
                         <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0flex-wrap">
                         <button onClick={() => onAbrirPreview(doc)}
                           className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
                           <ZoomIn size={13} />Vista previa
@@ -123,6 +141,30 @@ export default function ModalDetalleAreas({
                           className="flex items-center gap-1 text-xs text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                           <Download size={13} />Descargar
                         </a>
+
+                        {/* Botón Reemplazar — solo en OBSERVADO y para docs REQ- */}
+                        {esObservado && doc.nombre.startsWith('REQ-') && onReemplazarDoc && (
+                          <>
+                            <button
+                              onClick={() => fileRefs.current[doc.id]?.click()}
+                              disabled={loadingReemplazar === doc.id}
+                              className="flex items-center gap-1 text-xs text-amber-700 font-medium px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                            >
+                              {loadingReemplazar === doc.id
+                                ? <span className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                : <RefreshCw size={13} />
+                              }
+                              Reemplazar
+                            </button>
+                            <input
+                              ref={el => { fileRefs.current[doc.id] = el; }}
+                              type="file"
+                              accept="application/pdf"
+                              className="hidden"
+                              onChange={(e) => handleFileChange(doc.id, doc.nombre, e)}
+                            />
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -133,7 +175,7 @@ export default function ModalDetalleAreas({
             </div>
           )}
 
-          {/* PDF firmado final (por el Jefe) */}
+          {/* PDF firmado final */}
           {detalle.url_pdf_firmado && (
             <div className="bg-green-50 rounded-lg p-3 border border-green-200">
               <p className="text-xs font-semibold text-green-700 mb-1">PDF firmado oficialmente</p>

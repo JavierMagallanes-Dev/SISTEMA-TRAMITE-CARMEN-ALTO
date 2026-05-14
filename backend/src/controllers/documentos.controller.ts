@@ -196,3 +196,54 @@ export const subirPdfFirmado = async (
     next(err);
   }
 };
+// ── PUT /api/documentos/:id/reemplazar ──────────────────────
+// MDP o Técnico reemplaza un documento específico por uno corregido
+export const reemplazarDocumento = async (
+  req:  Request,
+  res:  Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const docId  = Number(req.params['id']);
+    const archivo = req.file;
+
+    if (!archivo)
+      throw new AppError(400, 'No se recibió ningún archivo.');
+    if (archivo.mimetype !== 'application/pdf')
+      throw new AppError(400, 'Solo se aceptan archivos PDF.');
+    if (archivo.size > 10 * 1024 * 1024)
+      throw new AppError(400, 'El archivo no puede superar los 10MB.');
+
+    const documento = await prisma.documento.findUnique({
+      where:  { id: docId },
+      select: { id: true, nombre: true, expedienteId: true },
+    });
+    if (!documento) throw new AppError(404, 'Documento no encontrado.');
+
+    // Subir nuevo archivo a Supabase
+    const url = await storageService.subirArchivo(
+      archivo.buffer,
+      archivo.mimetype,
+      'expedientes'
+    );
+
+    // Reemplazar URL en BD manteniendo el mismo nombre
+    const docActualizado = await prisma.documento.update({
+      where: { id: docId },
+      data:  { url, uploaded_at: new Date() },
+    });
+
+    // Invalidar PDF_UNIFICADO anterior para que se regenere
+    await prisma.documento.deleteMany({
+      where: {
+        expedienteId: documento.expedienteId,
+        nombre: { startsWith: 'PDF_UNIFICADO:' },
+      },
+    });
+
+    res.json({
+      message:   'Documento reemplazado correctamente.',
+      documento: docActualizado,
+    });
+  } catch (err) { next(err); }
+};

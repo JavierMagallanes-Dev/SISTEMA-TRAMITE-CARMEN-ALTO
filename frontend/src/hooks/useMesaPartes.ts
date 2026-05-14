@@ -83,6 +83,7 @@ export function useMesaPartes(initialTab: TabMDP = 'bandeja') {
   const [expObservar,     setExpObservar]     = useState<DetalleExpediente | null>(null);
   const [comentarioObs,   setComentarioObs]   = useState('');
   const [loadingObservar, setLoadingObservar] = useState(false);
+  const [loadingReemplazar, setLoadingReemplazar] = useState<number | null>(null);
 
   // Derivar
   const [modalDerivar,   setModalDerivar]   = useState(false);
@@ -215,7 +216,24 @@ export function useMesaPartes(initialTab: TabMDP = 'bandeja') {
     } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error.' }); }
     finally { setLoadingObservar(false); }
   };
-
+   
+  const handleReemplazarDoc = async (docId: number, nombre: string, archivo: File) => {
+  setLoadingReemplazar(docId);
+  try {
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    await api.put(`/documentos/${docId}/reemplazar`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    toast.success({ titulo: 'Documento reemplazado', descripcion: `${nombre} actualizado correctamente.` });
+    // Recargar detalle
+    if (detalle) verDetalle(detalle.id);
+  } catch (e: any) {
+    toast.error({ titulo: e?.response?.data?.error ?? 'Error al reemplazar.' });
+  } finally {
+    setLoadingReemplazar(null);
+  }
+};
   // ── Acciones de reactivación ───────────────────────────────
   const handleReactivar = async () => {
     if (!detalle) return;
@@ -279,5 +297,7 @@ export function useMesaPartes(initialTab: TabMDP = 'bandeja') {
     handleReactivar,
     abrirDerivar, cerrarDerivar, handleDerivar,
     nombreDoc, puedeObservar,
+    loadingReemplazar,
+handleReemplazarDoc,
   };
 }

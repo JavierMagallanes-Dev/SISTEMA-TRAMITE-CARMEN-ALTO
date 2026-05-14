@@ -1,15 +1,14 @@
 // src/components/mesa-partes/ModalDetalleMDP.tsx
-// Modal de detalle del expediente en Mesa de Partes.
-
-import Modal              from '../ui/Modal';
-import Button             from '../ui/Button';
-import Spinner            from '../ui/Spinner';
-import EstadoBadge        from '../shared/EstadoBadge';
+import { useRef }          from 'react';
+import Modal               from '../ui/Modal';
+import Button              from '../ui/Button';
+import Spinner             from '../ui/Spinner';
+import EstadoBadge         from '../shared/EstadoBadge';
 import TimelineMovimientos from '../shared/TimelineMovimientos';
-import { CardTitle }      from '../ui/Card';
+import { CardTitle }       from '../ui/Card';
 import { formatFecha, diasRestantes, colorDiasRestantes } from '../../utils/formato';
 import {
-  FileText, Download, Package, ZoomIn, AlertCircle, CheckCircle,
+  FileText, Download, Package, ZoomIn, AlertCircle, CheckCircle, RefreshCw,
 } from 'lucide-react';
 import type { DetalleExpediente, Documento } from '../../hooks/useMesaPartes';
 import type { EstadoExpediente } from '../../types';
@@ -27,13 +26,27 @@ interface Props {
   onAbrirPreview:        (doc: Documento) => void;
   onObservar:            () => void;
   onReactivar:           () => void;
+  onReemplazarDoc?:      (docId: number, nombre: string, archivo: File) => void;
+  loadingReemplazar?:    number | null;
 }
 
 export default function ModalDetalleMDP({
   open, onClose, detalle, cargando, loadingUnificado, loadingReactivar,
   nombreDoc, puedeObservar, onDescargarUnificado, onAbrirPreview,
-  onObservar, onReactivar,
+  onObservar, onReactivar, onReemplazarDoc, loadingReemplazar,
 }: Props) {
+
+  const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+  const esObservado = detalle?.estado === 'OBSERVADO';
+
+  const handleFileChange = (docId: number, nombre: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    onReemplazarDoc?.(docId, nombre, file);
+    if (fileRefs.current[docId]) fileRefs.current[docId]!.value = '';
+  };
+
   return (
     <Modal open={open} onClose={onClose} title="Detalle del expediente" size="lg">
       {cargando ? <Spinner text="Cargando..." /> : detalle ? (
@@ -59,6 +72,16 @@ export default function ModalDetalleMDP({
             </div>
           </div>
 
+          {/* Aviso observado */}
+          {esObservado && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertCircle size={14} className="text-amber-500 shrink-0" />
+              <span className="text-amber-700 text-xs font-semibold">
+                Expediente observado — el ciudadano debe subsanar documentos. Puedes reemplazar los documentos corregidos.
+              </span>
+            </div>
+          )}
+
           {/* Documentos */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -73,14 +96,19 @@ export default function ModalDetalleMDP({
             </div>
             {detalle.documentos && detalle.documentos.length > 0 ? (
               <div className="space-y-2">
-                {detalle.documentos.map((doc) => (
+                {detalle.documentos
+                  .filter(d =>
+                    !d.nombre.startsWith('PDF_UNIFICADO:') &&
+                    !d.nombre.startsWith('FIRMADO_TECNICO:')
+                  )
+                  .map((doc) => (
                   <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-200 transition-colors">
                     <FileText size={16} className="text-blue-500 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p>
                       <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
                       <button
                         onClick={() => onAbrirPreview(doc)}
                         className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
@@ -90,6 +118,30 @@ export default function ModalDetalleMDP({
                         className="flex items-center gap-1 text-xs text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                         <Download size={13} />Descargar
                       </a>
+
+                      {/* Botón Reemplazar — solo en OBSERVADO y docs REQ- */}
+                      {esObservado && doc.nombre.startsWith('REQ-') && onReemplazarDoc && (
+                        <>
+                          <button
+                            onClick={() => fileRefs.current[doc.id]?.click()}
+                            disabled={loadingReemplazar === doc.id}
+                            className="flex items-center gap-1 text-xs text-amber-700 font-medium px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                          >
+                            {loadingReemplazar === doc.id
+                              ? <span className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                              : <RefreshCw size={13} />
+                            }
+                            Reemplazar
+                          </button>
+                          <input
+                            ref={el => { fileRefs.current[doc.id] = el; }}
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            onChange={(e) => handleFileChange(doc.id, doc.nombre, e)}
+                          />
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

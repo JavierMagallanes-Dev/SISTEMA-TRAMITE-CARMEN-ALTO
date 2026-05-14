@@ -66,6 +66,7 @@ export function useAreas() {
   const [modalRechazar, setModalRechazar] = useState(false);
   const [comentario,    setComentario]    = useState('');
   const [expAccion,     setExpAccion]     = useState<ExpedienteBandeja | null>(null);
+  const [loadingReemplazar, setLoadingReemplazar] = useState<number | null>(null);
 
   // Adjuntar
   const [modalAdjuntar,  setModalAdjuntar]  = useState(false);
@@ -232,6 +233,24 @@ export function useAreas() {
     catch (e: any) { toast.error({ titulo: e?.response?.data?.error ?? 'Error.' }); }
     finally { setLoading(false); }
   };
+  
+  const handleReemplazarDoc = async (docId: number, nombre: string, archivo: File) => {
+  setLoadingReemplazar(docId);
+  try {
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    await api.put(`/documentos/${docId}/reemplazar`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    toast.success({ titulo: 'Documento reemplazado', descripcion: `${nombre} actualizado correctamente.` });
+    // Recargar detalle
+    if (detalle) verDetalle(detalle.id);
+  } catch (e: any) {
+    toast.error({ titulo: e?.response?.data?.error ?? 'Error al reemplazar.' });
+  } finally {
+    setLoadingReemplazar(null);
+  }
+};
 
   const handleRechazar = async () => {
     if (!expAccion || !comentario.trim()) return;
