@@ -270,18 +270,18 @@ export const exportarPdf = async (
     const esMDP       = rol === 'MESA_DE_PARTES';
 
     const doc = new PDFDocument({
-  size:          'A4',
-  margin:        40,
-  layout:        'landscape',
-  bufferPages:   true,
-  autoFirstPage: false,
-});
-doc.addPage();
+      size:          'A4',
+      margin:        40,
+      layout:        'landscape',
+      bufferPages:   true,
+      autoFirstPage: false,
+    });
+    doc.addPage();
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="reporte-expedientes-${Date.now()}.pdf"`);
     doc.pipe(res);
 
-    // Columnas para MDP (incluye área derivada)
     const colsMDP = [
       { label: 'Código',        x: 40,  w: 85  },
       { label: 'Ciudadano',     x: 128, w: 120 },
@@ -294,7 +294,6 @@ doc.addPage();
       { label: 'Monto',         x: 784, w: 58  },
     ];
 
-    // Columnas para Admin/Jefe
     const colsStd = [
       { label: 'Código',         x: 40,  w: 90  },
       { label: 'Ciudadano',      x: 133, w: 135 },
@@ -306,22 +305,19 @@ doc.addPage();
       { label: 'Monto',          x: 734, w: 68  },
     ];
 
-    const cols = esMDP ? colsMDP : colsStd;
+    const cols       = esMDP ? colsMDP : colsStd;
     const totalAncho = esMDP ? 802 : 762;
     const xInicio    = esMDP ? 20 : 40;
 
     const dibujarEncabezado = (subtitulo: string) => {
-  doc.rect(0, 0, 842, 70).fill(AZUL_PRIMARIO);
-  doc.rect(0, 60, 842, 10).fill(AZUL_OSCURO);
-  doc.rect(0, 70, 842, 3).fill(AZUL_SECUNDARIO);
-  // Solo insertar logo si el buffer tiene contenido
-  if (logoPng.length > 0) {
-    try {
-      doc.image(logoPng, 15, 7, { width: 50, height: 50 });
-    } catch { /* sin logo */ }
-  }
-  doc.fillColor('white').fontSize(13).font('Helvetica-Bold')
-     .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 75, 10, { width: 752 });
+      doc.rect(0, 0, 842, 70).fill(AZUL_PRIMARIO);
+      doc.rect(0, 60, 842, 10).fill(AZUL_OSCURO);
+      doc.rect(0, 70, 842, 3).fill(AZUL_SECUNDARIO);
+      if (logoPng.length > 0) {
+        try { doc.image(logoPng, 15, 7, { width: 50, height: 50 }); } catch { /* sin logo */ }
+      }
+      doc.fillColor('white').fontSize(13).font('Helvetica-Bold')
+         .text('MUNICIPALIDAD DISTRITAL DE CARMEN ALTO', 75, 10, { width: 752 });
       doc.fontSize(8).font('Helvetica')
          .text(subtitulo, 75, 28, { width: 752 });
       doc.fillColor(AZUL_SECUNDARIO).fontSize(7.5).font('Helvetica')
@@ -346,92 +342,75 @@ doc.addPage();
       return y + 14;
     };
 
-    // Dibujar pie en todas las páginas
-const range = doc.bufferedPageRange();
-for (let i = 0; i < range.count; i++) {
-  doc.switchToPage(i);
-  doc.rect(0, 560, 842, 3).fill(AZUL_SECUNDARIO);
-  doc.rect(0, 563, 842, 22).fill(AZUL_OSCURO);
-  doc.fillColor('white').fontSize(7).font('Helvetica')
-     .text('Municipalidad Distrital de Carmen Alto — Sistema de Trámite Documentario', xInicio, 570, { align: 'center', width: totalAncho });
-}
-
-doc.end();
-
     const dibujarFila = (exp: typeof expedientes[0], idx: number, y: number) => {
       const bgColor  = idx % 2 === 0 ? '#ffffff' : '#f0f7ff';
       const estColor = estadoColoresPdf[exp.estado] ?? bgColor;
       const pago     = exp.pagos[0];
-      const estCol   = esMDP ? cols[4] : cols[4];
 
       doc.rect(xInicio, y, totalAncho, 13).fill(bgColor).stroke('#d1e9f7');
-      doc.rect(estCol.x, y, estCol.w, 13).fill(estColor);
+      doc.rect(cols[4].x, y, cols[4].w, 13).fill(estColor);
 
       if (esMDP) {
         const areaDerivada = exp.movimientos[0]?.areaDestino?.nombre ?? '—';
         const datos = [
-          { x: cols[0].x, w: cols[0].w, text: exp.codigo,                        bold: true,  color: AZUL_PRIMARIO },
-          { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`, bold: false, color: NEGRO },
-          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni ?? '',                  bold: false, color: GRIS         },
-          { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,             bold: false, color: NEGRO        },
-          { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),      bold: true,  color: '#1a4f8a'    },
-          { x: cols[5].x, w: cols[5].w, text: exp.areaActual?.nombre ?? '—',      bold: false, color: NEGRO        },
-          { x: cols[6].x, w: cols[6].w, text: areaDerivada,                       bold: false, color: AZUL_OSCURO  },
-          { x: cols[7].x, w: cols[7].w, text: fmtFecha(exp.fecha_registro),       bold: false, color: GRIS         },
-          { x: cols[8].x, w: cols[8].w, text: pago ? `S/ ${Number(pago.monto_cobrado).toFixed(2)}` : '—', bold: true, color: '#1a4f8a' },
+          { x: cols[0].x, w: cols[0].w, text: exp.codigo,                                                           bold: true,  color: AZUL_PRIMARIO },
+          { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`,            bold: false, color: NEGRO         },
+          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni ?? '',                                              bold: false, color: GRIS           },
+          { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,                                               bold: false, color: NEGRO          },
+          { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),                                        bold: true,  color: '#1a4f8a'      },
+          { x: cols[5].x, w: cols[5].w, text: exp.areaActual?.nombre ?? '—',                                        bold: false, color: NEGRO          },
+          { x: cols[6].x, w: cols[6].w, text: areaDerivada,                                                         bold: false, color: AZUL_OSCURO    },
+          { x: cols[7].x, w: cols[7].w, text: fmtFecha(exp.fecha_registro),                                         bold: false, color: GRIS           },
+          { x: cols[8].x, w: cols[8].w, text: pago ? `S/ ${Number(pago.monto_cobrado).toFixed(2)}` : '—',           bold: true,  color: '#1a4f8a'      },
         ];
         datos.forEach((d) => {
           doc.fillColor(d.color).fontSize(6)
              .font(d.bold ? 'Helvetica-Bold' : 'Helvetica')
-             .text(d.text, d.x + 2, y + 3, { width: d.w - 4, ellipsis: true });
+             .text(d.text, d.x + 2, y + 3, { width: d.w - 4, ellipsis: true, lineBreak: false });
         });
       } else {
         const datos = [
-          { x: cols[0].x, w: cols[0].w, text: exp.codigo,                        bold: true,  color: AZUL_PRIMARIO },
-          { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`, bold: false, color: NEGRO },
-          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni ?? '',             bold: false, color: GRIS         },
-          { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,             bold: false, color: NEGRO        },
-          { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),      bold: true,  color: '#1a4f8a'    },
-          { x: cols[5].x, w: cols[5].w, text: fmtFechaHora(exp.fecha_registro),   bold: false, color: GRIS         },
-          { x: cols[6].x, w: cols[6].w, text: fmtFecha(exp.fecha_limite),         bold: false, color: GRIS         },
-          { x: cols[7].x, w: cols[7].w, text: pago ? `S/ ${Number(pago.monto_cobrado).toFixed(2)}` : '—', bold: true, color: '#1a4f8a' },
+          { x: cols[0].x, w: cols[0].w, text: exp.codigo,                                                           bold: true,  color: AZUL_PRIMARIO },
+          { x: cols[1].x, w: cols[1].w, text: `${exp.ciudadano.apellido_pat}, ${exp.ciudadano.nombres}`,            bold: false, color: NEGRO         },
+          { x: cols[2].x, w: cols[2].w, text: exp.ciudadano.dni ?? '',                                              bold: false, color: GRIS           },
+          { x: cols[3].x, w: cols[3].w, text: exp.tipoTramite.nombre,                                               bold: false, color: NEGRO          },
+          { x: cols[4].x, w: cols[4].w, text: exp.estado.replace(/_/g, ' '),                                        bold: true,  color: '#1a4f8a'      },
+          { x: cols[5].x, w: cols[5].w, text: fmtFechaHora(exp.fecha_registro),                                     bold: false, color: GRIS           },
+          { x: cols[6].x, w: cols[6].w, text: fmtFecha(exp.fecha_limite),                                           bold: false, color: GRIS           },
+          { x: cols[7].x, w: cols[7].w, text: pago ? `S/ ${Number(pago.monto_cobrado).toFixed(2)}` : '—',           bold: true,  color: '#1a4f8a'      },
         ];
         datos.forEach((d) => {
           doc.fillColor(d.color).fontSize(6.5)
              .font(d.bold ? 'Helvetica-Bold' : 'Helvetica')
-             .text(d.text, d.x + 2, y + 3, { width: d.w - 4, ellipsis: true });
+             .text(d.text, d.x + 2, y + 3, { width: d.w - 4, ellipsis: true, lineBreak: false });
         });
       }
     };
 
     // ── Generar PDF según rol ────────────────────────────────
     if (esMDP) {
-      // Mesa de Partes: lista plana con todos los expedientes
       dibujarEncabezado('Sistema de Trámite Documentario — Reporte Mesa de Partes');
       let y = 80;
       y = dibujarCabeceras(y);
 
       expedientes.forEach((exp, idx) => {
         if (y > 528) {
-          
           doc.addPage();
-          y = 40;
-          y = dibujarCabeceras(y);
+          dibujarCabeceras(40);
+          y = 56;
         }
         dibujarFila(exp, idx, y);
         y += 13;
       });
 
-      // Total
       const montoTotal = expedientes.reduce((s, e) => s + (e.pagos[0] ? Number(e.pagos[0].monto_cobrado) : 0), 0);
-      if (y > 540) {doc.addPage(); y = 40; }
+      if (y > 540) { doc.addPage(); y = 40; }
       y += 5;
       doc.rect(xInicio, y, totalAncho, 14).fill(AZUL_PRIMARIO);
       doc.fillColor('white').fontSize(7.5).font('Helvetica-Bold')
-         .text(`TOTAL: ${expedientes.length} expedientes | Recaudado: S/ ${montoTotal.toFixed(2)}`, xInicio + 5, y + 3, { width: totalAncho - 10, align: 'right' });
+         .text(`TOTAL: ${expedientes.length} expedientes | Recaudado: S/ ${montoTotal.toFixed(2)}`, xInicio + 5, y + 3, { width: totalAncho - 10, align: 'right', lineBreak: false });
 
     } else {
-      // Admin / Jefe: agrupado por área
       const grupos = new Map<string, typeof expedientes>();
       expedientes.forEach((exp) => {
         const area = exp.areaActual?.nombre ?? 'Sin área asignada';
@@ -445,13 +424,18 @@ doc.end();
       let primerGrupo = true;
 
       grupos.forEach((exps, areaNombre) => {
-        if (y > 510) {doc.addPage(); y = 40; y = dibujarCabeceras(y); }
+        if (y > 510) { doc.addPage(); y = 40; y = dibujarCabeceras(y); }
         else if (!primerGrupo) y += 5;
         primerGrupo = false;
         y = dibujarSubtituloArea(areaNombre, exps.length, y);
 
         exps.forEach((exp, idx) => {
-          if (y > 528) { doc.addPage(); y = 40; y = dibujarCabeceras(y); y = dibujarSubtituloArea(`${areaNombre} (cont.)`, exps.length, y); }
+          if (y > 528) {
+            doc.addPage();
+            y = 40;
+            y = dibujarCabeceras(y);
+            y = dibujarSubtituloArea(`${areaNombre} (cont.)`, exps.length, y);
+          }
           dibujarFila(exp, idx, y);
           y += 13;
         });
@@ -460,7 +444,7 @@ doc.end();
         doc.rect(xInicio, y, totalAncho, 11).fill('#dbeafe');
         doc.rect(xInicio, y, totalAncho, 2).fill(AZUL_SECUNDARIO);
         doc.fillColor(AZUL_OSCURO).fontSize(6.5).font('Helvetica-Bold')
-           .text(`Subtotal ${areaNombre}: S/ ${montoArea.toFixed(2)}`, xInicio + 5, y + 2, { width: totalAncho - 10, align: 'right' });
+           .text(`Subtotal ${areaNombre}: S/ ${montoArea.toFixed(2)}`, xInicio + 5, y + 2, { width: totalAncho - 10, align: 'right', lineBreak: false });
         y += 11;
       });
 
@@ -469,10 +453,22 @@ doc.end();
       y += 5;
       doc.rect(xInicio, y, totalAncho, 14).fill(AZUL_PRIMARIO);
       doc.fillColor('white').fontSize(7.5).font('Helvetica-Bold')
-         .text(`TOTAL GENERAL: ${expedientes.length} expedientes | Recaudado: S/ ${montoTotal.toFixed(2)}`, xInicio + 5, y + 3, { width: totalAncho - 10, align: 'right' });
+         .text(`TOTAL GENERAL: ${expedientes.length} expedientes | Recaudado: S/ ${montoTotal.toFixed(2)}`, xInicio + 5, y + 3, { width: totalAncho - 10, align: 'right', lineBreak: false });
     }
 
-    
+    // ── Pie de página en todas las páginas al final ──────────
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(i);
+      doc.rect(0, 560, 842, 3).fill(AZUL_SECUNDARIO);
+      doc.rect(0, 563, 842, 22).fill(AZUL_OSCURO);
+      doc.fillColor('white').fontSize(7).font('Helvetica')
+         .text(
+           'Municipalidad Distrital de Carmen Alto — Sistema de Trámite Documentario',
+           xInicio, 570, { align: 'center', width: totalAncho, lineBreak: false }
+         );
+    }
+
     doc.end();
   } catch (err) { next(err); }
 };
