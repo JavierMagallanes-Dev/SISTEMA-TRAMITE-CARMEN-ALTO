@@ -5,8 +5,9 @@
 import { useRef }  from 'react';
 import Modal       from '../ui/Modal';
 import Button      from '../ui/Button';
-import { FileText, Upload, X, Paperclip, Download, RefreshCw } from 'lucide-react';
+import { FileText, Upload, X, Paperclip, Download, RefreshCw} from 'lucide-react';
 import type { ExpedienteBandeja } from '../../hooks/useAreas';
+
 
 interface Props {
   open:              boolean;
@@ -124,18 +125,30 @@ export default function ModalAdjuntar({
           </div>
           <div className="p-4 space-y-3">
             {archivoAdjunto ? (
-              <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <FileText size={16} className="text-green-600 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-green-700 truncate">{archivoAdjunto.name}</p>
-                  <p className="text-xs text-green-500">{(archivoAdjunto.size / 1024).toFixed(1)} KB</p>
-                </div>
-                <button
-                  onClick={() => { setArchivo(null); if (adjuntoRef.current) adjuntoRef.current.value = ''; }}
-                  className="text-gray-400 hover:text-red-500">
-                  <X size={16} />
-                </button>
-              </div>
+  <div className="space-y-2">
+    <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+      <FileText size={16} className="text-green-600 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-green-700 truncate">{archivoAdjunto.name}</p>
+        <p className="text-xs text-green-500">{(archivoAdjunto.size / 1024).toFixed(1)} KB</p>
+      </div>
+      <button
+        onClick={() => {
+          const url = URL.createObjectURL(archivoAdjunto);
+          window.open(url, '_blank');
+        }}
+        className="text-blue-500 hover:text-blue-700 text-xs font-medium px-2 py-1 bg-blue-50 rounded-lg border border-blue-200"
+        title="Previsualizar PDF"
+      >
+        Ver
+      </button>
+      <button
+        onClick={() => { setArchivo(null); if (adjuntoRef.current) adjuntoRef.current.value = ''; }}
+        className="text-gray-400 hover:text-red-500">
+        <X size={16} />
+      </button>
+    </div>
+  </div>
             ) : (
               <div
                 onClick={() => adjuntoRef.current?.click()}
