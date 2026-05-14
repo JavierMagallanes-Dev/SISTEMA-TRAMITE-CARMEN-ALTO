@@ -393,12 +393,13 @@ export default function Paso2Datos({
                 </label>
                 <div className="p2-input-wrap">
                   <input
-                    type={key === 'telefono' ? 'tel' : 'text'}
-                    className={`p2-input ${showCheck(key) ? 'valid' : ''} ${showError(key) ? 'error' : ''}`}
-                    placeholder={placeholder} value={form[key as keyof Form]}
-                    onFocus={() => setActiveHelp(help)}
-                    onChange={(e) => setF(key, key === 'telefono' ? e.target.value.replace(/\D/g, '') : e.target.value)}
-                    onBlur={() => handleBlur(key)} />
+  type={key === 'telefono' ? 'tel' : 'text'}
+  className={`p2-input ${showCheck(key) ? 'valid' : ''} ${showError(key) ? 'error' : ''}`}
+  placeholder={placeholder} value={form[key as keyof Form]}
+  maxLength={key === 'telefono' ? 9 : undefined}
+  onFocus={() => setActiveHelp(help)}
+  onChange={(e) => setF(key, key === 'telefono' ? e.target.value.replace(/\D/g, '').slice(0, 9) : e.target.value)}
+  onBlur={() => handleBlur(key)} />
                   {showCheck(key) && <span className="p2-check-icon"><CheckMark /></span>}
                 </div>
                 {showError(key) && (
