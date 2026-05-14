@@ -86,10 +86,10 @@ export function useHistorial() {
     const coincideEstado   = filtroEstado === 'TODOS' || exp.estado === filtroEstado;
     const q                = busqueda.trim().toLowerCase();
     const coincideBusqueda = !q ||
-      exp.codigo.toLowerCase().includes(q) ||
-      `${exp.ciudadano.nombres} ${exp.ciudadano.apellido_pat}`.toLowerCase().includes(q) ||
-      exp.ciudadano.dni.includes(q) ||
-      exp.tipoTramite.nombre.toLowerCase().includes(q);
+  (exp.codigo ?? '').toLowerCase().includes(q) ||
+  `${exp.ciudadano?.nombres ?? ''} ${exp.ciudadano?.apellido_pat ?? ''}`.toLowerCase().includes(q) ||
+  (exp.ciudadano?.dni ?? '').includes(q) ||
+  (exp.tipoTramite?.nombre ?? '').toLowerCase().includes(q);
     return coincideEstado && coincideBusqueda;
   });
 
