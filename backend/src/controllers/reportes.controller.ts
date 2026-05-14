@@ -346,12 +346,17 @@ doc.addPage();
       return y + 14;
     };
 
-    const dibujarPie = () => {
-      doc.rect(0, 560, 842, 3).fill(AZUL_SECUNDARIO);
-      doc.rect(0, 563, 842, 22).fill(AZUL_OSCURO);
-      doc.fillColor('white').fontSize(7).font('Helvetica')
-         .text('Municipalidad Distrital de Carmen Alto — Sistema de Trámite Documentario', xInicio, 570, { align: 'center', width: totalAncho });
-    };
+    // Dibujar pie en todas las páginas
+const range = doc.bufferedPageRange();
+for (let i = 0; i < range.count; i++) {
+  doc.switchToPage(i);
+  doc.rect(0, 560, 842, 3).fill(AZUL_SECUNDARIO);
+  doc.rect(0, 563, 842, 22).fill(AZUL_OSCURO);
+  doc.fillColor('white').fontSize(7).font('Helvetica')
+     .text('Municipalidad Distrital de Carmen Alto — Sistema de Trámite Documentario', xInicio, 570, { align: 'center', width: totalAncho });
+}
+
+doc.end();
 
     const dibujarFila = (exp: typeof expedientes[0], idx: number, y: number) => {
       const bgColor  = idx % 2 === 0 ? '#ffffff' : '#f0f7ff';
@@ -408,7 +413,7 @@ doc.addPage();
 
       expedientes.forEach((exp, idx) => {
         if (y > 528) {
-          dibujarPie();
+          
           doc.addPage();
           y = 40;
           y = dibujarCabeceras(y);
@@ -419,7 +424,7 @@ doc.addPage();
 
       // Total
       const montoTotal = expedientes.reduce((s, e) => s + (e.pagos[0] ? Number(e.pagos[0].monto_cobrado) : 0), 0);
-      if (y > 540) { dibujarPie(); doc.addPage(); y = 40; }
+      if (y > 540) {doc.addPage(); y = 40; }
       y += 5;
       doc.rect(xInicio, y, totalAncho, 14).fill(AZUL_PRIMARIO);
       doc.fillColor('white').fontSize(7.5).font('Helvetica-Bold')
@@ -440,13 +445,13 @@ doc.addPage();
       let primerGrupo = true;
 
       grupos.forEach((exps, areaNombre) => {
-        if (y > 510) { dibujarPie(); doc.addPage(); y = 40; y = dibujarCabeceras(y); }
+        if (y > 510) {doc.addPage(); y = 40; y = dibujarCabeceras(y); }
         else if (!primerGrupo) y += 5;
         primerGrupo = false;
         y = dibujarSubtituloArea(areaNombre, exps.length, y);
 
         exps.forEach((exp, idx) => {
-          if (y > 528) { dibujarPie(); doc.addPage(); y = 40; y = dibujarCabeceras(y); y = dibujarSubtituloArea(`${areaNombre} (cont.)`, exps.length, y); }
+          if (y > 528) { doc.addPage(); y = 40; y = dibujarCabeceras(y); y = dibujarSubtituloArea(`${areaNombre} (cont.)`, exps.length, y); }
           dibujarFila(exp, idx, y);
           y += 13;
         });
@@ -460,14 +465,14 @@ doc.addPage();
       });
 
       const montoTotal = expedientes.reduce((s, e) => s + (e.pagos[0] ? Number(e.pagos[0].monto_cobrado) : 0), 0);
-      if (y > 540) { dibujarPie(); doc.addPage(); y = 40; }
+      if (y > 540) { doc.addPage(); y = 40; }
       y += 5;
       doc.rect(xInicio, y, totalAncho, 14).fill(AZUL_PRIMARIO);
       doc.fillColor('white').fontSize(7.5).font('Helvetica-Bold')
          .text(`TOTAL GENERAL: ${expedientes.length} expedientes | Recaudado: S/ ${montoTotal.toFixed(2)}`, xInicio + 5, y + 3, { width: totalAncho - 10, align: 'right' });
     }
 
-    dibujarPie();
+    
     doc.end();
   } catch (err) { next(err); }
 };
