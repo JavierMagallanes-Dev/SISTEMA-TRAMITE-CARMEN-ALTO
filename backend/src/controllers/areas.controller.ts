@@ -985,12 +985,49 @@ export const firmarExpedienteTecnico = async (
     const pdfFinal = await PDFDocument.create();
 
     if (docUnificado) {
+      // Cargar PDF_UNIFICADO base
       const response    = await fetch(docUnificado.url);
       const arrayBuffer = await response.arrayBuffer();
       const pdfDoc      = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
       const paginas     = await pdfFinal.copyPages(pdfDoc, pdfDoc.getPageIndices());
       paginas.forEach(p => pdfFinal.addPage(p));
+
+      // Agregar documentos adjuntados DESPUÉS de la derivación (no REQ-, no unificado, no firmado)
+      const docsAdicionales = expediente.documentos.filter(d =>
+        d.tipo_mime === 'application/pdf' &&
+        !d.nombre.startsWith('PDF_UNIFICADO:') &&
+        !d.nombre.startsWith('FIRMADO_TECNICO:') &&
+        !d.nombre.startsWith('REQ-')
+      );
+
+      for (const doc of docsAdicionales) {
+        try {
+          const resp    = await fetch(doc.url);
+          if (!resp.ok) continue;
+          const ab      = await resp.arrayBuffer();
+          const pdfDoc2 = await PDFDocument.load(ab, { ignoreEncryption: true });
+          const pags    = await pdfFinal.copyPages(pdfDoc2, pdfDoc2.getPageIndices());
+
+          // Página separadora
+          const sep    = pdfFinal.addPage([595, 842]);
+          const nombre = doc.nombre.replace(/^REQ-\d+:\s*/, '');
+          sep.drawRectangle({
+            x: 0, y: 380, width: 595, height: 82,
+            color: { red: 0.93, green: 0.95, blue: 0.98, type: 'RGB' as any },
+          });
+          sep.drawText(`Documento adjunto: ${nombre}`, {
+            x: 40, y: 430, size: 14,
+            color: { red: 0.016, green: 0.173, blue: 0.322, type: 'RGB' as any },
+          });
+          sep.drawText('Adjuntado por el área técnica', {
+            x: 40, y: 408, size: 10,
+            color: { red: 0.5, green: 0.5, blue: 0.5, type: 'RGB' as any },
+          });
+          pags.forEach(p => pdfFinal.addPage(p));
+        } catch { continue; }
+      }
     } else {
+      // Si no existe PDF_UNIFICADO fusionar documentos originales
       const docsPdf = expediente.documentos.filter(d =>
         d.tipo_mime === 'application/pdf' &&
         !d.nombre.startsWith('PDF_UNIFICADO:') &&
