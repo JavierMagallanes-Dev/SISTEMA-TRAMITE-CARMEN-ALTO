@@ -155,24 +155,25 @@ export default function AreasPage() {
 
       {/* Firma Técnico — sin código, solo conformidad técnica */}
       <ModalFirmarTecnico
-        open={a.modalFirmaTecnico}
-        onClose={() => a.setModalFirmaTecnico(false)}
-        expFirma={a.expFirma}
-        loadingPdfFirma={a.loadingPdfFirma}
-        urlPdfFirma={a.urlPdfFirma}
-        urlFirmaPreview={a.urlFirmaPreview}
-        paginaFirma={a.paginaFirma}
-        setPaginaFirma={a.setPaginaFirma}
-        firmaPos={a.firmaPos}
-        visorRef={a.visorRef}
-        onMouseDown={a.onMouseDown}
-        loadingFirmar={a.loadingFirmar}
-        onFirmar={a.handleFirmarTecnico}
-        VISOR_W={a.VISOR_W}
-        VISOR_H={a.VISOR_H}
-        FIRMA_PX_W={a.FIRMA_PX_W}
-        FIRMA_PX_H={a.FIRMA_PX_H}
-      />
+  open={a.modalFirmaTecnico}
+  onClose={() => a.setModalFirmaTecnico(false)}
+  expFirma={a.expFirma}
+  loadingPdfFirma={a.loadingPdfFirma}
+  urlPdfFirma={a.urlPdfFirma}
+  urlFirmaPreview={a.urlFirmaPreview}
+  paginaFirma={a.paginaFirma}
+  setPaginaFirma={a.setPaginaFirma}
+  firmaPos={a.firmaPos}
+  visorRef={a.visorRef}
+  onMouseDown={a.onMouseDown}
+  loadingFirmar={a.loadingFirmar}
+  onFirmar={a.handleFirmarTecnico}
+  VISOR_W={a.VISOR_W}
+  VISOR_H={a.VISOR_H}
+  FIRMA_PX_W={a.FIRMA_PX_W}
+  FIRMA_PX_H={a.FIRMA_PX_H}
+  docsAdjuntos={a.docsAdjuntosTecnico}
+/>
 
       <ModalSubirFirma
         open={a.modalSubirFirma}

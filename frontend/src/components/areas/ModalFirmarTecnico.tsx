@@ -2,8 +2,13 @@ import Modal   from '../ui/Modal';
 import Button  from '../ui/Button';
 import Alert   from '../ui/Alert';
 import Spinner from '../ui/Spinner';
-import { PenLine, CheckCircle } from 'lucide-react';
+import { PenLine, CheckCircle, FileText, Paperclip } from 'lucide-react';
 import type { ExpedienteBandeja } from '../../hooks/useAreas';
+
+interface DocAdjunto {
+  nombre: string;
+  url:    string;
+}
 
 interface Props {
   open:            boolean;
@@ -23,6 +28,7 @@ interface Props {
   VISOR_H:         number;
   FIRMA_PX_W:      number;
   FIRMA_PX_H:      number;
+  docsAdjuntos?:   DocAdjunto[];
 }
 
 export default function ModalFirmarTecnico({
@@ -33,6 +39,7 @@ export default function ModalFirmarTecnico({
   firmaPos, visorRef, onMouseDown,
   loadingFirmar, onFirmar,
   VISOR_W, VISOR_H, FIRMA_PX_W, FIRMA_PX_H,
+  docsAdjuntos = [],
 }: Props) {
   return (
     <Modal open={open} onClose={onClose} title="Firmar y enviar al Jefe de Área" size="lg">
@@ -49,6 +56,34 @@ export default function ModalFirmarTecnico({
               <span>Tu firma certifica conformidad técnica</span>
             </div>
           </div>
+
+          {/* Documentos adjuntados por el técnico */}
+          {docsAdjuntos.length > 0 && (
+            <div className="border border-blue-100 rounded-xl overflow-hidden">
+              <div className="bg-blue-50 px-4 py-2.5 border-b border-blue-100 flex items-center gap-2">
+                <Paperclip size={13} className="text-blue-500" />
+                <p className="text-xs font-bold text-blue-700">
+                  Documentos adjuntados por ti ({docsAdjuntos.length}) — incluidos en el PDF
+                </p>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {docsAdjuntos.map((doc, i) => (
+                  <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
+                    <FileText size={14} className="text-blue-400 shrink-0" />
+                    <span className="text-xs text-gray-700 flex-1 truncate">{doc.nombre}</span>
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md whitespace-nowrap"
+                    >
+                      Ver
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Selector de página */}
           <div className="flex items-center gap-3">

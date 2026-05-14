@@ -77,7 +77,8 @@ export function useAreas() {
 
   // Firma (General / Jefe)
   const [modalFirma,       setModalFirma]       = useState(false);
-  const [modalFirmaTecnico, setModalFirmaTecnico] = useState(false); // NUEVO: Modal para técnico
+  const [modalFirmaTecnico, setModalFirmaTecnico] = useState(false);
+  const [docsAdjuntosTecnico, setDocsAdjuntosTecnico] = useState<{nombre: string; url: string}[]>([]); // NUEVO: Modal para técnico
   const [expFirma,         setExpFirma]         = useState<ExpedienteBandeja | null>(null);
   const [loadingPdfFirma, setLoadingPdfFirma] = useState(false);
   const [urlPdfFirma,     setUrlPdfFirma]     = useState('');
@@ -341,40 +342,49 @@ export function useAreas() {
   };
 
   const abrirModalFirmaTecnico = async (exp: ExpedienteBandeja) => {
-    if (!tieneFirma) {
-      toast.warning({ titulo: 'Debes subir tu firma primero', descripcion: 'Ve a "Mi firma" en tu perfil.' });
-      return;
-    }
-    setExpFirma(exp);
-    setPaginaFirma(1);
-    setFirmaPos({ x: VISOR_W - FIRMA_PX_W - 16, y: VISOR_H - FIRMA_PX_H - 16 });
-    setModalFirmaTecnico(true);
-    setLoadingPdfFirma(true);
-    try {
-      // Obtener detalle para encontrar el PDF_UNIFICADO guardado
-      const det = await areasService.detalle(exp.id);
-      const docUnificado = det.documentos?.find((d: any) =>
-        d.nombre?.startsWith('PDF_UNIFICADO:')
-      );
+  if (!tieneFirma) {
+    toast.warning({ titulo: 'Debes subir tu firma primero', descripcion: 'Ve a "Mi firma" en tu perfil.' });
+    return;
+  }
+  setExpFirma(exp);
+  setPaginaFirma(1);
+  setFirmaPos({ x: VISOR_W - FIRMA_PX_W - 16, y: VISOR_H - FIRMA_PX_H - 16 });
+  setDocsAdjuntosTecnico([]);
+  setModalFirmaTecnico(true);
+  setLoadingPdfFirma(true);
+  try {
+    const det = await areasService.detalle(exp.id);
 
-      if (docUnificado) {
-        // Usar el PDF unificado guardado directamente
-        const response = await fetch(docUnificado.url);
-        const blob     = await response.blob();
-        const blobUrl  = window.URL.createObjectURL(blob);
-        setUrlPdfFirma(blobUrl);
-      } else {
-        // Fallback: regenerar desde el endpoint
-        const res     = await api.get(`/areas/expediente/${exp.id}/pdf-unificado`, { responseType: 'blob' });
-        const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-        setUrlPdfFirma(blobUrl);
-      }
-    } catch {
-      setUrlPdfFirma('');
-    } finally {
-      setLoadingPdfFirma(false);
+    // Cargar documentos adjuntos por el técnico (no REQ-, no unificado, no firmado)
+    const adjuntos = det.documentos?.filter((d: any) =>
+      d.tipo_mime === 'application/pdf' &&
+      !d.nombre?.startsWith('PDF_UNIFICADO:') &&
+      !d.nombre?.startsWith('FIRMADO_TECNICO:') &&
+      !d.nombre?.startsWith('REQ-')
+    ) ?? [];
+    setDocsAdjuntosTecnico(adjuntos.map((d: any) => ({ nombre: d.nombre, url: d.url })));
+
+    const docUnificado = det.documentos?.find((d: any) =>
+      d.nombre?.startsWith('PDF_UNIFICADO:')
+    );
+
+    if (docUnificado) {
+      const response = await fetch(docUnificado.url);
+      const blob     = await response.blob();
+      const blobUrl  = window.URL.createObjectURL(blob);
+      setUrlPdfFirma(blobUrl);
+    } else {
+      const res     = await api.get(`/areas/expediente/${exp.id}/pdf-unificado`, { responseType: 'blob' });
+      const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      setUrlPdfFirma(blobUrl);
     }
-  };
+  } catch {
+    setUrlPdfFirma('');
+    setDocsAdjuntosTecnico([]);
+  } finally {
+    setLoadingPdfFirma(false);
+  }
+};
 
   const handleFirmarTecnico = async () => {
     if (!expFirma) return;
@@ -455,6 +465,7 @@ export function useAreas() {
     loadingAdjunto, handleAdjuntar,
     archivoReemplazo, setArchivoReemplazo,
     loadingReemplazo, handleReemplazarPdf,
+    docsAdjuntosTecnico,
     // Confirms
     confirmTomar,     setConfirmTomar,
     confirmVisto,     setConfirmVisto,
