@@ -269,7 +269,14 @@ export const exportarPdf = async (
     const logoPng     = await getLogoPng();
     const esMDP       = rol === 'MESA_DE_PARTES';
 
-    const doc = new PDFDocument({ size: 'A4', margin: 40, layout: 'landscape' });
+    const doc = new PDFDocument({
+  size:          'A4',
+  margin:        40,
+  layout:        'landscape',
+  bufferPages:   true,
+  autoFirstPage: false,
+});
+doc.addPage();
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="reporte-expedientes-${Date.now()}.pdf"`);
     doc.pipe(res);
@@ -402,7 +409,7 @@ export const exportarPdf = async (
       expedientes.forEach((exp, idx) => {
         if (y > 528) {
           dibujarPie();
-          doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
+          doc.addPage();
           y = 40;
           y = dibujarCabeceras(y);
         }
@@ -412,7 +419,7 @@ export const exportarPdf = async (
 
       // Total
       const montoTotal = expedientes.reduce((s, e) => s + (e.pagos[0] ? Number(e.pagos[0].monto_cobrado) : 0), 0);
-      if (y > 540) { dibujarPie(); doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; }
+      if (y > 540) { dibujarPie(); doc.addPage(); y = 40; }
       y += 5;
       doc.rect(xInicio, y, totalAncho, 14).fill(AZUL_PRIMARIO);
       doc.fillColor('white').fontSize(7.5).font('Helvetica-Bold')
@@ -433,13 +440,13 @@ export const exportarPdf = async (
       let primerGrupo = true;
 
       grupos.forEach((exps, areaNombre) => {
-        if (y > 510) { dibujarPie(); doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; y = dibujarCabeceras(y); }
+        if (y > 510) { dibujarPie(); doc.addPage(); y = 40; y = dibujarCabeceras(y); }
         else if (!primerGrupo) y += 5;
         primerGrupo = false;
         y = dibujarSubtituloArea(areaNombre, exps.length, y);
 
         exps.forEach((exp, idx) => {
-          if (y > 528) { dibujarPie(); doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; y = dibujarCabeceras(y); y = dibujarSubtituloArea(`${areaNombre} (cont.)`, exps.length, y); }
+          if (y > 528) { dibujarPie(); doc.addPage(); y = 40; y = dibujarCabeceras(y); y = dibujarSubtituloArea(`${areaNombre} (cont.)`, exps.length, y); }
           dibujarFila(exp, idx, y);
           y += 13;
         });
@@ -453,7 +460,7 @@ export const exportarPdf = async (
       });
 
       const montoTotal = expedientes.reduce((s, e) => s + (e.pagos[0] ? Number(e.pagos[0].monto_cobrado) : 0), 0);
-      if (y > 540) { dibujarPie(); doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 }); y = 40; }
+      if (y > 540) { dibujarPie(); doc.addPage(); y = 40; }
       y += 5;
       doc.rect(xInicio, y, totalAncho, 14).fill(AZUL_PRIMARIO);
       doc.fillColor('white').fontSize(7.5).font('Helvetica-Bold')
