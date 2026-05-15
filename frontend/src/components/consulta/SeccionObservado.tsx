@@ -24,7 +24,7 @@ interface Props {
 }
 
 export default function SeccionObservado({
-  observacion, docsObservados, expedienteId,
+  observacion, docsObservados,
   archivos, subiendoDocs, fileInputRef,
   onArchivoChange, onQuitarArchivo, onSubirDocumentos,
   onReemplazarDoc,

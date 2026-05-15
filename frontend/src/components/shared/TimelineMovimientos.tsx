@@ -14,9 +14,7 @@ interface TimelineMovimientosProps {
   tipoTramiteId?: number;
 }
 
-// ── Mensajes por tipo de trámite y acción ────────────────────
 const MENSAJES_POR_TRAMITE: Record<number, Record<string, string>> = {
-  // Autorización Temporal para Puesto en Feria (ID 4)
   4: {
     REGISTRO:          'Tu solicitud de Autorización de Puesto en Feria fue recibida correctamente.',
     VERIFICACION_PAGO: 'Pago de S/ 40.00 verificado. Tu expediente está listo para ser evaluado.',
@@ -31,7 +29,6 @@ const MENSAJES_POR_TRAMITE: Record<number, Record<string, string>> = {
     OBSERVACION:       '',
     RECHAZO:           '',
   },
-  // Celebración de Matrimonio Civil (ID 5)
   5: {
     REGISTRO:          'Tu solicitud de Celebración de Matrimonio Civil fue recibida correctamente.',
     VERIFICACION_PAGO: 'Pago de S/ 160.00 verificado. Tu expediente está listo para derivarse a Registro Civil.',
@@ -46,7 +43,6 @@ const MENSAJES_POR_TRAMITE: Record<number, Record<string, string>> = {
     OBSERVACION:       '',
     RECHAZO:           '',
   },
-  // Licencia de Edificación (ID 3)
   3: {
     REGISTRO:          'Tu solicitud de Licencia de Edificación fue recibida correctamente.',
     VERIFICACION_PAGO: 'Pago de S/ 200.00 verificado. Tu expediente está listo para derivarse a Desarrollo Urbano.',
@@ -63,7 +59,6 @@ const MENSAJES_POR_TRAMITE: Record<number, Record<string, string>> = {
   },
 };
 
-// ── Mensajes genéricos (para otros tipos de trámite) ─────────
 const MENSAJES_GENERICOS: Record<string, string> = {
   REGISTRO:          'Tu solicitud fue recibida correctamente.',
   VERIFICACION_PAGO: 'Tu pago fue verificado. El trámite está en proceso.',
@@ -79,7 +74,6 @@ const MENSAJES_GENERICOS: Record<string, string> = {
   RECHAZO:           '',
 };
 
-// ── Helper: obtener mensaje según trámite ────────────────────
 const getMensajePublico = (tipoAccion: string, tipoTramiteId?: number): string => {
   if (tipoTramiteId && MENSAJES_POR_TRAMITE[tipoTramiteId]) {
     const mensaje = MENSAJES_POR_TRAMITE[tipoTramiteId][tipoAccion];
@@ -88,7 +82,12 @@ const getMensajePublico = (tipoAccion: string, tipoTramiteId?: number): string =
   return MENSAJES_GENERICOS[tipoAccion] ?? '';
 };
 
-// ── Ícono + colores por tipo de acción ───────────────────────
+// ── Limpiar prefijo [DOC:...] del comentario ─────────────────
+const limpiarComentario = (comentario: string | null | undefined): string | null => {
+  if (!comentario) return null;
+  return comentario.replace(/^\[DOC:[^\]]*\]\s*/, '');
+};
+
 function getIconConfig(tipoAccion: string): {
   Icon:   React.ElementType;
   bg:     string;
@@ -140,12 +139,10 @@ export default function TimelineMovimientos({
   tipoTramiteId,
 }: TimelineMovimientosProps) {
 
-  // 1. Ordenar del más nuevo al más antiguo
   const ordenados = [...movimientos].sort(
     (a, b) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime()
   );
 
-  // 2. En vista pública eliminar duplicados por estado_resultado
   const visibles = soloPublicos
     ? ordenados.filter((mov, idx, arr) =>
         idx === 0 || mov.estado_resultado !== arr[idx - 1].estado_resultado
@@ -162,24 +159,23 @@ export default function TimelineMovimientos({
 
   return (
     <div className="relative">
-      {/* Línea vertical */}
       <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200" />
 
       <div className="space-y-4">
         {visibles.map((mov, idx) => {
           const { Icon, bg, border, color } = getIconConfig(mov.tipo_accion);
 
-          // Texto del comentario según contexto
           const mensajePublico  = getMensajePublico(mov.tipo_accion, tipoTramiteId);
+
+          // En vista pública: usar mensaje personalizado o comentario limpio (sin [DOC:...])
           const textoComentario = soloPublicos
-            ? (mensajePublico === '' ? mov.comentario : mensajePublico)
+            ? (mensajePublico === '' ? limpiarComentario(mov.comentario) : mensajePublico)
             : mov.comentario;
 
           const mostrarUsuario = !soloPublicos;
 
           return (
             <div key={idx} className="flex gap-4 relative">
-              {/* Círculo con ícono */}
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 border-2"
                 style={{ backgroundColor: bg, borderColor: border }}
@@ -187,7 +183,6 @@ export default function TimelineMovimientos({
                 <Icon size={14} style={{ color }} strokeWidth={2.5} />
               </div>
 
-              {/* Contenido */}
               <div className="flex-1 pb-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   <EstadoBadge estado={mov.estado_resultado} size="sm" />
@@ -196,7 +191,6 @@ export default function TimelineMovimientos({
                   </span>
                 </div>
 
-                {/* Nombre del empleado — solo en vista interna */}
                 {mostrarUsuario && (
                   <p className="text-xs font-medium text-gray-700 mt-1">
                     {mov.usuario?.nombre_completo ?? 'Sistema'}
@@ -208,7 +202,6 @@ export default function TimelineMovimientos({
                   </p>
                 )}
 
-                {/* Comentario / mensaje público */}
                 {textoComentario && (
                   <p className="text-xs text-gray-500 mt-1 bg-gray-50 rounded px-2 py-1">
                     {textoComentario}

@@ -37,8 +37,28 @@ export default function ModalDetalleMDP({
 }: Props) {
 
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
-
   const esObservado = detalle?.estado === 'OBSERVADO';
+
+  // ── Extraer IDs observados y fecha de observación ──────────
+  const ultimaObservacion = detalle?.movimientos
+    ?.filter(m => m.tipo_accion === 'OBSERVACION').slice(-1)[0];
+
+  const idsObservados = (() => {
+    if (!ultimaObservacion?.comentario) return [];
+    const match = ultimaObservacion.comentario.match(/^\[DOC:([^\]]+)\]/);
+    if (!match) return [];
+    return match[1].split(',').map(Number);
+  })();
+
+  const fechaObservacion = ultimaObservacion?.fecha_hora ?? null;
+
+  const getEstadoDoc = (doc: Documento): 'observado' | 'subsanado' | 'normal' => {
+    if (!idsObservados.includes(doc.id)) return 'normal';
+    if (fechaObservacion && new Date(doc.uploaded_at) > new Date(fechaObservacion)) {
+      return 'subsanado';
+    }
+    return 'observado';
+  };
 
   const handleFileChange = (docId: number, nombre: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -77,7 +97,7 @@ export default function ModalDetalleMDP({
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
               <AlertCircle size={14} className="text-amber-500 shrink-0" />
               <span className="text-amber-700 text-xs font-semibold">
-                Expediente observado — el ciudadano debe subsanar documentos. Puedes reemplazar los documentos corregidos.
+                Expediente observado — revisa los documentos marcados. Los verdes ya fueron subsanados por el ciudadano.
               </span>
             </div>
           )}
@@ -101,50 +121,80 @@ export default function ModalDetalleMDP({
                     !d.nombre.startsWith('PDF_UNIFICADO:') &&
                     !d.nombre.startsWith('FIRMADO_TECNICO:')
                   )
-                  .map((doc) => (
-                  <div key={doc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-200 transition-colors">
-                    <FileText size={16} className="text-blue-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p>
-                      <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                      <button
-                        onClick={() => onAbrirPreview(doc)}
-                        className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
-                        <ZoomIn size={13} />Vista previa
-                      </button>
-                      <a href={doc.url} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                        <Download size={13} />Descargar
-                      </a>
-
-                      {/* Botón Reemplazar — solo en OBSERVADO y docs REQ- */}
-                      {esObservado && doc.nombre.startsWith('REQ-') && onReemplazarDoc && (
-                        <>
+                  .map((doc) => {
+                    const estadoDoc = getEstadoDoc(doc);
+                    return (
+                      <div
+                        key={doc.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                          estadoDoc === 'subsanado'
+                            ? 'bg-green-50 border-green-300'
+                            : estadoDoc === 'observado'
+                            ? 'bg-red-50 border-red-200'
+                            : 'bg-gray-50 border-gray-200 hover:border-blue-200'
+                        }`}
+                      >
+                        <FileText size={16} className={
+                          estadoDoc === 'subsanado' ? 'text-green-500 shrink-0' :
+                          estadoDoc === 'observado' ? 'text-red-400 shrink-0' :
+                          'text-blue-500 shrink-0'
+                        } />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-gray-700 truncate">{nombreDoc(doc.nombre)}</p>
+                            {estadoDoc === 'subsanado' && (
+                              <span className="text-xs font-semibold text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                ✓ Subsanado
+                              </span>
+                            )}
+                            {estadoDoc === 'observado' && (
+                              <span className="text-xs font-semibold text-red-600 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                ❌ Observado
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400">{formatFecha(doc.uploaded_at)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
                           <button
-                            onClick={() => fileRefs.current[doc.id]?.click()}
-                            disabled={loadingReemplazar === doc.id}
-                            className="flex items-center gap-1 text-xs text-amber-700 font-medium px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
-                          >
-                            {loadingReemplazar === doc.id
-                              ? <span className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                              : <RefreshCw size={13} />
-                            }
-                            Reemplazar
+                            onClick={() => onAbrirPreview(doc)}
+                            className="flex items-center gap-1 text-xs text-indigo-600 font-medium px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                            <ZoomIn size={13} />Vista previa
                           </button>
-                          <input
-                            ref={el => { fileRefs.current[doc.id] = el; }}
-                            type="file"
-                            accept="application/pdf"
-                            className="hidden"
-                            onChange={(e) => handleFileChange(doc.id, doc.nombre, e)}
-                          />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                          <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-blue-600 font-medium px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                            <Download size={13} />Descargar
+                          </a>
+                          {esObservado && doc.nombre.startsWith('REQ-') && onReemplazarDoc && (
+                            <>
+                              <button
+                                onClick={() => fileRefs.current[doc.id]?.click()}
+                                disabled={loadingReemplazar === doc.id}
+                                className={`flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                                  estadoDoc === 'subsanado'
+                                    ? 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+                                    : 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100'
+                                }`}
+                              >
+                                {loadingReemplazar === doc.id
+                                  ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  : <RefreshCw size={13} />
+                                }
+                                {estadoDoc === 'subsanado' ? 'Actualizar' : 'Reemplazar'}
+                              </button>
+                              <input
+                                ref={el => { fileRefs.current[doc.id] = el; }}
+                                type="file"
+                                accept="application/pdf"
+                                className="hidden"
+                                onChange={(e) => handleFileChange(doc.id, doc.nombre, e)}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             ) : (
               <p className="text-sm text-gray-400 mt-2 bg-gray-50 rounded-lg p-3 text-center">El ciudadano no adjuntó documentos.</p>
