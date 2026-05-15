@@ -236,6 +236,5 @@ export function useConsulta() {
     obtenerObservacion, yaSubioComprobante, movimientosPublicos,
     // Observación
     docsObservados, handleReemplazarDoc,
-    docsSubidos, docsPreviews, subiendoDocId,
   };
 }
