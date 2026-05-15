@@ -7,6 +7,7 @@ import { prisma }          from '../config/prisma';
 import { AppError }        from '../middlewares/error.middleware';
 import { storageService }  from '../services/storage.service';
 import { notificarCambioEstado } from '../services/email.service';
+import { crearNotificacion }     from './notificaciones.controller';
 import { v4 as uuidv4 }   from 'uuid';
 
 // ----------------------------------------------------------------
@@ -80,9 +81,6 @@ export const listarDocumentos = async (
 
 // ----------------------------------------------------------------
 // POST /api/documentos/subir-firmado/:expedienteId
-// El Jefe sube el PDF ya firmado con FirmaPeru.
-// Actualiza el expediente con la URL, código de verificación
-// y envía email al ciudadano avisando que puede descargar.
 // ----------------------------------------------------------------
 export const subirPdfFirmado = async (
   req:  Request,
@@ -100,7 +98,6 @@ export const subirPdfFirmado = async (
     if (archivo.mimetype !== 'application/pdf')
       throw new AppError(400, 'Solo se aceptan archivos PDF.');
 
-    // Cargar datos del expediente + ciudadano para el email
     const expediente = await prisma.expediente.findUnique({
       where: { id: Number(expedienteId) },
       select: {
@@ -121,7 +118,6 @@ export const subirPdfFirmado = async (
       );
     }
 
-    // Subir PDF firmado a Supabase Storage
     const url                      = await storageService.subirArchivo(
       archivo.buffer,
       archivo.mimetype,
@@ -129,7 +125,6 @@ export const subirPdfFirmado = async (
     );
     const codigo_verificacion_firma = uuidv4();
 
-    // Transacción: PDF_FIRMADO → RESUELTO
     await prisma.$transaction(async (tx) => {
       await tx.expediente.update({
         where: { id: Number(expedienteId) },
@@ -169,23 +164,16 @@ export const subirPdfFirmado = async (
       });
     });
 
-    // ── Notificar al ciudadano que su documento está listo ──
-    console.log('📧 Enviando email RESUELTO a:', expediente.ciudadano.email);
-
     notificarCambioEstado({
-      email: expediente.ciudadano.email ?? '',
+      email:       expediente.ciudadano.email ?? '',
       nombres:     expediente.ciudadano.nombres,
       codigo:      expediente.codigo,
       tipoTramite: expediente.tipoTramite.nombre,
       estado:      'RESUELTO',
-      comentario:  '¡Su documento oficial ha sido firmado digitalmente y está listo para descargar! Ingrese al portal con su código y haga clic en "Descargar resolución".',
+      comentario:  '¡Su documento oficial ha sido firmado digitalmente y está listo para descargar!',
       area:        expediente.areaActual?.nombre,
       urlDescarga: url,
-    }).then(() => {
-      console.log('✅ Email RESUELTO enviado a:', expediente.ciudadano.email);
-    }).catch((e) => {
-      console.error('❌ Error al enviar email RESUELTO:', e?.message ?? e);
-    });
+    }).catch((e) => console.error('❌ Error al enviar email RESUELTO:', e?.message ?? e));
 
     res.json({
       message:                  'PDF firmado subido. Expediente RESUELTO.',
@@ -196,7 +184,8 @@ export const subirPdfFirmado = async (
     next(err);
   }
 };
-// ── PUT /api/documentos/:id/reemplazar ──────────────────────
+
+// ── PUT /api/documentos/:id/reemplazar ───────────────────────
 // MDP o Técnico reemplaza un documento específico por uno corregido
 export const reemplazarDocumento = async (
   req:  Request,
@@ -233,13 +222,57 @@ export const reemplazarDocumento = async (
       data:  { url, uploaded_at: new Date() },
     });
 
-    // Invalidar PDF_UNIFICADO anterior para que se regenere
+    // Invalidar PDF_UNIFICADO anterior
     await prisma.documento.deleteMany({
       where: {
         expedienteId: documento.expedienteId,
-        nombre: { startsWith: 'PDF_UNIFICADO:' },
+        nombre:       { startsWith: 'PDF_UNIFICADO:' },
       },
     });
+
+    // ── Notificar a MDP y Técnico del área ───────────────────
+    const expedienteInfo = await prisma.expediente.findUnique({
+      where:  { id: documento.expedienteId },
+      select: {
+        id:          true,
+        codigo:      true,
+        areaActualId: true,
+        tipoTramite: { select: { nombre: true } },
+        ciudadano:   { select: { nombres: true, apellido_pat: true } },
+      },
+    });
+
+    if (expedienteInfo) {
+      const nombreDoc     = documento.nombre.replace(/^REQ-\d+:\s*/, '');
+      const nombreCiudadano = `${expedienteInfo.ciudadano.nombres} ${expedienteInfo.ciudadano.apellido_pat}`;
+      const mensajeNotif  = `${nombreCiudadano} subsanó el documento "${nombreDoc}" del expediente ${expedienteInfo.codigo}.`;
+
+      // Notificar a MDP
+      const usuariosMDP = await prisma.usuario.findMany({
+        where:  { activo: true, rol: { nombre: 'MESA_DE_PARTES' } },
+        select: { id: true },
+      });
+      usuariosMDP.forEach(u => crearNotificacion(
+        u.id,
+        '📄 Documento subsanado por el ciudadano',
+        mensajeNotif,
+        expedienteInfo.id,
+      ));
+
+      // Notificar al Técnico del área si existe
+      if (expedienteInfo.areaActualId) {
+        const tecnicosArea = await prisma.usuario.findMany({
+          where:  { activo: true, areaId: expedienteInfo.areaActualId, rol: { nombre: 'TECNICO' } },
+          select: { id: true },
+        });
+        tecnicosArea.forEach(u => crearNotificacion(
+          u.id,
+          '📄 Documento subsanado por el ciudadano',
+          mensajeNotif,
+          expedienteInfo.id,
+        ));
+      }
+    }
 
     res.json({
       message:   'Documento reemplazado correctamente.',
