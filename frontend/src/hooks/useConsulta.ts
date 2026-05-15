@@ -106,7 +106,6 @@ const handleReemplazarDoc = async (docId: number, archivo: File) => {
   });
   if (!res.ok) throw new Error('Error al reemplazar el documento.');
   toast.success({ titulo: 'Documento corregido enviado correctamente.' });
-  if (expediente) consultar(expediente.codigo);
 };
   // ── Cargo de recepción ────────────────────────────────────
   const descargarCargo = (cod: string) => {

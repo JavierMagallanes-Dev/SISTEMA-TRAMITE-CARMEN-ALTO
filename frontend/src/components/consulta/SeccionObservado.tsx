@@ -28,10 +28,10 @@ export default function SeccionObservado({
   onArchivoChange, onQuitarArchivo, onSubirDocumentos,
   onReemplazarDoc,
 }: Props) {
-  const fileRefsDoc                                          = useRef<Record<number, HTMLInputElement | null>>({});
-  const [subiendoDoc,  setSubiendoDoc]                      = useState<number | null>(null);
-  const [docSubido,    setDocSubido]                        = useState<number[]>([]);
-  const [previews,     setPreviews]                         = useState<Record<number, string>>({});
+  const fileRefsDoc = useRef<Record<number, HTMLInputElement | null>>({});
+  const [subiendoDoc, setSubiendoDoc] = useState<number | null>(null);
+  const [docSubido,   setDocSubido]   = useState<number[]>([]);
+  const [previews,    setPreviews]    = useState<Record<number, string>>({});
 
   const handleFileDoc = async (docId: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -100,11 +100,12 @@ export default function SeccionObservado({
             return (
               <div
                 key={doc.id}
-                className={`rounded-xl border p-4 transition-colors ${
+                className={`rounded-xl border p-4 transition-all duration-300 ${
                   subido ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-200'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
+
                   {/* Info documento */}
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {subido
@@ -112,10 +113,14 @@ export default function SeccionObservado({
                       : <FileText    size={18} className="text-red-500 shrink-0" />
                     }
                     <div className="min-w-0">
-                      <p className={`text-sm font-semibold truncate ${subido ? 'text-green-700' : 'text-red-700'}`}>
+                      <p className={`text-sm font-semibold truncate ${
+                        subido ? 'text-green-700' : 'text-red-700'
+                      }`}>
                         {nombre}
                       </p>
-                      <p className={`text-xs mt-0.5 ${subido ? 'text-green-600' : 'text-gray-500'}`}>
+                      <p className={`text-xs mt-0.5 ${
+                        subido ? 'text-green-600' : 'text-gray-500'
+                      }`}>
                         {subido
                           ? '✓ Documento corregido enviado correctamente'
                           : 'Este documento necesita corrección'
@@ -126,7 +131,8 @@ export default function SeccionObservado({
 
                   {/* Acciones */}
                   <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    {/* Botón previsualizar — disponible una vez subido */}
+
+                    {/* Botón previsualizar — solo cuando ya subió */}
                     {subido && preview && (
                       <a
                         href={preview}
@@ -139,53 +145,31 @@ export default function SeccionObservado({
                       </a>
                     )}
 
-                    {/* Botón subir corrección */}
-                    {!subido && (
-                      <>
-                        <button
-                          onClick={() => fileRefsDoc.current[doc.id]?.click()}
-                          disabled={subiendo}
-                          className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          {subiendo
-                            ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            : <Upload size={13} />
-                          }
-                          {subiendo ? 'Subiendo...' : 'Subir corrección'}
-                        </button>
-                        <input
-                          ref={el => { fileRefsDoc.current[doc.id] = el; }}
-                          type="file"
-                          accept="application/pdf"
-                          className="hidden"
-                          onChange={(e) => handleFileDoc(doc.id, e)}
-                        />
-                      </>
-                    )}
+                    {/* Un solo botón — cambia texto según estado */}
+                    <button
+                      onClick={() => fileRefsDoc.current[doc.id]?.click()}
+                      disabled={subiendo}
+                      className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50 ${
+                        subido
+                          ? 'text-green-700 bg-white border border-green-300 hover:bg-green-50'
+                          : 'text-white bg-red-500 hover:bg-red-600'
+                      }`}
+                    >
+                      {subiendo
+                        ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        : <Upload size={13} />
+                      }
+                      {subiendo ? 'Subiendo...' : subido ? 'Cambiar' : 'Subir corrección'}
+                    </button>
 
-                    {/* Botón reemplazar de nuevo si ya subió */}
-                    {subido && (
-                      <>
-                        <button
-                          onClick={() => fileRefsDoc.current[doc.id]?.click()}
-                          disabled={subiendo}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-white border border-green-300 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
-                        >
-                          {subiendo
-                            ? <span className="w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                            : <Upload size={12} />
-                          }
-                          Cambiar
-                        </button>
-                        <input
-                          ref={el => { fileRefsDoc.current[doc.id] = el; }}
-                          type="file"
-                          accept="application/pdf"
-                          className="hidden"
-                          onChange={(e) => handleFileDoc(doc.id, e)}
-                        />
-                      </>
-                    )}
+                    {/* UN SOLO input por documento */}
+                    <input
+                      ref={el => { fileRefsDoc.current[doc.id] = el; }}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => handleFileDoc(doc.id, e)}
+                    />
                   </div>
                 </div>
               </div>
