@@ -100,7 +100,7 @@ const docsObservados = (() => {
 const handleReemplazarDoc = async (docId: number, archivo: File) => {
   const formData = new FormData();
   formData.append('archivo', archivo);
-  const res = await fetch(`${VITE_API_URL}/documentos/${docId}/reemplazar`, {
+  const res = await fetch(`${VITE_API_URL}/documentos/${docId}/reemplazar-publico`, {
     method: 'PUT',
     body:   formData,
   });
