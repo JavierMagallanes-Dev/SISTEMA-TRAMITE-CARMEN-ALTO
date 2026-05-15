@@ -206,16 +206,22 @@ export function useMesaPartes(initialTab: TabMDP = 'bandeja') {
     setExpObservar(detalle); setComentarioObs(''); setModalObservar(true);
   };
 
-  const handleObservar = async () => {
-    if (!expObservar || !comentarioObs.trim()) return;
-    setLoadingObservar(true);
-    try {
-      await mesaPartesService.observar(expObservar.id, comentarioObs.trim());
-      toast.success({ titulo: 'Expediente observado' });
-      setModalObservar(false); cerrarDetalle(); setComentarioObs(''); cargarDatos();
-    } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error.' }); }
-    finally { setLoadingObservar(false); }
-  };
+  // Cambia la firma de handleObservar:
+const handleObservar = async (docsObservados: { id: number; nombre: string }[]) => {
+  if (!expObservar || !comentarioObs.trim()) return;
+  setLoadingObservar(true);
+  try {
+    // Formato: [DOC:id1,id2] comentario
+    const prefijo = docsObservados.length > 0
+      ? `[DOC:${docsObservados.map(d => d.id).join(',')}] `
+      : '';
+    const comentarioFinal = `${prefijo}${comentarioObs.trim()}`;
+    await mesaPartesService.observar(expObservar.id, comentarioFinal);
+    toast.success({ titulo: 'Expediente observado' });
+    setModalObservar(false); cerrarDetalle(); setComentarioObs(''); cargarDatos();
+  } catch (err: any) { toast.error({ titulo: err?.response?.data?.error ?? 'Error.' }); }
+  finally { setLoadingObservar(false); }
+};
    
   const handleReemplazarDoc = async (docId: number, nombre: string, archivo: File) => {
   setLoadingReemplazar(docId);

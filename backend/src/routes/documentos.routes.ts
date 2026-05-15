@@ -56,5 +56,9 @@ router.put(
   reemplazarDocumento
 );
 
-
+router.put(
+  '/:id/reemplazar-publico',
+  upload.single('archivo'),
+  reemplazarDocumento
+);
 export default router;

@@ -96,14 +96,17 @@ export default function ConsultaPage() {
                 {c.expediente.estado === 'OBSERVADO' && (
                   <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                     <SeccionObservado
-                      observacion={c.obtenerObservacion()}
-                      archivos={c.archivos}
-                      subiendoDocs={c.subiendoDocs}
-                      fileInputRef={c.fileInputRef}
-                      onArchivoChange={c.handleArchivoChange}
-                      onQuitarArchivo={c.quitarArchivo}
-                      onSubirDocumentos={c.handleSubirDocumentos}
-                    />
+  observacion={c.obtenerObservacion()}
+  docsObservados={c.docsObservados}
+  expedienteId={c.expediente.id}
+  archivos={c.archivos}
+  subiendoDocs={c.subiendoDocs}
+  fileInputRef={c.fileInputRef}
+  onArchivoChange={c.handleArchivoChange}
+  onQuitarArchivo={c.quitarArchivo}
+  onSubirDocumentos={c.handleSubirDocumentos}
+  onReemplazarDoc={c.handleReemplazarDoc}
+/>
                   </div>
                 )}
 

@@ -32,6 +32,7 @@ export interface ExpedientePublico {
   areaActual:  { nombre: string; sigla: string } | null;
   pagos:       Pago[];
   movimientos: Movimiento[];
+  documentos?: { id: number; nombre: string; url: string }[];
 }
 
 export type OpcionPago = 'seleccion' | 'comprobante' | 'stripe';
@@ -80,7 +81,33 @@ export function useConsulta() {
   useEffect(() => {
     if (codigoParam) consultar(codigoParam);
   }, [codigoParam]);
+// Extraer docs observados del comentario y enriquecer con nombres
+const docsObservados = (() => {
+  if (!expediente) return [];
+  const movObs = [...expediente.movimientos].reverse().find(m => m.tipo_accion === 'OBSERVACION');
+  if (!movObs?.comentario) return [];
+  const match = movObs.comentario.match(/^\[DOC:([^\]]+)\]/);
+  if (!match) return [];
+  const ids = match[1].split(',').map(Number);
+  // Enriquecer con nombres desde los documentos del expediente
+  const docs = (expediente as any).documentos ?? [];
+  return ids.map(id => {
+    const doc = docs.find((d: any) => d.id === id);
+    return { id, nombre: doc?.nombre ?? '' };
+  });
+})();
 
+const handleReemplazarDoc = async (docId: number, archivo: File) => {
+  const formData = new FormData();
+  formData.append('archivo', archivo);
+  const res = await fetch(`${VITE_API_URL}/documentos/${docId}/reemplazar`, {
+    method: 'PUT',
+    body:   formData,
+  });
+  if (!res.ok) throw new Error('Error al reemplazar el documento.');
+  toast.success({ titulo: 'Documento corregido enviado correctamente.' });
+  if (expediente) consultar(expediente.codigo);
+};
   // ── Cargo de recepción ────────────────────────────────────
   const descargarCargo = (cod: string) => {
     window.open(`${VITE_API_URL}/recepcion/cargo/publico/${cod}`, '_blank');
@@ -185,5 +212,7 @@ export function useConsulta() {
     handleComprobanteChange, handleSubirComprobante, handlePagoExito,
     // Helpers
     obtenerObservacion, yaSubioComprobante, movimientosPublicos,
+    docsObservados,
+  handleReemplazarDoc,
   };
 }

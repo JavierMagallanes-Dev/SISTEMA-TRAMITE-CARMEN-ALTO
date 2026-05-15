@@ -134,13 +134,14 @@ export default function MesaPartesPage({ initialTab }: Props) {
       />
 
       <ModalObservarMDP
-        open={mdp.modalObservar}
-        onClose={() => { mdp.setModalObservar(false); mdp.setComentarioObs(''); }}
-        comentario={mdp.comentarioObs}
-        setComentario={mdp.setComentarioObs}
-        loading={mdp.loadingObservar}
-        onObservar={mdp.handleObservar}
-      />
+  open={mdp.modalObservar}
+  onClose={() => { mdp.setModalObservar(false); mdp.setComentarioObs(''); }}
+  comentario={mdp.comentarioObs}
+  setComentario={mdp.setComentarioObs}
+  loading={mdp.loadingObservar}
+  onObservar={mdp.handleObservar}
+  documentos={mdp.detalle?.documentos ?? []}
+/>
 
       <ModalPreviewDoc
         open={mdp.modalPreview}

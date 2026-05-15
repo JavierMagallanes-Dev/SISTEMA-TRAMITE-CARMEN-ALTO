@@ -226,14 +226,21 @@ export function useAreas() {
     finally { setLoading(false); }
   };
 
-  const handleObservar = async () => {
-    if (!expAccion || !comentario.trim()) return;
-    setLoading(true);
-    try { await areasService.observar(expAccion.id, comentario.trim()); toast.success({ titulo: 'Observado' }); setModalObservar(false); setComentario(''); cargarBandeja(); }
-    catch (e: any) { toast.error({ titulo: e?.response?.data?.error ?? 'Error.' }); }
-    finally { setLoading(false); }
-  };
-  
+  const handleObservar = async (docsObservados?: { id: number; nombre: string }[]) => {
+  if (!expAccion || !comentario.trim()) return;
+  setLoading(true);
+  try {
+    const prefijo = docsObservados && docsObservados.length > 0
+      ? `[DOC:${docsObservados.map(d => d.id).join(',')}] `
+      : '';
+    const comentarioFinal = `${prefijo}${comentario.trim()}`;
+    await areasService.observar(expAccion.id, comentarioFinal);
+    toast.success({ titulo: 'Observado' });
+    setModalObservar(false); setComentario(''); cargarBandeja();
+  } catch (e: any) { toast.error({ titulo: e?.response?.data?.error ?? 'Error.' }); }
+  finally { setLoading(false); }
+};
+
   const handleReemplazarDoc = async (docId: number, nombre: string, archivo: File) => {
   setLoadingReemplazar(docId);
   try {
@@ -477,6 +484,8 @@ export function useAreas() {
     comentario, setComentario,
     expAccion, setExpAccion,
     handleObservar, handleRechazar,
+    loadingReemplazar,
+handleReemplazarDoc,
     // Adjuntar
     modalAdjuntar, setModalAdjuntar,
     expAdjuntar, setExpAdjuntar,

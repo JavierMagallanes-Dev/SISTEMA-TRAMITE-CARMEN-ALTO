@@ -72,6 +72,8 @@ export default function AreasPage() {
         nombreDoc={a.nombreDoc}
         onDescargarUnif={a.descargarUnificado}
         onAbrirPreview={a.abrirPreview}
+        onReemplazarDoc={a.handleReemplazarDoc}
+  loadingReemplazar={a.loadingReemplazar}
       />
 
       <ModalPreviewDoc
@@ -109,6 +111,8 @@ export default function AreasPage() {
         onConfirmar={a.handleObservar}
         variant="primary"
         confirmText="Registrar"
+        mostrarDocs={true}
+        documentos={a.detalle?.documentos ?? []}
       />
 
       <ModalComentarioAreas
