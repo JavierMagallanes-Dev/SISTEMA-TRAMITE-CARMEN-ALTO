@@ -3,7 +3,7 @@
 // y permite subir la corrección por documento específico.
 
 import { useRef, useState } from 'react';
-import { AlertTriangle, Upload, X, CheckCircle, FileText } from 'lucide-react';
+import { AlertTriangle, Upload, X, CheckCircle, FileText, ZoomIn } from 'lucide-react';
 
 interface DocObservado {
   id:     number;
@@ -11,16 +11,15 @@ interface DocObservado {
 }
 
 interface Props {
-  observacion:      string | null;
-  docsObservados:   DocObservado[];
-  expedienteId:     number;
-  archivos:         File[];
-  subiendoDocs:     boolean;
-  fileInputRef:     React.RefObject<HTMLInputElement | null>;
-  onArchivoChange:  (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onQuitarArchivo:  (index: number) => void;
+  observacion:       string | null;
+  docsObservados:    DocObservado[];
+  archivos:          File[];
+  subiendoDocs:      boolean;
+  fileInputRef:      React.RefObject<HTMLInputElement | null>;
+  onArchivoChange:   (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onQuitarArchivo:   (index: number) => void;
   onSubirDocumentos: () => void;
-  onReemplazarDoc:  (docId: number, archivo: File) => Promise<void>;
+  onReemplazarDoc:   (docId: number, archivo: File) => Promise<void>;
 }
 
 export default function SeccionObservado({
@@ -29,9 +28,10 @@ export default function SeccionObservado({
   onArchivoChange, onQuitarArchivo, onSubirDocumentos,
   onReemplazarDoc,
 }: Props) {
-  const fileRefsDoc = useRef<Record<number, HTMLInputElement | null>>({});
-  const [subiendoDoc, setSubiendoDoc] = useState<number | null>(null);
-  const [docSubido, setDocSubido] = useState<number[]>([]);
+  const fileRefsDoc                                          = useRef<Record<number, HTMLInputElement | null>>({});
+  const [subiendoDoc,  setSubiendoDoc]                      = useState<number | null>(null);
+  const [docSubido,    setDocSubido]                        = useState<number[]>([]);
+  const [previews,     setPreviews]                         = useState<Record<number, string>>({});
 
   const handleFileDoc = async (docId: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,24 +39,31 @@ export default function SeccionObservado({
     if (file.type !== 'application/pdf') { alert('Solo se aceptan archivos PDF.'); return; }
     if (file.size > 10 * 1024 * 1024)   { alert('El archivo no puede superar 10MB.'); return; }
 
+    // Preview local antes de subir
+    const previewUrl = URL.createObjectURL(file);
+    setPreviews(prev => ({ ...prev, [docId]: previewUrl }));
+
     setSubiendoDoc(docId);
     try {
       await onReemplazarDoc(docId, file);
       setDocSubido(prev => [...prev, docId]);
-    } catch { /* error manejado en el hook */ }
-    finally {
+    } catch {
+      // Si falla limpiar preview
+      setPreviews(prev => { const n = { ...prev }; delete n[docId]; return n; });
+    } finally {
       setSubiendoDoc(null);
       if (fileRefsDoc.current[docId]) fileRefsDoc.current[docId]!.value = '';
     }
   };
 
-  // Comentario limpio — extraer el mensaje sin el prefijo [DOC:...]
+  // Comentario limpio — sin prefijo [DOC:...]
   const comentarioLimpio = observacion
     ? observacion.replace(/^\[DOC:[^\]]*\]\s*/, '')
     : null;
 
   return (
     <div className="p-5 sm:p-6 space-y-5">
+
       {/* Header observación */}
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
@@ -88,49 +95,98 @@ export default function SeccionObservado({
             const nombre   = doc.nombre.replace(/^REQ-\d+:\s*/, '');
             const subido   = docSubido.includes(doc.id);
             const subiendo = subiendoDoc === doc.id;
+            const preview  = previews[doc.id];
 
             return (
-              <div key={doc.id} className={`rounded-xl border p-4 ${
-                subido ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-              }`}>
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
+              <div
+                key={doc.id}
+                className={`rounded-xl border p-4 transition-colors ${
+                  subido ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-200'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  {/* Info documento */}
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
                     {subido
-                      ? <CheckCircle size={16} className="text-green-500 shrink-0" />
-                      : <FileText size={16} className="text-red-500 shrink-0" />
+                      ? <CheckCircle size={18} className="text-green-500 shrink-0" />
+                      : <FileText    size={18} className="text-red-500 shrink-0" />
                     }
-                    <div>
-                      <p className={`text-sm font-semibold ${subido ? 'text-green-700' : 'text-red-700'}`}>
+                    <div className="min-w-0">
+                      <p className={`text-sm font-semibold truncate ${subido ? 'text-green-700' : 'text-red-700'}`}>
                         {nombre}
                       </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {subido ? '✓ Documento corregido enviado' : 'Este documento necesita corrección'}
+                      <p className={`text-xs mt-0.5 ${subido ? 'text-green-600' : 'text-gray-500'}`}>
+                        {subido
+                          ? '✓ Documento corregido enviado correctamente'
+                          : 'Este documento necesita corrección'
+                        }
                       </p>
                     </div>
                   </div>
 
-                  {!subido && (
-                    <>
-                      <button
-                        onClick={() => fileRefsDoc.current[doc.id]?.click()}
-                        disabled={subiendo}
-                        className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
+                  {/* Acciones */}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {/* Botón previsualizar — disponible una vez subido */}
+                    {subido && preview && (
+                      <a
+                        href={preview}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-white border border-green-300 rounded-lg hover:bg-green-50 transition-colors"
                       >
-                        {subiendo
-                          ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          : <Upload size={13} />
-                        }
-                        {subiendo ? 'Subiendo...' : 'Subir corrección'}
-                      </button>
-                      <input
-                        ref={el => { fileRefsDoc.current[doc.id] = el; }}
-                        type="file"
-                        accept="application/pdf"
-                        className="hidden"
-                        onChange={(e) => handleFileDoc(doc.id, e)}
-                      />
-                    </>
-                  )}
+                        <ZoomIn size={12} />
+                        Ver documento
+                      </a>
+                    )}
+
+                    {/* Botón subir corrección */}
+                    {!subido && (
+                      <>
+                        <button
+                          onClick={() => fileRefsDoc.current[doc.id]?.click()}
+                          disabled={subiendo}
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {subiendo
+                            ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            : <Upload size={13} />
+                          }
+                          {subiendo ? 'Subiendo...' : 'Subir corrección'}
+                        </button>
+                        <input
+                          ref={el => { fileRefsDoc.current[doc.id] = el; }}
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => handleFileDoc(doc.id, e)}
+                        />
+                      </>
+                    )}
+
+                    {/* Botón reemplazar de nuevo si ya subió */}
+                    {subido && (
+                      <>
+                        <button
+                          onClick={() => fileRefsDoc.current[doc.id]?.click()}
+                          disabled={subiendo}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-white border border-green-300 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
+                        >
+                          {subiendo
+                            ? <span className="w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                            : <Upload size={12} />
+                          }
+                          Cambiar
+                        </button>
+                        <input
+                          ref={el => { fileRefsDoc.current[doc.id] = el; }}
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => handleFileDoc(doc.id, e)}
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -138,7 +194,7 @@ export default function SeccionObservado({
         </div>
       )}
 
-      {/* Sección genérica — si no hay docs específicos o para adjuntar otros */}
+      {/* Sección genérica */}
       <div className="border-t border-gray-100 pt-4">
         <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">
           {docsObservados.length > 0
