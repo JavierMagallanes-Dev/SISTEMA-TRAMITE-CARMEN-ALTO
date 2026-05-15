@@ -56,11 +56,6 @@ export function useConsulta() {
   const [subiendoDocs, setSubiendoDocs] = useState(false);
   const fileInputRef                    = useRef<HTMLInputElement>(null);
 
-  // Estado de docs subsanados — persiste en el hook para no perderse en rerenders
-  const [docsSubidos,   setDocsSubidos]  = useState<Record<number, boolean>>({});
-  const [docsPreviews,  setDocsPreviews] = useState<Record<number, string>>({});
-  const [subiendoDocId, setSubiendoDocId] = useState<number | null>(null);
-
   // Pago
   const [opcionPago,        setOpcionPago]       = useState<OpcionPago>('seleccion');
   const [comprobante,       setComprobante]       = useState<File | null>(null);
@@ -101,33 +96,16 @@ export function useConsulta() {
     });
   })();
 
-  // ── Reemplazar documento observado ────────────────────────
+  // ── Reemplazar documento observado (portal público) ───────
   const handleReemplazarDoc = async (docId: number, archivo: File) => {
-    // Crear preview local
-    const previewUrl = URL.createObjectURL(archivo);
-    setDocsPreviews(prev => ({ ...prev, [docId]: previewUrl }));
-    setSubiendoDocId(docId);
-
-    try {
-      const formData = new FormData();
-      formData.append('archivo', archivo);
-      const res = await fetch(`${VITE_API_URL}/documentos/${docId}/reemplazar-publico`, {
-        method: 'PUT',
-        body:   formData,
-      });
-      if (!res.ok) throw new Error('Error al reemplazar el documento.');
-
-      // Marcar como subido en el hook
-      setDocsSubidos((prev: any) => ({ ...prev, [docId]: true }));
-      toast.success({ titulo: 'Documento corregido enviado correctamente.' });
-    } catch (err: any) {
-      // Limpiar preview si falla
-      setDocsPreviews(prev => { const n = { ...prev }; delete n[docId]; return n; });
-      toast.error({ titulo: err.message ?? 'Error al reemplazar el documento.' });
-      throw err;
-    } finally {
-      setSubiendoDocId(null);
-    }
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    const res = await fetch(`${VITE_API_URL}/documentos/${docId}/reemplazar-publico`, {
+      method: 'PUT',
+      body:   formData,
+    });
+    if (!res.ok) throw new Error('Error al reemplazar el documento.');
+    toast.success({ titulo: 'Documento corregido enviado correctamente.' });
   };
 
   // ── Cargo de recepción ────────────────────────────────────
