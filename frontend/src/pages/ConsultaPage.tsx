@@ -98,6 +98,9 @@ export default function ConsultaPage() {
                     <SeccionObservado
   observacion={c.obtenerObservacion()}
   docsObservados={c.docsObservados}
+  docsSubidos={c.docsSubidos}
+  docsPreviews={c.docsPreviews}
+  subiendoDocId={c.subiendoDocId}
   archivos={c.archivos}
   subiendoDocs={c.subiendoDocs}
   fileInputRef={c.fileInputRef}

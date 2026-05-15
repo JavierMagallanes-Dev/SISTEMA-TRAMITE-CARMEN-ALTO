@@ -1,8 +1,5 @@
 // src/components/consulta/SeccionObservado.tsx
-// Sección para expedientes OBSERVADOS — muestra qué documentos corregir
-// y permite subir la corrección por documento específico.
-
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { AlertTriangle, Upload, X, CheckCircle, FileText, ZoomIn } from 'lucide-react';
 
 interface DocObservado {
@@ -13,6 +10,9 @@ interface DocObservado {
 interface Props {
   observacion:       string | null;
   docsObservados:    DocObservado[];
+  docsSubidos:       Record<number, boolean>;
+  docsPreviews:      Record<number, string>;
+  subiendoDocId:     number | null;
   archivos:          File[];
   subiendoDocs:      boolean;
   fileInputRef:      React.RefObject<HTMLInputElement | null>;
@@ -24,39 +24,26 @@ interface Props {
 
 export default function SeccionObservado({
   observacion, docsObservados,
+  docsSubidos, docsPreviews, subiendoDocId,
   archivos, subiendoDocs, fileInputRef,
   onArchivoChange, onQuitarArchivo, onSubirDocumentos,
   onReemplazarDoc,
 }: Props) {
   const fileRefsDoc = useRef<Record<number, HTMLInputElement | null>>({});
-  const [subiendoDoc, setSubiendoDoc] = useState<number | null>(null);
-  const [docSubido,   setDocSubido]   = useState<number[]>([]);
-  const [previews,    setPreviews]    = useState<Record<number, string>>({});
 
   const handleFileDoc = async (docId: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== 'application/pdf') { alert('Solo se aceptan archivos PDF.'); return; }
     if (file.size > 10 * 1024 * 1024)   { alert('El archivo no puede superar 10MB.'); return; }
-
-    // Preview local antes de subir
-    const previewUrl = URL.createObjectURL(file);
-    setPreviews(prev => ({ ...prev, [docId]: previewUrl }));
-
-    setSubiendoDoc(docId);
     try {
       await onReemplazarDoc(docId, file);
-      setDocSubido(prev => [...prev, docId]);
-    } catch {
-      // Si falla limpiar preview
-      setPreviews(prev => { const n = { ...prev }; delete n[docId]; return n; });
-    } finally {
-      setSubiendoDoc(null);
+    } catch { /* error manejado en el hook */ }
+    finally {
       if (fileRefsDoc.current[docId]) fileRefsDoc.current[docId]!.value = '';
     }
   };
 
-  // Comentario limpio — sin prefijo [DOC:...]
   const comentarioLimpio = observacion
     ? observacion.replace(/^\[DOC:[^\]]*\]\s*/, '')
     : null;
@@ -64,7 +51,7 @@ export default function SeccionObservado({
   return (
     <div className="p-5 sm:p-6 space-y-5">
 
-      {/* Header observación */}
+      {/* Header */}
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
           <AlertTriangle size={18} className="text-amber-600" />
@@ -77,7 +64,7 @@ export default function SeccionObservado({
         </div>
       </div>
 
-      {/* Comentario de observación */}
+      {/* Comentario */}
       {comentarioLimpio && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
           <p className="text-xs font-bold text-amber-700 mb-1">Motivo de la observación:</p>
@@ -85,7 +72,7 @@ export default function SeccionObservado({
         </div>
       )}
 
-      {/* Documentos específicos a corregir */}
+      {/* Documentos a corregir */}
       {docsObservados.length > 0 && (
         <div className="space-y-3">
           <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">
@@ -93,9 +80,9 @@ export default function SeccionObservado({
           </p>
           {docsObservados.map((doc) => {
             const nombre   = doc.nombre.replace(/^REQ-\d+:\s*/, '');
-            const subido   = docSubido.includes(doc.id);
-            const subiendo = subiendoDoc === doc.id;
-            const preview  = previews[doc.id];
+            const subido   = !!docsSubidos[doc.id];
+            const subiendo = subiendoDocId === doc.id;
+            const preview  = docsPreviews[doc.id];
 
             return (
               <div
@@ -105,22 +92,16 @@ export default function SeccionObservado({
                 }`}
               >
                 <div className="flex items-start justify-between gap-3 flex-wrap">
-
-                  {/* Info documento */}
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {subido
                       ? <CheckCircle size={18} className="text-green-500 shrink-0" />
                       : <FileText    size={18} className="text-red-500 shrink-0" />
                     }
                     <div className="min-w-0">
-                      <p className={`text-sm font-semibold truncate ${
-                        subido ? 'text-green-700' : 'text-red-700'
-                      }`}>
+                      <p className={`text-sm font-semibold truncate ${subido ? 'text-green-700' : 'text-red-700'}`}>
                         {nombre}
                       </p>
-                      <p className={`text-xs mt-0.5 ${
-                        subido ? 'text-green-600' : 'text-gray-500'
-                      }`}>
+                      <p className={`text-xs mt-0.5 ${subido ? 'text-green-600' : 'text-gray-500'}`}>
                         {subido
                           ? '✓ Documento corregido enviado correctamente'
                           : 'Este documento necesita corrección'
@@ -129,10 +110,8 @@ export default function SeccionObservado({
                     </div>
                   </div>
 
-                  {/* Acciones */}
                   <div className="flex items-center gap-2 shrink-0 flex-wrap">
-
-                    {/* Botón previsualizar — solo cuando ya subió */}
+                    {/* Preview — solo cuando subió */}
                     {subido && preview && (
                       <a
                         href={preview}
@@ -145,7 +124,7 @@ export default function SeccionObservado({
                       </a>
                     )}
 
-                    {/* Un solo botón — cambia texto según estado */}
+                    {/* Botón único */}
                     <button
                       onClick={() => fileRefsDoc.current[doc.id]?.click()}
                       disabled={subiendo}
@@ -162,7 +141,7 @@ export default function SeccionObservado({
                       {subiendo ? 'Subiendo...' : subido ? 'Cambiar' : 'Subir corrección'}
                     </button>
 
-                    {/* UN SOLO input por documento */}
+                    {/* UN SOLO input */}
                     <input
                       ref={el => { fileRefsDoc.current[doc.id] = el; }}
                       type="file"

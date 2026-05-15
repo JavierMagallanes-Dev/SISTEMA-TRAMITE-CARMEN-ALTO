@@ -56,6 +56,11 @@ export function useConsulta() {
   const [subiendoDocs, setSubiendoDocs] = useState(false);
   const fileInputRef                    = useRef<HTMLInputElement>(null);
 
+  // Estado de docs subsanados — persiste en el hook para no perderse en rerenders
+  const [docsSubidos,   setDocsSubidos]  = useState<Record<number, boolean>>({});
+  const [docsPreviews,  setDocsPreviews] = useState<Record<number, string>>({});
+  const [subiendoDocId, setSubiendoDocId] = useState<number | null>(null);
+
   // Pago
   const [opcionPago,        setOpcionPago]       = useState<OpcionPago>('seleccion');
   const [comprobante,       setComprobante]       = useState<File | null>(null);
@@ -81,32 +86,50 @@ export function useConsulta() {
   useEffect(() => {
     if (codigoParam) consultar(codigoParam);
   }, [codigoParam]);
-// Extraer docs observados del comentario y enriquecer con nombres
-const docsObservados = (() => {
-  if (!expediente) return [];
-  const movObs = [...expediente.movimientos].reverse().find(m => m.tipo_accion === 'OBSERVACION');
-  if (!movObs?.comentario) return [];
-  const match = movObs.comentario.match(/^\[DOC:([^\]]+)\]/);
-  if (!match) return [];
-  const ids = match[1].split(',').map(Number);
-  // Enriquecer con nombres desde los documentos del expediente
-  const docs = (expediente as any).documentos ?? [];
-  return ids.map(id => {
-    const doc = docs.find((d: any) => d.id === id);
-    return { id, nombre: doc?.nombre ?? '' };
-  });
-})();
 
-const handleReemplazarDoc = async (docId: number, archivo: File) => {
-  const formData = new FormData();
-  formData.append('archivo', archivo);
-  const res = await fetch(`${VITE_API_URL}/documentos/${docId}/reemplazar-publico`, {
-    method: 'PUT',
-    body:   formData,
-  });
-  if (!res.ok) throw new Error('Error al reemplazar el documento.');
-  toast.success({ titulo: 'Documento corregido enviado correctamente.' });
-};
+  // ── Docs observados ───────────────────────────────────────
+  const docsObservados: { id: number; nombre: string }[] = (() => {
+    if (!expediente) return [];
+    const movObs = [...expediente.movimientos].reverse().find(m => m.tipo_accion === 'OBSERVACION');
+    if (!movObs?.comentario) return [];
+    const match = movObs.comentario.match(/^\[DOC:([^\]]+)\]/);
+    if (!match) return [];
+    const ids = match[1].split(',').map(Number);
+    return ids.map(id => {
+      const doc = expediente.documentos?.find(d => d.id === id);
+      return { id, nombre: doc?.nombre ?? '' };
+    });
+  })();
+
+  // ── Reemplazar documento observado ────────────────────────
+  const handleReemplazarDoc = async (docId: number, archivo: File) => {
+    // Crear preview local
+    const previewUrl = URL.createObjectURL(archivo);
+    setDocsPreviews(prev => ({ ...prev, [docId]: previewUrl }));
+    setSubiendoDocId(docId);
+
+    try {
+      const formData = new FormData();
+      formData.append('archivo', archivo);
+      const res = await fetch(`${VITE_API_URL}/documentos/${docId}/reemplazar-publico`, {
+        method: 'PUT',
+        body:   formData,
+      });
+      if (!res.ok) throw new Error('Error al reemplazar el documento.');
+
+      // Marcar como subido en el hook
+      setDocsSubidos((prev: any) => ({ ...prev, [docId]: true }));
+      toast.success({ titulo: 'Documento corregido enviado correctamente.' });
+    } catch (err: any) {
+      // Limpiar preview si falla
+      setDocsPreviews(prev => { const n = { ...prev }; delete n[docId]; return n; });
+      toast.error({ titulo: err.message ?? 'Error al reemplazar el documento.' });
+      throw err;
+    } finally {
+      setSubiendoDocId(null);
+    }
+  };
+
   // ── Cargo de recepción ────────────────────────────────────
   const descargarCargo = (cod: string) => {
     window.open(`${VITE_API_URL}/recepcion/cargo/publico/${cod}`, '_blank');
@@ -211,7 +234,8 @@ const handleReemplazarDoc = async (docId: number, archivo: File) => {
     handleComprobanteChange, handleSubirComprobante, handlePagoExito,
     // Helpers
     obtenerObservacion, yaSubioComprobante, movimientosPublicos,
-    docsObservados,
-  handleReemplazarDoc,
+    // Observación
+    docsObservados, handleReemplazarDoc,
+    docsSubidos, docsPreviews, subiendoDocId,
   };
 }
