@@ -530,44 +530,6 @@ export default function Paso2Datos({
         {/* ─ Columna ayuda ─ */}
         <div className="p2-help-col">
 
-          {/* Progreso con ring */}
-          <div className="p2-aside-card">
-            <p className="p2-checklist-title">Progreso del registro</p>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 8 }}>
-              <div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: '#216ece', lineHeight: 1, letterSpacing: '-0.02em' }}>
-                  {progreso}<span style={{ fontSize: 18, color: '#64748b' }}>%</span>
-                </div>
-                <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                  {Object.keys(validators).filter(f => isValid(f)).length + (turnstileToken ? 1 : 0) + reqObligatoriosSubidos} de {Object.keys(validators).length + 1 + reqObligatoriosTotal} completados
-                </p>
-              </div>
-              <div style={{ width: 60, height: 60, position: 'relative' }}>
-                <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                  <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" strokeWidth="3" />
-                  <circle
-                    cx="18" cy="18" r="15" fill="none"
-                    stroke="url(#p2-grad-ring)" strokeWidth="3"
-                    strokeDasharray="94.2"
-                    strokeDashoffset={94.2 * (1 - progreso / 100)}
-                    strokeLinecap="round"
-                    style={{ transition: 'stroke-dashoffset .6s cubic-bezier(.22,.61,.36,1)' }}
-                  />
-                  <defs>
-                    <linearGradient id="p2-grad-ring">
-                      <stop offset="0%"   stopColor="#216ece" />
-                      <stop offset="100%" stopColor="#4abdef" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-            </div>
-            {/* Barra de progreso */}
-            <div className="p2-progress-bar" style={{ marginTop: 12 }}>
-              <div className="p2-progress-fill" style={{ width: `${progreso}%` }} />
-            </div>
-          </div>
-
           {/* Chips info trámite */}
           <div className="p2-info-chips">
             <div className="p2-info-chip">
@@ -627,7 +589,39 @@ export default function Paso2Datos({
               ))}
             </div>
           </div>
-
+              {/* Progreso — solo círculo, sin barra */}
+  <div className="p2-aside-card">
+    <p className="p2-checklist-title">Progreso del registro</p>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+      <div>
+        <div style={{ fontSize: 32, fontWeight: 800, color: '#216ece', lineHeight: 1, letterSpacing: '-0.02em' }}>
+          {progreso}<span style={{ fontSize: 18, color: '#64748b' }}>%</span>
+        </div>
+        <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+          {Object.keys(validators).filter(f => isValid(f)).length + (turnstileToken ? 1 : 0) + reqObligatoriosSubidos} de {Object.keys(validators).length + 1 + reqObligatoriosTotal} completados
+        </p>
+      </div>
+      <div style={{ width: 60, height: 60 }}>
+        <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+          <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+          <circle
+            cx="18" cy="18" r="15" fill="none"
+            stroke="url(#p2-grad-ring)" strokeWidth="3"
+            strokeDasharray="94.2"
+            strokeDashoffset={94.2 * (1 - progreso / 100)}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset .6s cubic-bezier(.22,.61,.36,1)' }}
+          />
+          <defs>
+            <linearGradient id="p2-grad-ring">
+              <stop offset="0%" stopColor="#216ece" />
+              <stop offset="100%" stopColor="#4abdef" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </div>
+  </div>
           {/* Contacto mejorado */}
           <div className="p2-help-contact" style={{
             background: 'linear-gradient(135deg, #eaf2fb, white)',
