@@ -529,62 +529,133 @@ export default function Paso2Datos({
 
         {/* ─ Columna ayuda ─ */}
         <div className="p2-help-col">
-          {/* Progreso */}
-          <div className="p2-progress">
-            <div className="p2-progress-header">
-              <span className="p2-progress-label">Progreso</span>
-              <span className="p2-progress-count">{progreso}%</span>
+
+          {/* Progreso con ring */}
+          <div className="p2-aside-card">
+            <p className="p2-checklist-title">Progreso del registro</p>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 8 }}>
+              <div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: '#216ece', lineHeight: 1, letterSpacing: '-0.02em' }}>
+                  {progreso}<span style={{ fontSize: 18, color: '#64748b' }}>%</span>
+                </div>
+                <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  {Object.keys(validators).filter(f => isValid(f)).length + (turnstileToken ? 1 : 0) + reqObligatoriosSubidos} de {Object.keys(validators).length + 1 + reqObligatoriosTotal} completados
+                </p>
+              </div>
+              <div style={{ width: 60, height: 60, position: 'relative' }}>
+                <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                  <circle cx="18" cy="18" r="15" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                  <circle
+                    cx="18" cy="18" r="15" fill="none"
+                    stroke="url(#p2-grad-ring)" strokeWidth="3"
+                    strokeDasharray="94.2"
+                    strokeDashoffset={94.2 * (1 - progreso / 100)}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset .6s cubic-bezier(.22,.61,.36,1)' }}
+                  />
+                  <defs>
+                    <linearGradient id="p2-grad-ring">
+                      <stop offset="0%"   stopColor="#216ece" />
+                      <stop offset="100%" stopColor="#4abdef" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
             </div>
-            <div className="p2-progress-bar">
+            {/* Barra de progreso */}
+            <div className="p2-progress-bar" style={{ marginTop: 12 }}>
               <div className="p2-progress-fill" style={{ width: `${progreso}%` }} />
             </div>
           </div>
 
-          {/* Chips */}
+          {/* Chips info trámite */}
           <div className="p2-info-chips">
-            <div className="p2-info-chip"><span className="p2-chip-val">{tipoSeleccionado.plazo_dias}d</span><span className="p2-chip-label">plazo</span></div>
-            <div className="p2-info-chip"><span className="p2-chip-val">S/{Number(tipoSeleccionado.costo_soles).toFixed(0)}</span><span className="p2-chip-label">costo</span></div>
-            <div className="p2-info-chip"><span className="p2-chip-val">~3m</span><span className="p2-chip-label">tiempo</span></div>
+            <div className="p2-info-chip">
+              <span className="p2-chip-val">{tipoSeleccionado.plazo_dias}d</span>
+              <span className="p2-chip-label">plazo</span>
+            </div>
+            <div className="p2-info-chip">
+              <span className="p2-chip-val">S/{Number(tipoSeleccionado.costo_soles).toFixed(0)}</span>
+              <span className="p2-chip-label">costo</span>
+            </div>
+            <div className="p2-info-chip">
+              <span className="p2-chip-val">~3m</span>
+              <span className="p2-chip-label">tiempo</span>
+            </div>
           </div>
 
-          {/* Ayuda contextual */}
+          {/* Ayuda contextual mejorada */}
           {helpData && (
             <div className={`p2-help-card p2-help-${helpData.tipo}`}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 9,
+                background: helpData.tipo === 'info' ? '#dbeafe' : helpData.tipo === 'warning' ? '#fde68a' : '#bbf7d0',
+                color: helpData.tipo === 'info' ? '#1d4ed8' : helpData.tipo === 'warning' ? '#a16207' : '#166534',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 8,
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+              </div>
               <p className="p2-help-card-title">{helpData.title}</p>
               <p className="p2-help-card-text">{helpData.text}</p>
             </div>
           )}
 
-          {/* Checklist de validación */}
-          <div className="p2-checklist">
+          {/* Checklist de validación mejorado */}
+          <div className="p2-aside-card">
             <p className="p2-checklist-title">Lista de verificación</p>
-            {checkItems.map(({ key, label }) => (
-              <div key={key} className={`p2-check-item ${isValid(key) ? 'ok' : 'pending'}`}>
-                <div className="p2-check-dot">
-                  {isValid(key) && <CheckMark />}
+            <div className="p2-checklist" style={{ marginTop: 8 }}>
+              {checkItems.map(({ key, label }) => (
+                <div key={key} className={`p2-check-item ${isValid(key) ? 'ok' : 'pending'}`}>
+                  <div className="p2-check-dot">
+                    {isValid(key) && <CheckMark />}
+                  </div>
+                  <span>{label}</span>
                 </div>
-                <span>{label}</span>
+              ))}
+              <div className={`p2-check-item ${turnstileToken ? 'ok' : 'pending'}`}>
+                <div className="p2-check-dot">{turnstileToken && <CheckMark />}</div>
+                <span>Verificación de seguridad</span>
               </div>
-            ))}
-            <div className={`p2-check-item ${turnstileToken ? 'ok' : 'pending'}`}>
-              <div className="p2-check-dot">{turnstileToken && <CheckMark />}</div>
-              <span>Verificación de seguridad</span>
+              {requisitos.filter(r => r.obligatorio).map(req => (
+                <div key={req.id} className={`p2-check-item ${estadosReq[req.id]?.subido ? 'ok' : 'pending'}`}>
+                  <div className="p2-check-dot">{estadosReq[req.id]?.subido && <CheckMark />}</div>
+                  <span>{req.nombre}</span>
+                </div>
+              ))}
             </div>
-            {requisitos.filter(r => r.obligatorio).map(req => (
-              <div key={req.id} className={`p2-check-item ${estadosReq[req.id]?.subido ? 'ok' : 'pending'}`}>
-                <div className="p2-check-dot">{estadosReq[req.id]?.subido && <CheckMark />}</div>
-                <span>{req.nombre}</span>
-              </div>
-            ))}
           </div>
 
-          {/* Contacto */}
-          <div className="p2-help-contact">
-            <p className="p2-help-contact-title">¿Necesitas ayuda?</p>
-            <p className="p2-help-contact-text">
-              Mesa de Partes:<br />
-              <a href="tel:066123456" className="p2-help-contact-tel">(066) 123-456</a><br />
-              L–V de 8:00 a 16:30
+          {/* Contacto mejorado */}
+          <div className="p2-help-contact" style={{
+            background: 'linear-gradient(135deg, #eaf2fb, white)',
+            border: '1px solid #c7d8f0',
+            borderRadius: 14,
+            padding: 16,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: 'white', border: '1px solid #c7d8f0',
+                color: '#216ece', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.35 6.35l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="p2-help-contact-title" style={{ marginBottom: 2 }}>¿Necesitas ayuda?</p>
+                <a href="tel:066123456" className="p2-help-contact-tel">(066) 123-456</a>
+              </div>
+            </div>
+            <p className="p2-help-contact-text" style={{ marginTop: 4 }}>
+              Mesa de Partes · L–V de 8:00 a 16:30<br />
+              <a href="mailto:mesadepartes@carmenalto.gob.pe"
+                style={{ color: '#216ece', fontWeight: 600, textDecoration: 'none', fontSize: 11.5 }}>
+                mesadepartes@carmenalto.gob.pe
+              </a>
             </p>
           </div>
         </div>

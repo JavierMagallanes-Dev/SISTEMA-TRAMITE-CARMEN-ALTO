@@ -161,9 +161,18 @@
 /* ── Layout principal ───────────────────────────────────────── */
 .p2-two-col {
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr 400px;
   background: #fff;
   min-height: calc(100vh - 200px);
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (max-width: 1280px) {
+  .p2-two-col {
+    grid-template-columns: 1fr 360px;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -677,4 +686,13 @@
   border-radius: 50%;
   background: #1D9E75;
   animation: p2pulse 2s ease-in-out infinite;
+}
+
+/* Card lateral */
+.p2-aside-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
 }
